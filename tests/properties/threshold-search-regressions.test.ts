@@ -113,4 +113,22 @@ describe("threshold search regressions", () => {
       3252736698,
     );
   });
+
+  // After D40: an attentive listener 0.1 dB below the level −45 is still found at −40, 5.1 dB
+  // above its true threshold, in 13.75 percent of its ears.
+  it.fails(
+    "regression 3: attentive listener just below a level of the grid found one step too loud (CP3, seed 2093169249)",
+    () => {
+      expectUsefulForAttentive(
+        {
+          trueThresholdDb: { left: -45.1, right: 0 },
+          widthDb: 1,
+          lapseFraction: 0,
+          falseAlarmFraction: 0,
+          wrongSideFraction: 0,
+        },
+        2093169249,
+      );
+    },
+  );
 });
