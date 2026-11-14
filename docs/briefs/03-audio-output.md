@@ -14,6 +14,8 @@ The single place where sound leaves the product, and the place where the safety 
 - Stops all sound at once on request, when the tab is hidden and when the page is left.
 - Calibration: plays the calibration noise in both ears while the visitor moves a control, starting quiet, and stores the chosen gain. The control cannot go above the absolute ceiling.
 - Headphone check: plays a sound in the left ear only and asks which side it was on. A wrong answer tells the visitor to turn the headphones around.
+- A listening page for development, kept out of the visitor's path and plainly labelled as a development page: calibration first, then a list of the six sounds with a play button for each ear and a level control that cannot pass the cap, and a stop button. Everything on it goes through the output stage. It is how a person first hears the ghost sounds, so it must be safe to open with the system volume at any setting: it starts silent, and the first sound it can play is the calibration noise at its quietest.
+- The absolute digital ceiling is in the Initial values table of `.kiro/steering/audio-safety.md`. This spec adds it to `src/config`.
 
 ## Design note
 

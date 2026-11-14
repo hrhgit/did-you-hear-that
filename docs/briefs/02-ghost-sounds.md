@@ -29,7 +29,8 @@ The characters are a starting point. They will be tuned by ear in the IDE after 
 ## Tools
 
 - `npm run render:sounds` renders every sound at 44100 and 48000 Hz, measures band energy, out-of-band energy, fade lengths, duration and level, writes a report to `docs/reports/sounds.md`, and exits with an error if any sound breaks a rule above.
-- A way to listen: the dev page gets a plain list of the sounds with play buttons, routed through the output stage once that exists, or through a clearly marked temporary player until then.
+- No way to listen is built in this spec. A temporary player would be a second output path, which audio-safety rule 1 and the lint rules forbid. The listening page comes with the audio-output spec, where the cap exists. This spec is checked by measurement only.
+- The longest sound and the shortest fade are in the Initial values table of `.kiro/steering/audio-safety.md`. This spec adds them to `src/config`.
 
 ## Hook
 
