@@ -7,6 +7,9 @@ import type { SoundId } from "../../src/config/sound-id";
 import { soundRulesConfig } from "../../src/config/sound-rules-config";
 import { decibelsToGain } from "../../src/audio/synth/decibels-to-gain";
 import { soundRenderers } from "../../src/audio/synth/sound-renderers";
+import type { BackendEvent } from "../../src/audio/output/audio-backend";
+import type { PlayRequest } from "../../src/audio/output/create-audio-output";
+import type { FakeRunningMode } from "../../src/audio/output/fake-audio-backend";
 import type {
   Ear,
   EarChoice,
@@ -401,3 +404,147 @@ export function gridLevelsUpTo(topDb: number): readonly number[] {
   }
   return levels;
 }
+
+// Operation sequences for the properties of the shell (CP7, CP9, CP10, CP13). An operation is a
+// plain record, so fast-check prints and shrinks a sequence; the property applies it to a shell.
+
+/** A play request without its random source, which the property supplies. */
+export type PlayOperation = { readonly kind: "play" } & Omit<
+  PlayRequest,
+  "random"
+>;
+
+export type ShellOperation =
+  | PlayOperation
+  | { readonly kind: "beginRoom" }
+  | { readonly kind: "headphoneCheck" }
+  | { readonly kind: "beginCalibration" }
+  | { readonly kind: "repeat"; readonly requestedSettingDb: number }
+  | { readonly kind: "keep" }
+  | { readonly kind: "activate" }
+  | { readonly kind: "settleRunning" }
+  | { readonly kind: "runningMode"; readonly mode: FakeRunningMode }
+  | { readonly kind: "stopAll" }
+  | { readonly kind: "event"; readonly event: BackendEvent }
+  /** Moves the audio clock and the timer forward together. */
+  | { readonly kind: "advance"; readonly durationMs: number }
+  /** Moves both clocks to the end of the last scheduled sound. */
+  | { readonly kind: "waitForEnd" };
+
+/**
+ * Levels for the shell's plays: the search's grid from below the floor to above the cap, and any
+ * double from −90 to +30 dB.
+ */
+export const shellLevelArbitrary: fc.Arbitrary<number> = fc.oneof(
+  fc
+    .integer({ min: -10, max: 9 })
+    .map(
+      (k) =>
+        hearingMethodConfig.startingLevelDb +
+        k * hearingMethodConfig.upwardStepDb,
+    ),
+  fc.double({ min: -90, max: 30, noNaN: true }),
+);
+
+export const playOperationArbitrary: fc.Arbitrary<PlayOperation> = fc.record({
+  kind: fc.constant("play" as const),
+  soundId: soundIdArbitrary,
+  ear: oneEarArbitrary,
+  levelDb: shellLevelArbitrary,
+  purpose: fc.constantFrom("trial", "replay", "listening"),
+});
+
+/** Any double for a requested calibration setting, NaN and the infinities included. */
+export const requestedSettingArbitrary: fc.Arbitrary<number> = fc.oneof(
+  fc.double({ min: -100, max: 30, noNaN: true }),
+  fc.integer({ min: -70, max: 10 }),
+  fc.double(),
+);
+
+const repeatOperationArbitrary: fc.Arbitrary<ShellOperation> = fc.record({
+  kind: fc.constant("repeat" as const),
+  requestedSettingDb: requestedSettingArbitrary,
+});
+
+const backendEventArbitrary: fc.Arbitrary<BackendEvent> = fc.constantFrom(
+  "hidden",
+  "pageLeft",
+  "deviceChanged",
+  "interrupted",
+);
+
+const simple = (kind: ShellOperation["kind"]): fc.Arbitrary<ShellOperation> =>
+  fc.constant({ kind } as ShellOperation);
+
+/** CP7: plays on either ear at any level and Purpose, and room starts, 1 to 40 of them. */
+export const riseOperationsArbitrary: fc.Arbitrary<readonly ShellOperation[]> =
+  fc.array(
+    fc.oneof(
+      { weight: 6, arbitrary: playOperationArbitrary },
+      { weight: 1, arbitrary: simple("beginRoom") },
+    ),
+    { minLength: 1, maxLength: 40 },
+  );
+
+/** CP9: calibration repeats at any requested setting, keeps, new calibrations and plays. */
+export const calibrationOperationsArbitrary: fc.Arbitrary<
+  readonly ShellOperation[]
+> = fc.array(
+  fc.oneof(
+    { weight: 8, arbitrary: repeatOperationArbitrary },
+    { weight: 2, arbitrary: simple("keep") },
+    { weight: 1, arbitrary: simple("beginCalibration") },
+    { weight: 1, arbitrary: playOperationArbitrary },
+    { weight: 1, arbitrary: simple("headphoneCheck") },
+  ),
+  { minLength: 1, maxLength: 40 },
+);
+
+/** CP10 and CP13: every operation on the shell and every backend event, in any order. */
+export const shellOperationsArbitrary: fc.Arbitrary<readonly ShellOperation[]> =
+  fc.array(
+    fc.oneof(
+      { weight: 4, arbitrary: playOperationArbitrary },
+      { weight: 3, arbitrary: repeatOperationArbitrary },
+      { weight: 1, arbitrary: simple("headphoneCheck") },
+      { weight: 2, arbitrary: simple("beginCalibration") },
+      { weight: 2, arbitrary: simple("keep") },
+      { weight: 1, arbitrary: simple("beginRoom") },
+      { weight: 3, arbitrary: simple("activate") },
+      { weight: 1, arbitrary: simple("settleRunning") },
+      {
+        weight: 1,
+        arbitrary: fc.record({
+          kind: fc.constant("runningMode" as const),
+          mode: fc.constantFrom<FakeRunningMode>(
+            "immediate",
+            "manual",
+            "reject",
+          ),
+        }),
+      },
+      { weight: 2, arbitrary: simple("stopAll") },
+      {
+        weight: 2,
+        arbitrary: fc.record({
+          kind: fc.constant("event" as const),
+          event: backendEventArbitrary,
+        }),
+      },
+      {
+        weight: 2,
+        arbitrary: fc.record({
+          kind: fc.constant("advance" as const),
+          durationMs: fc.oneof(
+            fc.integer({ min: 0, max: 3000 }),
+            fc.constantFrom(
+              audioOutputConfig.stopFadeMs,
+              audioOutputConfig.stopFadeMs + audioOutputConfig.scheduleLeadMs,
+            ),
+          ),
+        }),
+      },
+      { weight: 3, arbitrary: simple("waitForEnd") },
+    ),
+    { minLength: 1, maxLength: 40 },
+  );
