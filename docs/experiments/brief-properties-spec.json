@@ -1,0 +1,917 @@
+{
+  "search": "spec",
+  "commit": "a480f64da2e2a7ff6aeebb56300ff2fbe1cb9133",
+  "workingTreeClean": true,
+  "command": "npm run experiment:properties -- --search spec",
+  "takesSettings": true,
+  "takesSeed": true,
+  "settings": {
+    "downwardStepDb": 10,
+    "upwardStepDb": 5,
+    "startingLevelDb": -25,
+    "capRelativeToAnchorDb": 15,
+    "floorDb": -70,
+    "responseWindowMs": 2000,
+    "gapBetweenTrialsMinMs": 1500,
+    "gapBetweenTrialsMaxMs": 4000,
+    "noSoundTrialShareMinFraction": 0.15,
+    "noSoundTrialShareMaxFraction": 0.25,
+    "falseAlarmRateUnreliableAboveFraction": 0.3,
+    "trialLimitPerEarPerRoomCount": 20,
+    "swappedRepeatDifferenceDb": 15,
+    "roomFrequenciesHz": {
+      "quick": [
+        1000,
+        4000,
+        8000
+      ],
+      "full": [
+        500,
+        1000,
+        2000,
+        4000,
+        8000
+      ]
+    },
+    "noSoundTrialProbabilityFraction": 0.2,
+    "thresholdCatchesMinCount": 2,
+    "thresholdCatchShareMinFraction": 0.5,
+    "floorCatchesForBetterThanFloorCount": 2,
+    "capMissesForWorseThanCapCount": 2,
+    "inconsistentCatchMarginDb": 10
+  },
+  "briefProperties": [
+    {
+      "number": 1,
+      "statement": "Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within one step of the grid or the result is unreliable. \"Within one step of the grid\" means: take the lowest level of the 5 dB grid at or above the listener's true threshold; the estimate is that level, or one 5 dB step either side of it. (Amended 2026-11-14; the share within the original 5 dB is reported as withinFiveDbFraction.)",
+      "holds": false,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP1",
+          "title": "Exact listeners get the exact answer",
+          "kind": "universal",
+          "requirements": [
+            "R5",
+            "R6",
+            "R7",
+            "R8.2",
+            "R8.3"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1735096631
+          },
+          "durationMs": 13
+        },
+        {
+          "id": "CP2",
+          "title": "Accurate or flagged",
+          "kind": "statistical",
+          "requirements": [
+            "R13.8"
+          ],
+          "holds": false,
+          "checkable": true,
+          "firstCounterexample": {
+            "shrunk": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": 4.2,
+                  "right": 14.7
+                },
+                "widthDb": 4.3,
+                "lapseFraction": 0.062,
+                "falseAlarmFraction": 0.299,
+                "wrongSideFraction": 0.006
+              },
+              "setSeed": 4040559320,
+              "accurateFraction": 0.175,
+              "flaggedFraction": 0.7425,
+              "wrongFraction": 0.0825,
+              "withinFiveDbFraction": 0.16625,
+              "unfinishedRoomCount": 0,
+              "wrongExamples": [
+                {
+                  "room": 4,
+                  "engineSeed": 2180911488,
+                  "listenerSeed": 4239219736,
+                  "ear": "right",
+                  "trueThresholdDb": 14.7,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                },
+                {
+                  "room": 5,
+                  "engineSeed": 1186916255,
+                  "listenerSeed": 1189908897,
+                  "ear": "left",
+                  "trueThresholdDb": 4.2,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -10
+                  }
+                },
+                {
+                  "room": 17,
+                  "engineSeed": 3488359267,
+                  "listenerSeed": 700061596,
+                  "ear": "left",
+                  "trueThresholdDb": 4.2,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -15
+                  }
+                },
+                {
+                  "room": 28,
+                  "engineSeed": 2475117228,
+                  "listenerSeed": 824207894,
+                  "ear": "right",
+                  "trueThresholdDb": 14.7,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -20
+                  }
+                },
+                {
+                  "room": 30,
+                  "engineSeed": 1371468222,
+                  "listenerSeed": 4145721076,
+                  "ear": "left",
+                  "trueThresholdDb": 4.2,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -20
+                  }
+                }
+              ]
+            },
+            "firstInDrawOrder": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": 11.2,
+                  "right": 14.7
+                },
+                "widthDb": 4.3,
+                "lapseFraction": 0.062,
+                "falseAlarmFraction": 0.299,
+                "wrongSideFraction": 0.006
+              },
+              "setSeed": 1113057956,
+              "accurateFraction": 0.14125,
+              "flaggedFraction": 0.78375,
+              "wrongFraction": 0.075,
+              "withinFiveDbFraction": 0.14125,
+              "unfinishedRoomCount": 0
+            },
+            "fastCheck": {
+              "seed": 20261116,
+              "path": "89:1:1:35",
+              "numShrinks": 3
+            }
+          },
+          "metrics": {
+            "accurateOrFlaggedMinFraction": 0.93,
+            "accurateOrFlaggedTargetFraction": 0.95,
+            "seed": 20261116,
+            "setCount": 100,
+            "roomsPerSet": 400,
+            "earCount": 80000,
+            "accurateFraction": 0.5344875,
+            "flaggedFraction": 0.4455125,
+            "wrongFraction": 0.02,
+            "withinFiveDbFraction": 0.4893625,
+            "withinFiveDbSetsNotMeetingLimitCount": 26,
+            "unfinishedRoomCount": 0,
+            "setsNotMeetingLimitCount": 1,
+            "worstSet": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": 11.2,
+                  "right": 14.7
+                },
+                "widthDb": 4.3,
+                "lapseFraction": 0.062,
+                "falseAlarmFraction": 0.299,
+                "wrongSideFraction": 0.006
+              },
+              "setSeed": 1113057956,
+              "accurateFraction": 0.14125,
+              "flaggedFraction": 0.78375,
+              "wrongFraction": 0.075,
+              "withinFiveDbFraction": 0.14125,
+              "unfinishedRoomCount": 0
+            },
+            "setsNotMeetingLimit": [
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 11.2,
+                    "right": 14.7
+                  },
+                  "widthDb": 4.3,
+                  "lapseFraction": 0.062,
+                  "falseAlarmFraction": 0.299,
+                  "wrongSideFraction": 0.006
+                },
+                "setSeed": 1113057956,
+                "accurateFraction": 0.14125,
+                "flaggedFraction": 0.78375,
+                "wrongFraction": 0.075,
+                "withinFiveDbFraction": 0.14125,
+                "unfinishedRoomCount": 0
+              }
+            ]
+          },
+          "durationMs": 3388
+        },
+        {
+          "id": "CP3",
+          "title": "Useful for attentive listeners",
+          "kind": "statistical",
+          "requirements": [
+            "R13.8"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "accurateMinFraction": 0.88,
+            "accurateTargetFraction": 0.9,
+            "flaggedMaxFraction": 0.1,
+            "seed": 20261117,
+            "setCount": 50,
+            "roomsPerSet": 400,
+            "earCount": 40000,
+            "accurateFraction": 0.976075,
+            "flaggedFraction": 0.023675,
+            "wrongFraction": 0.00025,
+            "withinFiveDbFraction": 0.9417,
+            "withinFiveDbSetsNotMeetingLimitCount": 8,
+            "unfinishedRoomCount": 0,
+            "setsNotMeetingLimitCount": 0,
+            "worstSet": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -0.7,
+                  "right": -8.7
+                },
+                "widthDb": 3.5,
+                "lapseFraction": 0.003,
+                "falseAlarmFraction": 0.02,
+                "wrongSideFraction": 0.009
+              },
+              "setSeed": 2867132293,
+              "accurateFraction": 0.93,
+              "flaggedFraction": 0.06875,
+              "wrongFraction": 0.00125,
+              "withinFiveDbFraction": 0.87,
+              "unfinishedRoomCount": 0
+            },
+            "setsNotMeetingLimit": []
+          },
+          "durationMs": 557
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "statement": "Always ends within the trial limit.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP4",
+          "part": "ending and per-ear limit",
+          "title": "Every room ends",
+          "kind": "universal",
+          "requirements": [
+            "R10.1"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1143542828
+          },
+          "durationMs": 16
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "statement": "Levels requested never leave the range between floor and cap, and never rise by more than one upward step between consecutive trials for an ear.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP5",
+          "title": "Levels stay in range and climb gently",
+          "kind": "universal",
+          "requirements": [
+            "R5.4",
+            "R5.5",
+            "R5.7"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -425659466
+          },
+          "durationMs": 12
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "statement": "No-sound trials: share within range, positions not predictable.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP7",
+          "title": "The no-sound share is always in range",
+          "kind": "universal",
+          "requirements": [
+            "R9.3",
+            "R9.4"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1441186483
+          },
+          "durationMs": 20
+        },
+        {
+          "id": "CP8",
+          "title": "No-sound positions cannot be predicted",
+          "kind": "statistical",
+          "requirements": [
+            "R9.1",
+            "R9.5"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "seed": 20261118,
+            "roomCount": 2000,
+            "minimumTrialsPerValueCount": 400,
+            "allowedDeviationFraction": 0.1,
+            "trialCount": 60941,
+            "noSoundShare": 0.18864147290001804,
+            "largestDeviation": 0.05964147290001803,
+            "valuesOutsideCount": 0,
+            "valuesOutside": [],
+            "roomsEndingWithNoSoundFraction": 0.315,
+            "unfinishedRoomCount": 0,
+            "features": {
+              "trialsSinceLastNoSound": [
+                {
+                  "value": "none yet",
+                  "trialCount": 10045,
+                  "noSoundShare": 0.1991040318566451,
+                  "checked": true
+                },
+                {
+                  "value": "1",
+                  "trialCount": 10866,
+                  "noSoundShare": 0.1703478741027057,
+                  "checked": true
+                },
+                {
+                  "value": "2",
+                  "trialCount": 8707,
+                  "noSoundShare": 0.15389916159411968,
+                  "checked": true
+                },
+                {
+                  "value": "3",
+                  "trialCount": 7102,
+                  "noSoundShare": 0.16798085046465785,
+                  "checked": true
+                },
+                {
+                  "value": "4",
+                  "trialCount": 5707,
+                  "noSoundShare": 0.1974767828981952,
+                  "checked": true
+                },
+                {
+                  "value": "5",
+                  "trialCount": 4444,
+                  "noSoundShare": 0.19801980198019803,
+                  "checked": true
+                },
+                {
+                  "value": "6",
+                  "trialCount": 3446,
+                  "noSoundShare": 0.22460824143934996,
+                  "checked": true
+                },
+                {
+                  "value": "7",
+                  "trialCount": 2575,
+                  "noSoundShare": 0.21048543689320387,
+                  "checked": true
+                },
+                {
+                  "value": "8 or more",
+                  "trialCount": 8049,
+                  "noSoundShare": 0.22226363523419057,
+                  "checked": true
+                }
+              ],
+              "positionInRoom": [
+                {
+                  "value": "1",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1915,
+                  "checked": true
+                },
+                {
+                  "value": "2",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1585,
+                  "checked": true
+                },
+                {
+                  "value": "3",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.129,
+                  "checked": true
+                },
+                {
+                  "value": "4",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.203,
+                  "checked": true
+                },
+                {
+                  "value": "5",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.183,
+                  "checked": true
+                },
+                {
+                  "value": "6",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1445,
+                  "checked": true
+                },
+                {
+                  "value": "7",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.154,
+                  "checked": true
+                },
+                {
+                  "value": "8",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1715,
+                  "checked": true
+                },
+                {
+                  "value": "9",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.186,
+                  "checked": true
+                },
+                {
+                  "value": "10",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1775,
+                  "checked": true
+                },
+                {
+                  "value": "11 or more",
+                  "trialCount": 40941,
+                  "noSoundShare": 0.19782125497667374,
+                  "checked": true
+                }
+              ],
+              "previousTrialOutcome": [
+                {
+                  "value": "none",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1915,
+                  "checked": true
+                },
+                {
+                  "value": "caught",
+                  "trialCount": 18635,
+                  "noSoundShare": 0.20048296216796352,
+                  "checked": true
+                },
+                {
+                  "value": "wrongSide",
+                  "trialCount": 5559,
+                  "noSoundShare": 0.1926605504587156,
+                  "checked": true
+                },
+                {
+                  "value": "missed",
+                  "trialCount": 23881,
+                  "noSoundShare": 0.18654997696913864,
+                  "checked": true
+                },
+                {
+                  "value": "noResponse",
+                  "trialCount": 8083,
+                  "noSoundShare": 0.17406903377458866,
+                  "checked": true
+                },
+                {
+                  "value": "falseAlarm",
+                  "trialCount": 2783,
+                  "noSoundShare": 0.1595400646784046,
+                  "checked": true
+                }
+              ],
+              "previousSoundTrialEar": [
+                {
+                  "value": "none",
+                  "trialCount": 2383,
+                  "noSoundShare": 0.16072177926982795,
+                  "checked": true
+                },
+                {
+                  "value": "right",
+                  "trialCount": 28927,
+                  "noSoundShare": 0.1875756213917793,
+                  "checked": true
+                },
+                {
+                  "value": "left",
+                  "trialCount": 29631,
+                  "noSoundShare": 0.19192737335898213,
+                  "checked": true
+                }
+              ]
+            }
+          },
+          "durationMs": 95
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "statement": "Same seed and same outcomes give the same trials.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP9",
+          "title": "Same seed, same responses, same room",
+          "kind": "universal",
+          "requirements": [
+            "R1.5"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1434242113
+          },
+          "durationMs": 22
+        }
+      ]
+    }
+  ],
+  "otherChecks": [
+    {
+      "id": "CP10",
+      "part": "gaps in range",
+      "title": "Gaps do not depend on the trial",
+      "kind": "universal",
+      "requirements": [
+        "R3.6"
+      ],
+      "holds": true,
+      "checkable": true,
+      "metrics": {
+        "numRuns": 200,
+        "fastCheckSeed": -118584876
+      },
+      "durationMs": 12
+    },
+    {
+      "id": "CP10",
+      "part": "mean gaps",
+      "title": "Gaps do not depend on the trial",
+      "kind": "statistical",
+      "requirements": [
+        "R3.6"
+      ],
+      "holds": true,
+      "checkable": true,
+      "metrics": {
+        "seed": 20261118,
+        "roomCount": 2000,
+        "largestMeanDifferenceMs": 50,
+        "meanGapMs": {
+          "noSound": 2742.21416144746,
+          "sound": 2747.751299423602,
+          "left": 2751.434974165899,
+          "right": 2743.994035460413
+        },
+        "trialCounts": {
+          "noSound": 11496,
+          "sound": 49445,
+          "left": 24967,
+          "right": 24478
+        },
+        "kindDifferenceMs": 5.537137976142276,
+        "earDifferenceMs": 7.440938705485678
+      },
+      "durationMs": 14
+    }
+  ],
+  "population": {
+    "listenerCount": 3000,
+    "seed": 20261120,
+    "range": "plausible",
+    "earCount": 6000,
+    "accurateCount": 2689,
+    "flaggedCount": 3180,
+    "wrongCount": 131,
+    "accurateFraction": 0.44816666666666666,
+    "flaggedFraction": 0.53,
+    "wrongFraction": 0.021833333333333333,
+    "withinFiveDbCount": 2482,
+    "withinFiveDbFraction": 0.4136666666666667,
+    "medianTrialCount": 30,
+    "largestTrialCount": 53,
+    "budgetExceededCount": 0,
+    "threwCount": 0
+  },
+  "specOnly": {
+    "note": "Checks of this spec's own design. The comparison does not count them (D21).",
+    "checks": [
+      {
+        "id": "CP4",
+        "part": "room total",
+        "title": "Every room ends within Room_Trial_Limit",
+        "kind": "universal",
+        "requirements": [
+          "R10.1",
+          "R10.2",
+          "R10.3"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": 77577228
+        },
+        "durationMs": 11
+      },
+      {
+        "id": "CP6",
+        "title": "The result agrees with its own record",
+        "kind": "universal",
+        "requirements": [
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8",
+          "R11"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": -1637303208
+        },
+        "durationMs": 15
+      },
+      {
+        "id": "CP11",
+        "title": "Ears are mixed at random",
+        "kind": "statistical",
+        "requirements": [
+          "R3.7",
+          "R3.8"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261118,
+          "roomCount": 2000,
+          "leftShareMinFraction": 0.47,
+          "leftShareMaxFraction": 0.53,
+          "largestConditionalDifferenceFraction": 0.05,
+          "bothSearchingSoundTrialCount": 37015,
+          "leftShare": 0.5008510063487775,
+          "leftAfterLeft": 0.5054663477963786,
+          "leftAfterRight": 0.49836704291525813,
+          "conditionalDifference": 0.007099304881120427,
+          "oneEarViolationCount": 0
+        },
+        "durationMs": 5
+      },
+      {
+        "id": "CP12",
+        "part": "examples",
+        "title": "Extreme listeners",
+        "kind": "statistical",
+        "requirements": [
+          "R8",
+          "R10",
+          "R13.5"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261119,
+          "roomsPerListenerCount": 20,
+          "listeners": [
+            "neverAnswers",
+            "alwaysAnswers",
+            "alwaysAnswersWrongSide",
+            "alwaysPressesLeft"
+          ],
+          "roomsNotShowingExpectationCount": 0
+        },
+        "durationMs": 2
+      },
+      {
+        "id": "CP12",
+        "part": "answers at random",
+        "title": "Extreme listeners",
+        "kind": "statistical",
+        "requirements": [
+          "R8",
+          "R13.5"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261119,
+          "roomCount": 500,
+          "bothUnreliableMinFraction": 0.95,
+          "bothUnreliableFraction": 0.98,
+          "reasonCountsOverEars": {
+            "trialLimit": 335,
+            "falseAlarmRate": 976,
+            "inconsistentCatch": 259
+          },
+          "roomsNotFlagged": [
+            {
+              "room": 30,
+              "engineSeed": 4231532939,
+              "listenerSeed": 4214867879,
+              "left": {
+                "presentationCount": 14,
+                "catchCount": 4,
+                "wrongSideCount": 3,
+                "missCount": 7,
+                "state": "found",
+                "thresholdDb": -5
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 3,
+                "wrongSideCount": 1,
+                "missCount": 2,
+                "state": "found",
+                "thresholdDb": -30
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 4
+            },
+            {
+              "room": 93,
+              "engineSeed": 854193321,
+              "listenerSeed": 2449851597,
+              "left": {
+                "presentationCount": 15,
+                "catchCount": 6,
+                "wrongSideCount": 6,
+                "missCount": 3,
+                "state": "found",
+                "thresholdDb": -30
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 2,
+                "wrongSideCount": 2,
+                "missCount": 2,
+                "state": "found",
+                "thresholdDb": -15
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 4
+            },
+            {
+              "room": 221,
+              "engineSeed": 3366188223,
+              "listenerSeed": 200460567,
+              "left": {
+                "presentationCount": 11,
+                "catchCount": 3,
+                "wrongSideCount": 4,
+                "missCount": 4,
+                "state": "found",
+                "thresholdDb": -5
+              },
+              "right": {
+                "presentationCount": 20,
+                "catchCount": 9,
+                "wrongSideCount": 6,
+                "missCount": 5,
+                "state": "unreliable",
+                "reasons": [
+                  "trialLimit"
+                ]
+              },
+              "falseAlarmCount": 2,
+              "noSoundTrialCount": 8
+            },
+            {
+              "room": 299,
+              "engineSeed": 4267685729,
+              "listenerSeed": 912700742,
+              "left": {
+                "presentationCount": 20,
+                "catchCount": 8,
+                "wrongSideCount": 6,
+                "missCount": 6,
+                "state": "unreliable",
+                "reasons": [
+                  "trialLimit"
+                ]
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 3,
+                "wrongSideCount": 2,
+                "missCount": 1,
+                "state": "found",
+                "thresholdDb": -30
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 5
+            },
+            {
+              "room": 322,
+              "engineSeed": 3931416189,
+              "listenerSeed": 3850211804,
+              "left": {
+                "presentationCount": 13,
+                "catchCount": 5,
+                "wrongSideCount": 4,
+                "missCount": 4,
+                "state": "unreliable",
+                "reasons": [
+                  "inconsistentCatch"
+                ]
+              },
+              "right": {
+                "presentationCount": 12,
+                "catchCount": 4,
+                "wrongSideCount": 5,
+                "missCount": 3,
+                "state": "found",
+                "thresholdDb": -15
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 5
+            }
+          ]
+        },
+        "durationMs": 17
+      },
+      {
+        "id": "CP13",
+        "title": "Settings validation",
+        "kind": "universal",
+        "requirements": [
+          "R2"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": 1937372765
+        },
+        "durationMs": 7
+      }
+    ],
+    "noSoundScheduleReport": {
+      "seed": 20261118,
+      "roomCount": 2000,
+      "searchTrialCount": 59819,
+      "forcedSoundShareOfSearchTrials": 0.1319146090706966,
+      "roomsWithClosingTrialsFraction": 0.315,
+      "closingTrialShareOfTrials": 0.018411250225628065
+    }
+  }
+}
