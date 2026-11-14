@@ -270,7 +270,8 @@ p = { levelDb: nextLevel, direction: nextDirection, outcome }
 append p and update the tallies
 caught = outcome == "caught"
 
-if p.direction == ascending and foundAt(p.levelDb):            → end found(p.levelDb)
+if p.direction == ascending and foundAt(p.levelDb)
+        and not quieterLevelStillOpen(p.levelDb):             → end found(p.levelDb)
 else if p.levelDb == floor and betterThanFloorReached():       → end betterThanFloor
 else if p.direction == ascending and p.levelDb == cap
         and ascendingNonCatchesAt(cap) >= capMissesForWorseThanCapCount:  → end worseThanCap
@@ -281,6 +282,8 @@ else:
 
 foundAt(L): catches = ascending catches at L, total = ascending presentations at L
             catches >= thresholdCatchesMinCount and atLeastFraction(catches, total, thresholdCatchShareMinFraction)
+quieterLevelStillOpen(L): Q = L − upwardStepDb
+            L < cap and Q > floor, and foundAt(Q) would hold with one more ascending catch at Q (D40)
 betterThanFloorReached(): catches = catches at floor (any direction), total = presentations at floor
             catches >= floorCatchesForBetterThanFloorCount and atLeastFraction(catches, total, thresholdCatchShareMinFraction)
 ```
@@ -402,7 +405,9 @@ All with the shipped settings: start −25, floor −70, cap 15, steps 10 down a
 
 **G. Trial limit.** Outcomes M C, then M M M C four times, then M M (20 in all). The levels are −25 −20 −30 −25 −20 −15 −25 −20 −15 −10 −20 −15 −10 −5 −15 −10 −5 0 −10 −5. Each of −20, −15, −10 and −5 ends with 1 ascending catch in 3, and 0 has 1 of 1. Neither the floor nor the cap is reached. After the 20th presentation the ear ends with the reason `trialLimit`.
 
-These traces become unit tests of `createEarSearch` (A to G) and of `finalizeEarResult` (E and G).
+**H. A quieter level still open (D40).** Outcomes C C C M C M C M M M C M C. The levels are −25 −35 −45 −55 −50 −60 −55 −65 −60 −55 −50 −60 −55. After the 11th presentation −50 holds 2 ascending catches in 2, but −55 holds 1 in 2, and one more catch would make it 2 of 3. So the search goes on: −60 is missed and −55 is caught, 2 of 3. The level below it, −60, has 0 ascending catches in 1 and cannot qualify on its next presentation, so the ear is found at −55 after 13 presentations. Before D40 it was found at −50 after 11.
+
+These traces become unit tests of `createEarSearch` (A to H) and of `finalizeEarResult` (E and G).
 
 ## Error handling
 
@@ -460,7 +465,7 @@ The check also reports, without a limit, the share of search trials on which the
 
 **CP13. Settings validation** (Universal; R2). Every settings object from the valid-settings generator is accepted. For each rule in R2.3 to R2.9, a mutation of a valid object that breaks only that rule is rejected with a `RangeError` whose message names the field.
 
-The other checks are examples, not properties. They are the worked traces A to G, the response classification table, the frozen-object checks and the config value checks.
+The other checks are examples, not properties. They are the worked traces A to H, the response classification table, the frozen-object checks and the config value checks.
 
 ## Testing strategy
 
@@ -551,7 +556,7 @@ See D20. Regression tests live in `tests/properties/threshold-search-regressions
 | R3 | `threshold-search.test.ts` (first trial, repeated `current()`, numbering, frozen objects), CP10, CP11 |
 | R4 | `classify-response.test.ts`, `threshold-search.test.ts` (errors leave state unchanged), CP6 |
 | R5 | `ear-search.test.ts` traces, CP1, CP5, CP6 |
-| R6, R7 | `ear-search.test.ts` traces A to G, CP1, CP6 |
+| R6, R7 | `ear-search.test.ts` traces A to H, CP1, CP6 |
 | R8 | `finalize-ear-result.test.ts`, trace E, CP6, CP12 |
 | R9 | `no-sound-schedule.test.ts`, CP7, CP8 |
 | R10 | CP4, CP12 |
@@ -600,7 +605,7 @@ Each point below was open in the brief, the steering files or the architecture a
 
 **D1. The threshold rule: at least 2 ascending catches at one level, making up at least half of the ascending presentations there.** `hearing-method.md` says "at least 2 of 3 presentations reached while rising" and marks the exact wording as unverified, because the guideline text had not been read. While writing this spec I read the ASHA 2005 guideline (see Sources). It defines threshold as the lowest level at which responses occur in at least half of a series of ascending trials, and sets two responses out of three presentations at a single level as the minimum, citing ANSI S3.21-2004. The ANSI standard itself was not read. The steering file is not changed by this spec, so the rule stays marked unverified there.
 
-Two readings fit the steering text. In the first, only the first three ascending presentations at a level count, so a level with one catch in three is closed for good. In the second, a level keeps counting, and it qualifies once it has at least 2 catches and they are at least half of its ascending presentations. With exactly three presentations both readings say "2 of 3". The second also matches the guideline's "at least half", and it does not close a level after two unlucky lapses, which would push the estimate up by a whole step (trace F). I chose the second. The search stops as soon as any level qualifies, as in manual practice. At that moment no quieter level has qualified, so it is "the quietest level" that meets the rule. The numbers 2 and one half are config fields (`thresholdCatchesMinCount`, `thresholdCatchShareMinFraction`), because `structure.md` keeps every number that affects scoring in `src/config`.
+Two readings fit the steering text. In the first, only the first three ascending presentations at a level count, so a level with one catch in three is closed for good. In the second, a level keeps counting, and it qualifies once it has at least 2 catches and they are at least half of its ascending presentations. With exactly three presentations both readings say "2 of 3". The second also matches the guideline's "at least half", and it does not close a level after two unlucky lapses, which would push the estimate up by a whole step (trace F). I chose the second. The search stops as soon as any level qualifies, as in manual practice. At that moment no quieter level has qualified, so it is "the quietest level" that meets the rule. (D40 refines this: below the cap, the search does not stop while the level one step quieter could still qualify on its next ascending presentation.) The numbers 2 and one half are config fields (`thresholdCatchesMinCount`, `thresholdCatchShareMinFraction`), because `structure.md` keeps every number that affects scoring in `src/config`.
 
 **D2. "Reached while rising" means the ear's previous presentation was not caught.** A presentation is ascending when the same ear's previous presentation was a miss or a wrong side, descending when it was a catch, and `first` for the ear's first presentation in the room. A presentation held at the cap after a miss is ascending, because the search was trying to rise. A presentation held at the floor after a catch is descending. Direction comes from the previous outcome and not from comparing levels, so the clamped cases need no special rule. A consequence: no ascending presentation can happen at the floor, so `found` is never at the floor. A visitor who keeps catching the floor ends `betterThanFloor`.
 
@@ -748,3 +753,26 @@ The decisions below were settled while implementing task 9.
 - The Vitest files of CP4, CP5, CP6, CP7, CP9 and the universal part of CP10 each run their check twice, with the shipped settings and with the valid-settings generator (D21). CP1 runs with the shipped settings and CP13 with the generator, as the design states them.
 - The generated JSON files in `docs/experiments/` are listed in `.prettierignore`. They are output, written with `JSON.stringify(…, null, 2)`, and Prettier's JSON layout would otherwise make `npm run lint` report every new run.
 - Vitest reports a test file without tests as an error, so the regression file holds one `it.todo` until the first case is added.
+
+The decisions below were settled while implementing task 10.
+
+**D40. A found level waits while the level one step quieter could still reach the rule.** Regression 1 (CP2, set seed 4263754660: left −55.1 dB, width 1 dB, all rates 0) and regression 2 (CP3, set seed 3252736698: left −0.1 dB, width 1 dB, all rates 0) showed the same mechanism in their trial records. A narrow listener 0.1 dB below a level of the grid catches that level about 61 percent of the time and the level above nearly always. Each ascending pass reaches the quieter level first, and every miss there hands the louder level an ascending catch. The search stopped as soon as the louder level had 2 catches, often while the quieter level held 1 catch in 2 and one more catch would have made it 2 of 3. The ear was then found 5.1 dB above the true threshold, which D18 counts as Wrong. In the first room of regression 1 the left ear went C C C M C M C M M M C, found at −50 after 11 presentations.
+
+The change is a refinement of the threshold reading of D1 and stays within "at least 2 of 3 presentations reached while rising": a level that meets the found rule ends the ear only if the level one upward step below it could not meet the rule with one more ascending catch. While it could, the search simply goes on with the usual steps, so the quieter level gets its next ascending presentation. The found level is still a level with at least 2 ascending catches making up at least half of its ascending presentations, so it is now more often "the quietest level" in the steering's sense. Two exceptions keep earlier decisions intact. The floor is never open, because it never has ascending presentations (D2). The cap is never held back, so the loudest level is still played at most three times before the ear ends (D4). Trace H shows the rule, R6.5 states it, the oracle of CP6 checks it from its own count, and traces A to G are unchanged by it.
+
+Measured with `npm run experiment:properties -- --search spec`, before and after:
+
+| | Before | After |
+|---|---|---|
+| CP2 sets below 93 percent (of 100) | 36 | 26 |
+| CP2 Accurate / Flagged / Wrong over 80 000 ears | 47.5 / 44.2 / 8.4 percent | 48.9 / 44.6 / 6.5 percent |
+| CP3 sets below the limits (of 50) | 11 | 8 |
+| CP3 Accurate / Flagged / Wrong over 40 000 ears | 92.5 / 2.3 / 5.2 percent | 94.2 / 2.4 / 3.5 percent |
+| Regression 1 set, Accurate or Flagged | 78.0 percent | 85.75 percent |
+| Regression 2 set, Accurate | 82.6 percent | 88.0 percent |
+| Population of 3000: Accurate / Flagged / Wrong | 40.5 / 52.7 / 6.7 percent | 41.4 / 53.0 / 5.6 percent |
+| Median trials per room | 28 | 30 |
+
+Every other check still holds. Regression 2 now holds, at exactly its 88 percent limit (704 of 800 ears). Regression 1 does not, and neither does CP2 or CP3. D41 records why.
+
+Two other changes inside what task 10 allows were measured and not made. Looking further ahead, so that the quieter level stays open until it could reach 2 catches however many presentations that takes, brought CP2 to 17 sets below its limit. But it made CP3 worse (13 sets below, 6.1 percent Flagged) because more ears ran into the trial limit, and it raised the median room to 40 trials. Setting `inconsistentCatchMarginDb` to 5 dB, which marks a single catch one step below the found level as inconsistent, brought CP2 to 18 to 19 sets below. But CP3 then had 35 to 38 sets below, with 12 to 16 percent of attentive ears Flagged, because an honest listener near a level of the grid catches the level below quite often. Both would trade a wrong number for an unreliable notice given to attentive visitors, which CP3 exists to prevent.

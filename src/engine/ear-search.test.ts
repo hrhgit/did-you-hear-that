@@ -18,7 +18,7 @@ interface Trace {
   readonly ending: EarEnding;
 }
 
-/** The worked examples A to G in design.md, with the shipped settings. */
+/** The worked examples A to H in design.md, with the shipped settings. */
 const traces: readonly Trace[] = [
   {
     name: "A. step listener, true threshold -52",
@@ -124,6 +124,27 @@ const traces: readonly Trace[] = [
       asc,
     ],
     ending: { kind: "trialLimit" },
+  },
+  {
+    name: "H. a quieter level still open",
+    outcomes: [C, C, C, M, C, M, C, M, M, M, C, M, C],
+    levelsDb: [-25, -35, -45, -55, -50, -60, -55, -65, -60, -55, -50, -60, -55],
+    directions: [
+      first,
+      desc,
+      desc,
+      desc,
+      asc,
+      desc,
+      asc,
+      desc,
+      asc,
+      asc,
+      asc,
+      desc,
+      asc,
+    ],
+    ending: { kind: "found", thresholdDb: -55 },
   },
 ];
 

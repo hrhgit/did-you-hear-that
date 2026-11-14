@@ -91,6 +91,30 @@ export function createEarSearch(
     );
   };
 
+  /**
+   * Could the level one upward step below `levelDb` still meet the found rule on its next
+   * ascending presentation? While it could, a level that meets the rule is not yet the quietest
+   * one (D40). The floor never has ascending presentations (D2), so it is never open. The cap is
+   * never held back, so the loudest level is still played at most three times (D4).
+   */
+  const quieterLevelStillOpen = (levelDb: number): boolean => {
+    const quieterDb = levelDb - upwardStepDb;
+    if (levelDb >= capDb || quieterDb <= floorDb) {
+      return false;
+    }
+    const tally = ascendingTallies.get(quieterDb);
+    const catchCount = (tally?.catchCount ?? 0) + 1;
+    const presentationCount = (tally?.presentationCount ?? 0) + 1;
+    return (
+      catchCount >= thresholdCatchesMinCount &&
+      atLeastFraction(
+        catchCount,
+        presentationCount,
+        thresholdCatchShareMinFraction,
+      )
+    );
+  };
+
   const betterThanFloorReached = (): boolean =>
     floorCatchCount >= floorCatchesForBetterThanFloorCount &&
     atLeastFraction(
@@ -152,7 +176,8 @@ export function createEarSearch(
       // Only the first rule that applies counts (R7.3: found before worse than cap).
       if (
         presentation.direction === "ascending" &&
-        foundAt(presentation.levelDb)
+        foundAt(presentation.levelDb) &&
+        !quieterLevelStillOpen(presentation.levelDb)
       ) {
         currentEnding = Object.freeze({
           kind: "found",

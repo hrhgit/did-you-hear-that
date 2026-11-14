@@ -61,7 +61,7 @@ function soundOutcomeOf(ear: Ear, response: string): SoundOutcome {
   return response === ear ? "caught" : "wrongSide";
 }
 
-/** R6.2, R7.1, R7.2 and R8.1, applied after the latest presentation, in the order of R7.3. */
+/** R6.2, R6.5, R7.1, R7.2 and R8.1, applied after the latest presentation, in the order of R7.3. */
 function endingAfter(
   presentations: readonly OraclePresentation[],
   settings: ThresholdSearchSettings,
@@ -70,21 +70,32 @@ function endingAfter(
   const caught = (presentation: OraclePresentation): boolean =>
     presentation.outcome === "caught";
 
-  if (latest.direction === "ascending") {
+  // R6.2: the ascending presentations at a level meet the rule, counting `extra` more catches.
+  const meetsFoundRule = (levelDb: number, extra: number): boolean => {
     const ascendingHere = presentations.filter(
       (presentation) =>
         presentation.direction === "ascending" &&
-        presentation.levelDb === latest.levelDb,
+        presentation.levelDb === levelDb,
     );
-    const catches = ascendingHere.filter(caught).length;
-    if (
+    const catches = ascendingHere.filter(caught).length + extra;
+    return (
       catches >= settings.thresholdCatchesMinCount &&
       atLeastFraction(
         catches,
-        ascendingHere.length,
+        ascendingHere.length + extra,
         settings.thresholdCatchShareMinFraction,
       )
-    ) {
+    );
+  };
+
+  if (latest.direction === "ascending" && meetsFoundRule(latest.levelDb, 0)) {
+    // R6.5: below the cap, the level one upward step lower must not be still open.
+    const quieterDb = latest.levelDb - settings.upwardStepDb;
+    const quieterStillOpen =
+      latest.levelDb < settings.capRelativeToAnchorDb &&
+      quieterDb > settings.floorDb &&
+      meetsFoundRule(quieterDb, 1);
+    if (!quieterStillOpen) {
       return { kind: "found", thresholdDb: latest.levelDb };
     }
   }

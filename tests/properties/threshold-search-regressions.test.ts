@@ -101,19 +101,16 @@ describe("threshold search regressions", () => {
   );
 
   // The same mechanism for an attentive listener 0.1 dB below the level 0.
-  it.fails(
-    "regression 2: attentive listener found one step too loud while the quieter level could still reach 2 of 3 (CP3, seed 3252736698)",
-    () => {
-      expectUsefulForAttentive(
-        {
-          trueThresholdDb: { left: -0.1, right: 0 },
-          widthDb: 1,
-          lapseFraction: 0,
-          falseAlarmFraction: 0,
-          wrongSideFraction: 0,
-        },
-        3252736698,
-      );
-    },
-  );
+  it("regression 2: attentive listener found one step too loud while the quieter level could still reach 2 of 3 (CP3, seed 3252736698)", () => {
+    expectUsefulForAttentive(
+      {
+        trueThresholdDb: { left: -0.1, right: 0 },
+        widthDb: 1,
+        lapseFraction: 0,
+        falseAlarmFraction: 0,
+        wrongSideFraction: 0,
+      },
+      3252736698,
+    );
+  });
 });

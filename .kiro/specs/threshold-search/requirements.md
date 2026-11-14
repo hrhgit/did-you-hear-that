@@ -147,9 +147,10 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 #### Acceptance criteria
 
 1. THE Threshold_Search SHALL give each Presentation a Direction as defined in the glossary. A Presentation held at the Cap after a Miss or Wrong_Side SHALL be `ascending`, and a Presentation held at the Floor after a Catch SHALL be `descending` (D2).
-2. WHEN the Threshold_Search records an ascending Presentation at a Level, and the ascending Presentations for that Ear at that Level include at least `thresholdCatchesMinCount` Catches that make up at least `thresholdCatchShareMinFraction` of them, THE Threshold_Search SHALL end that Ear_Search as found, with that Level as its threshold (D1).
+2. WHEN the Threshold_Search records an ascending Presentation at a Level, and the ascending Presentations for that Ear at that Level include at least `thresholdCatchesMinCount` Catches that make up at least `thresholdCatchShareMinFraction` of them, THE Threshold_Search SHALL end that Ear_Search as found, with that Level as its threshold, except as criterion 5 requires (D1).
 3. THE Threshold_Search SHALL count only ascending Presentations toward the rule in criterion 2.
 4. THE Threshold_Search SHALL keep counting ascending Presentations at a Level after that Level has missed the rule once, so that a later majority at that Level can still meet it (D1).
+5. IF the Level of criterion 2 is below the Cap, and the Level one Upward_Step below it is above the Floor and would meet the rule of criterion 2 with one more ascending Catch, THEN THE Threshold_Search SHALL keep that Ear_Search searching instead of ending it as found (D40).
 
 ### Requirement 7: Better than floor and worse than cap
 
