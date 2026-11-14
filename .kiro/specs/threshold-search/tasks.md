@@ -116,13 +116,14 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Decisions: D22, D42_
   - Status (commits 80c6a97 and d50e902): two runs gave byte-identical files under `cmp`. 6000 rows with the `withinFiveDb` column of D42. Accurate 2689 (44.8 percent), Flagged 3180 (53.0 percent), Wrong 131 (2.2 percent), within the original 5 dB 2482 (41.4 percent), the same as the population in the property CLI.
 
-- [ ] 12. Update the READMEs
+- [x] 12. Update the READMEs
   - `src/engine/README.md`: what the engine is and that `createThresholdSearch` is its entry point.
   - `tests/listeners/README.md`: the listener types, the harness and the scatter script.
   - `tests/properties/README.md`: the `checks/` directory, the regression file and the `it.fails` rule, and that statistical checks use fixed seeds.
   - `docs/README.md`: the `experiments/` directory.
   - Follow `wording.md`. Say "self-check" or "first listen" if the product is named, and never "hearing test".
   - _Requirements: 14.1_
+  - Status (commit e59f15d): all four READMEs updated. The product is not named in them. A search for every term in `src/config/banned-terms.ts` finds only `it.fails`, the name of the Vitest function that the task asks `tests/properties/README.md` to describe.
 
 - [ ] 13. Verify the spec version is complete
   - Run `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`. All must exit 0. Record the wall time of `npm test`, which must be under 3 minutes (R14.7).
