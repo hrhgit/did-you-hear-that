@@ -27,7 +27,7 @@ export interface TimestampPair {
  * context do nothing, and the ones that read it return the values given below.
  */
 export interface AudioBackend {
-  /** Whether the browser offers an `AudioContext` at all. */
+  /** Whether the browser offers Web Audio at all. */
   hasWebAudio(): boolean;
   /** Whether a user activation is active, or null where the browser cannot tell (D23). */
   userActivationActive(): boolean | null;
