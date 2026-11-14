@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Render check on synthesis save",
+      "description": "Renders the changed ghost sound at 44100 and 48000 Hz and checks the band, fade, duration and level rules. Findings go to the agent. See .kiro/specs/ghost-sounds/design.md.",
+      "trigger": "PostFileSave",
+      "matcher": "(^|/)src/(audio/synth/.+|config/(audio-safety-config|sound-rules-config|ghost-sound-config|sound-id))\\.ts$",
+      "action": { "type": "command", "command": "npm run --silent render:sounds -- --hook" },
+      "timeout": 120
+    }
+  ]
+}
