@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/ui/base.css" />
+    <link rel="stylesheet" href="/src/ui/listening-page/listening-page.css" />
+    <title></title>
+  </head>
+  <body class="listening-page">
+    <!--
+      The development listening page (audio-output design.md, D26). The development server serves
+      it at /listen.html. The build does not take it as an input and nothing links to it. Every
+      string is set from src/copy by the script.
+    -->
+    <header class="listening-header" data-part="header"></header>
+    <div class="stop-bar" data-part="stop-bar">
+      <button
+        type="button"
+        class="stop-button"
+        data-part="stop-button"
+      ></button>
+      <p class="stop-line" data-part="stop-line" hidden></p>
+      <button
+        type="button"
+        class="start-again-button"
+        data-part="start-again-button"
+        hidden
+      ></button>
+    </div>
+    <main></main>
+    <script
+      type="module"
+      src="/src/ui/listening-page/start-listening-page.ts"
+    ></script>
+  </body>
+</html>

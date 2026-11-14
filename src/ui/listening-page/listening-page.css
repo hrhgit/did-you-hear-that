@@ -1,0 +1,119 @@
+/*
+ * The development listening page (audio-output design.md, "The listening page"). It reads the
+ * colours of base.css. Nothing moves, fades or flashes (audio-safety rule 9).
+ */
+.listening-page main {
+  display: block;
+  min-height: 0;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 3rem;
+  text-align: left;
+}
+
+.listening-header {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 0.5rem;
+}
+
+.listening-header h1 {
+  margin: 0 0 0.25em;
+  font-size: clamp(1.5rem, 1rem + 2vw, 2.25rem);
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+/* The stop control stays at the top of the window at every scroll position (R14.8). */
+.stop-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--color-night);
+  border-bottom: 1px solid var(--color-moonlight);
+}
+
+.listening-page button {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--color-moonlight);
+  border-radius: 0.25rem;
+  background-color: var(--color-night);
+  color: var(--color-moonlight);
+  font: inherit;
+  cursor: pointer;
+}
+
+.listening-page button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.listening-page button:focus-visible {
+  outline: 2px solid var(--color-moonlight);
+  outline-offset: 2px;
+}
+
+.stop-button {
+  min-width: 10rem;
+  font-weight: 700;
+}
+
+.stop-bar .stop-line {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.listening-page section {
+  margin: 1.5rem 0 0;
+}
+
+.listening-page h2 {
+  margin: 0 0 0.5em;
+  font-size: 1.35rem;
+  font-weight: 400;
+}
+
+.listening-page h3 {
+  margin: 1rem 0 0.25em;
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.listening-page p {
+  margin: 0.5em 0;
+  font-size: 1rem;
+}
+
+.listening-page .controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.listening-page dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.listening-page dt,
+.listening-page dd {
+  margin: 0;
+}
+
+.sound-row {
+  padding: 0.5rem 0 1rem;
+  border-bottom: 1px solid rgb(230 225 214 / 30%);
+}
+
+.listening-page [hidden] {
+  display: none;
+}
