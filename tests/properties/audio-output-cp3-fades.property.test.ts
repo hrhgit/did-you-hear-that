@@ -23,10 +23,11 @@ import {
 
 /**
  * Runs over arbitrary buffers, and runs per shipped sound. The design gives 50 per shipped sound;
- * D28 halved that to 25 because CP3 and CP6 together took more than 30 seconds.
+ * D28 halved that to 25 because CP3 and CP6 together took more than 30 seconds, and task 15
+ * halved it again to 12 because CP3, CP6 and CP8 together took more than 30 seconds (D50).
  */
 const runs = 300;
-const runsPerSound = 25;
+const runsPerSound = 12;
 
 /** The condition of CP3 for one result that is not refused. */
 function expectFaded(

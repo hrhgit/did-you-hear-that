@@ -17,9 +17,10 @@ import {
 
 /**
  * Runs per sound. The design gives 100; D28 halved that to 50 because CP3 and CP6 together took
- * more than 30 seconds.
+ * more than 30 seconds, and task 15 halved it again to 25 because CP3, CP6 and CP8 together took
+ * more than 30 seconds (D50).
  */
-const runsPerSound = 50;
+const runsPerSound = 25;
 
 function rmsOf(samples: Float32Array): number {
   let sumOfSquares = 0;

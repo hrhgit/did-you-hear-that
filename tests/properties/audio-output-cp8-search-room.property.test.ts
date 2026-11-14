@@ -33,8 +33,11 @@ vi.mock("../../src/audio/synth/sound-renderers", async () => {
   return { soundRenderers: worstCaseRenderers };
 });
 
-/** Runs (design.md, Correctness properties). */
-const runs = 100;
+/**
+ * Runs. The design gives 100; task 15 halved that to 50 because CP3, CP6 and CP8 together took
+ * more than 30 seconds (D28, D50).
+ */
+const runs = 50;
 
 /** Far above any room the engine can produce; a guard against a search that never ends. */
 const trialGuardCount = 1000;
