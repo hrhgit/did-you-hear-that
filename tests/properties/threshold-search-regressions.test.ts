@@ -14,10 +14,14 @@
 
 import { describe, expect, it } from "vitest";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
-import { atLeastFraction } from "../../src/engine/fraction-comparisons";
+import {
+  atLeastFraction,
+  atMostFraction,
+} from "../../src/engine/fraction-comparisons";
 import type { PsychometricListenerParameters } from "../listeners/psychometric-listener";
 import { specSearchUnderTest } from "../listeners/spec-search-under-test";
 import { cp2AccurateOrFlaggedCheck } from "./checks/cp2-accurate-or-flagged-check";
+import { cp3UsefulForAttentiveCheck } from "./checks/cp3-useful-for-attentive-check";
 import { measureListenerSet } from "./checks/measure-listener-set";
 
 /** CP2's condition for one parameter set: at least 93 percent of 800 ears Accurate or Flagged. */
@@ -44,6 +48,38 @@ function expectAccurateOrFlagged(
   ).toBe(true);
 }
 
+/** CP3's condition for one parameter set: at least 88 percent Accurate and at most 10 percent Flagged. */
+function expectUsefulForAttentive(
+  parameters: PsychometricListenerParameters,
+  setSeed: number,
+): void {
+  const { roomsPerSet, accurateMinFraction, flaggedMaxFraction } =
+    cp3UsefulForAttentiveCheck.parameters;
+  const measurement = measureListenerSet(
+    specSearchUnderTest,
+    hearingMethodConfig,
+    parameters,
+    roomsPerSet,
+  );
+  expect(measurement.setSeed).toBe(setSeed);
+  expect(
+    atLeastFraction(
+      measurement.accurateCount,
+      measurement.earCount,
+      accurateMinFraction,
+    ),
+    `Accurate ${String(measurement.accurateFraction)}`,
+  ).toBe(true);
+  expect(
+    atMostFraction(
+      measurement.flaggedCount,
+      measurement.earCount,
+      flaggedMaxFraction,
+    ),
+    `Flagged ${String(measurement.flaggedFraction)}`,
+  ).toBe(true);
+}
+
 describe("threshold search regressions", () => {
   // A narrow listener 0.1 dB below a level of the grid catches that level about 61 percent of
   // the time. The search stopped at the level above as soon as it had 2 ascending catches,
@@ -60,6 +96,23 @@ describe("threshold search regressions", () => {
           wrongSideFraction: 0,
         },
         4263754660,
+      );
+    },
+  );
+
+  // The same mechanism for an attentive listener 0.1 dB below the level 0.
+  it.fails(
+    "regression 2: attentive listener found one step too loud while the quieter level could still reach 2 of 3 (CP3, seed 3252736698)",
+    () => {
+      expectUsefulForAttentive(
+        {
+          trueThresholdDb: { left: -0.1, right: 0 },
+          widthDb: 1,
+          lapseFraction: 0,
+          falseAlarmFraction: 0,
+          wrongSideFraction: 0,
+        },
+        3252736698,
       );
     },
   );
