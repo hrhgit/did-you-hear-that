@@ -129,3 +129,4 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - Commit `docs/experiments/hook-catches.md` and any change from the fallback. Do not commit the stream capture or the witness log.
   - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 14.1_
   - _Decisions: D19, D20_
+  - Status (2026-11-14): open. Both headless runs, the first with PostFileSave only and the second with the PostToolUse fallback, gained no witness line, because the agent declined the change under `audio-safety.md` rule 3 and wrote no file. The IDE step was not attempted, because the session was non-interactive. The fallback hook was removed again (D20). The brief's Done-when line is not met. See `docs/experiments/hook-catches.md`.
