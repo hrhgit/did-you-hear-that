@@ -118,7 +118,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 1.4, 3.1, 3.2, 17.1, 17.2, 17.3_
   - _Decisions: D23_
 
-- [ ] 14. Show the hook firing on a deliberate bad change, and record it
+- [x] 14. Show the hook firing on a deliberate bad change, and record it
   - This task runs from a new session, started after task 13's commit. Follow "The hook in a headless CLI session" in `design.md`.
   - Note the number of lines in the witness log, `kiro-cli --version` and `git hash-object .kiro/hooks/render-check-on-synth-save.json`.
   - Run the headless command given in `design.md`, from the repository root, with its output captured to `$TMPDIR/hook-demo-stream.jsonl`.
@@ -129,4 +129,4 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - Commit `docs/experiments/hook-catches.md` and any change from the fallback. Do not commit the stream capture or the witness log.
   - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 14.1_
   - _Decisions: D19, D20_
-  - Status (2026-11-14): open. Both headless runs, the first with PostFileSave only and the second with the PostToolUse fallback, gained no witness line, because the agent declined the change under `audio-safety.md` rule 3 and wrote no file. The IDE step was not attempted, because the session was non-interactive. The fallback hook was removed again (D20). The brief's Done-when line is not met. See `docs/experiments/hook-catches.md`.
+  - Status (2026-11-14): done. Runs 1 and 2 gained no witness line, because the agent declined the fade change under `audio-safety.md` rule 3 and wrote no file. Run 3 used the band change of D44 with PostFileSave only, and the witness log gained a PostFileSave line from that session for the change, with exit code 1. The brief's Done-when line is met. The PostToolUse fallback was not needed for run 3 and stays removed (D20). The hook's findings did not reach the agent in run 3, which is recorded as open. The IDE step was not attempted, because the sessions were non-interactive. See `docs/experiments/hook-catches.md`.
