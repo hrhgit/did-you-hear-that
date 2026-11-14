@@ -105,7 +105,9 @@ describe("checkSound", () => {
       const [rule] = checkSound({ ...ghost, fadeInMs: 18.94 });
       expect(rule.measured).toBe(18.94);
       expect(rule.limit).toBe(fadeMinMs);
-      expect(rule.description).toBe("fade in 18.9 ms, limit at least 20 ms");
+      expect(rule.description).toBe(
+        `fade in 18.9 ms, limit at least ${fadeMinMs} ms`,
+      );
     });
 
     it("are broken by a first or last sample that is not exactly zero (R7.1)", () => {

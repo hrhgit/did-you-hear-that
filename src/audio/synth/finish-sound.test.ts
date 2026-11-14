@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { audioSafetyConfig } from "../../config/audio-safety-config";
 import { createSeededRandom } from "../../config/seeded-random";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import { finishSound } from "./finish-sound";
@@ -58,11 +59,13 @@ describe("finishSound", () => {
   it("returns a new Float32Array and leaves its input alone", () => {
     const input = noise(2000, 4);
     const before = input.slice();
-    const finished = finishSound(input, 44100, 20);
+    const finished = finishSound(input, 44100, audioSafetyConfig.fadeMinMs);
     expect(finished).toBeInstanceOf(Float32Array);
     expect(finished).toHaveLength(2000);
     expect(input).toEqual(before);
-    expect(finishSound(input, 44100, 20)).not.toBe(finished);
+    expect(finishSound(input, 44100, audioSafetyConfig.fadeMinMs)).not.toBe(
+      finished,
+    );
   });
 
   it("throws an Error for an all-zero input", () => {
