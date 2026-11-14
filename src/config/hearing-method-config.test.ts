@@ -4,7 +4,7 @@ import { hearingMethodConfig } from "./hearing-method-config";
 const config = hearingMethodConfig;
 
 describe("hearingMethodConfig", () => {
-  it("holds the initial values from the hearing method table and nothing else", () => {
+  it("holds the hearing method table and the threshold search rule values, and nothing else", () => {
     expect(config).toEqual({
       downwardStepDb: 10,
       upwardStepDb: 5,
@@ -23,6 +23,12 @@ describe("hearingMethodConfig", () => {
         quick: [1000, 4000, 8000],
         full: [500, 1000, 2000, 4000, 8000],
       },
+      noSoundTrialProbabilityFraction: 0.2,
+      thresholdCatchesMinCount: 2,
+      thresholdCatchShareMinFraction: 0.5,
+      floorCatchesForBetterThanFloorCount: 2,
+      capMissesForWorseThanCapCount: 2,
+      inconsistentCatchMarginDb: 10,
     });
   });
 
@@ -67,6 +73,36 @@ describe("hearingMethodConfig", () => {
     it("has a positive integer trial limit", () => {
       expect(Number.isInteger(config.trialLimitPerEarPerRoomCount)).toBe(true);
       expect(config.trialLimitPerEarPerRoomCount).toBeGreaterThan(0);
+    });
+
+    it("keeps the no-sound trial probability within the no-sound share range", () => {
+      expect(config.noSoundTrialProbabilityFraction).toBeGreaterThanOrEqual(
+        config.noSoundTrialShareMinFraction,
+      );
+      expect(config.noSoundTrialProbabilityFraction).toBeLessThanOrEqual(
+        config.noSoundTrialShareMaxFraction,
+      );
+    });
+
+    it("keeps the threshold catch share from 0 to 1", () => {
+      expect(config.thresholdCatchShareMinFraction).toBeGreaterThanOrEqual(0);
+      expect(config.thresholdCatchShareMinFraction).toBeLessThanOrEqual(1);
+    });
+
+    it("has positive integer counts for the threshold, floor and cap rules", () => {
+      for (const count of [
+        config.thresholdCatchesMinCount,
+        config.floorCatchesForBetterThanFloorCount,
+        config.capMissesForWorseThanCapCount,
+      ]) {
+        expect(Number.isInteger(count)).toBe(true);
+        expect(count).toBeGreaterThan(0);
+      }
+    });
+
+    it("has a positive integer inconsistent catch margin", () => {
+      expect(Number.isInteger(config.inconsistentCatchMarginDb)).toBe(true);
+      expect(config.inconsistentCatchMarginDb).toBeGreaterThan(0);
     });
 
     it("lists the rooms of each visit in strictly ascending order", () => {

@@ -3,7 +3,9 @@ export type VisitType = "quick" | "full";
 
 /**
  * The initial values of the threshold search, from the "Initial values" table in
- * `.kiro/steering/hearing-method.md`. Every field name ends in its unit.
+ * `.kiro/steering/hearing-method.md`, and the threshold search rule values settled in the
+ * Decisions section of `.kiro/specs/threshold-search/design.md`. Every field name ends in its
+ * unit.
  *
  * Levels are in decibels relative to the calibration anchor: 0 is the anchor and negative is
  * quieter. Step sizes are positive magnitudes: the engine subtracts `downwardStepDb` after a
@@ -25,6 +27,18 @@ export interface HearingMethodConfig {
   readonly trialLimitPerEarPerRoomCount: number;
   readonly swappedRepeatDifferenceDb: number;
   readonly roomFrequenciesHz: Readonly<Record<VisitType, readonly number[]>>;
+  /** Chance that a trial in the search phase of a room is a no-sound trial. */
+  readonly noSoundTrialProbabilityFraction: number;
+  /** Fewest ascending catches at one level for that level to be the threshold. */
+  readonly thresholdCatchesMinCount: number;
+  /** Smallest share of catches among the ascending presentations at one level for the threshold. */
+  readonly thresholdCatchShareMinFraction: number;
+  /** Catches at the floor, in any direction, that end an ear as better than floor. */
+  readonly floorCatchesForBetterThanFloorCount: number;
+  /** Ascending misses and wrong-side answers at the cap that end an ear as worse than cap. */
+  readonly capMissesForWorseThanCapCount: number;
+  /** A catch at least this far below an ear's result marks the ear unreliable. */
+  readonly inconsistentCatchMarginDb: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -71,4 +85,16 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
     // "Rooms, full visit | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz"
     full: [500, 1000, 2000, 4000, 8000],
   },
+  // Not in the steering table. threshold-search design.md, D8: the middle of the no-sound share range
+  noSoundTrialProbabilityFraction: 0.2,
+  // Not in the steering table. threshold-search design.md, D1: at least 2 ascending catches at one level
+  thresholdCatchesMinCount: 2,
+  // Not in the steering table. threshold-search design.md, D1: catches are at least half of the ascending presentations
+  thresholdCatchShareMinFraction: 0.5,
+  // Not in the steering table. threshold-search design.md, D3: 2 catches at the floor
+  floorCatchesForBetterThanFloorCount: 2,
+  // Not in the steering table. threshold-search design.md, D4: 2 ascending non-catches at the cap
+  capMissesForWorseThanCapCount: 2,
+  // Not in the steering table. threshold-search design.md, D5: one downward step below the result
+  inconsistentCatchMarginDb: 10,
 });
