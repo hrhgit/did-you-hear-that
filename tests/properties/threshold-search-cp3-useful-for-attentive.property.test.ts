@@ -5,8 +5,10 @@ import { cp3UsefulForAttentiveCheck as check } from "./checks/cp3-useful-for-att
 
 describe("CP3. Useful for attentive listeners (Statistical; brief property 1)", () => {
   // Skipped: this check did not hold on the first complete run (task 9 status line in
-  // .kiro/specs/threshold-search/tasks.md). Task 10 adds its regression cases and removes this
-  // skip together with the change that makes it hold (D20).
+  // .kiro/specs/threshold-search/tasks.md), and after D40 it still does not. What remains are
+  // ears found one grid step too loud, which only a value task 10 may not move silently could
+  // remove. D41 records the measured numbers and leaves regression cases 1 and 3 as `it.fails`.
+  // Remove this skip together with the change that makes the check hold (D20).
   it.skip(
     "gives at least 88 percent Accurate and at most 10 percent Flagged ear results for each of 50 Attentive_Range listeners (seed 20261117)",
     () => {
