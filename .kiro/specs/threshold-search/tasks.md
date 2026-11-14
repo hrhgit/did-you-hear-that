@@ -132,6 +132,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - Run `npm run experiment:properties -- --search spec` and confirm that every brief property holds in `docs/experiments/brief-properties-spec.json`. Commit it.
   - Write the commit hash measured into a status line under this task. Task 15 cites it.
   - _Requirements: 12.4, 14.7, 17.1, 17.2_
+  - Status: not done, because brief property 1 does not hold in `docs/experiments/brief-properties-spec.json`. Commit measured: a480f64da2e2a7ff6aeebb56300ff2fbe1cb9133, with a clean working tree. `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` exit 0. `npm test` took 2.8 s wall time: 45 files with 713 tests, 1 expected break (regression 4) and 1 skipped file (CP2). `npm run check:copy` finds no banned terms in 2 strings and `npm run render:sounds` has no ghost sounds to render, as before. The only numeric literals in `src/engine/` outside comments and tests are 0, 1 and the tolerance 1e-9. Brief properties 2 to 5 hold. Brief property 1 does not: CP1 and CP3 hold, CP2 has 1 of 100 sets below its limit (D43). Population of 3000: 44.8 percent Accurate, 53.0 Flagged, 2.2 Wrong, 41.4 within the original 5 dB, median 30 and largest 53 trials per room.
 
 - [ ] 14. Measure the no-spec version
   - Only now read `experiment/no-spec`. Record its commit hash.
