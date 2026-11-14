@@ -32,13 +32,25 @@ Also include the extreme listeners: always answers, never answers, answers at ra
 
 ## Properties
 
-1. Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within 5 dB or the result is unreliable.
+1. Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within one step of the grid or the result is unreliable. "Within one step of the grid" means: take the lowest level of the 5 dB grid at or above the listener's true threshold; the estimate is that level, or one 5 dB step either side of it. Measured from the true threshold itself, that is from 5 dB below to just under 10 dB above. See the amendment below.
 2. Always ends within the trial limit.
 3. Levels requested never leave the range between floor and cap, and never rise by more than one upward step between consecutive trials for an ear.
 4. No-sound trials: share within range, positions not predictable.
 5. Same seed and same outcomes give the same trials.
 
 Property 1 is expected to fail at first. Keep each counterexample as a named regression test and fix it in its own commit.
+
+### Amendment to property 1, 2026-11-14
+
+The first version of property 1 said "within 5 dB" of the true threshold. The first complete run and decision D41 of the threshold-search spec showed that no search on a 5 dB grid can meet that for nearly every listener. A listener whose true threshold lies just below a grid level catches that level only about half the time. The rule needs 2 catches in 3, so the search settles one level higher in a large share of rooms, and the result is 5.1 dB or more above the truth. That comes from the grid and the rule, not from a fault in the engine. The engine reports the level the visitor caught, which is a fact about the visit, so the tolerance is now stated on the same grid.
+
+What this changes and what it does not:
+
+- The band is the one stated in property 1 above. It is wider upward than downward because the rule lands at or above the true threshold.
+- Every measurement also reports the share of ears inside the original 5 dB, so the old figure stays visible in the experiment files and in the comparison.
+- The limits of the statistical checks (93 percent, 88 percent), the listener ranges, the step sizes and every value in `hearing-method.md` stay as they are.
+- A kind of listener that still falls below a limit under the new band stays as an expected break with its measured numbers. It is a limit of the method and is reported as one. No limit is lowered to remove it.
+- Visitor-facing text must not promise 5 dB. It may say that a result can sit one step away from where a repeat would put it.
 
 ## The comparison experiment
 
