@@ -50,20 +50,20 @@ Until task 12, nothing in this spec can make a sound in a browser. Task 16 is fo
   - _Requirements: 7.1, 7.2, 8.1, 8.2, 8.3, 9.2, 9.4, 9.6, 10.1, 10.2, 20.1, 20.2, 20.3, 20.4, 20.5, 20.6_
   - _Decisions: D28_
 
-- [ ] 6. Add the backend interface, the fake backend and the output shell
+- [x] 6. Add the backend interface, the fake backend and the output shell
   - Write `audio-backend.ts`, `fake-audio-backend.ts` and `create-audio-output.ts` as described in "The output shell" and "The fake backend" in `design.md`. The shell takes a `Timer` from `src/config/timer.ts` for the suspend after a stop.
   - `create-audio-output.test.ts`, with the fake backend and the manual timer: the order inside `activate` (`createOrResume` recorded before the first await); `noGesture`; every state and the refusals in each; calibration first (R15.1); keep and its two refusals; the headphone check in the left ear at Level 0; `play` returns start and end times 50 ms ahead and on the audio clock; busy; the clamp log; `beginRoom`; a replay exempt from the rise limit; every stop reason, the fade, the suspend or close after the timer, and that nothing plays until `activate`; `deviceChanged` forgets the calibration.
   - Check: `npm test`, `npm run lint`.
   - _Requirements: 3.3, 3.5, 3.6, 4.1 to 4.4, 5.2 to 5.4, 7.8, 8.4, 9.3, 11.1, 11.4, 11.5, 12.1 to 12.3, 13.1, 13.2, 14.1 to 14.7, 15.1 to 15.3, 16.3 to 16.6, 17.1, 17.2_
   - _Decisions: D3, D4, D11, D12, D14, D15, D16, D17, D18, D19, D20, D22, D23_
 
-- [ ] 7. Write the properties of the shell
+- [x] 7. Write the properties of the shell
   - Write the files for CP7, CP9, CP10 and CP13, with operation-sequence arbitraries added to `output-arbitraries.ts`.
   - Check: `npm test`, `npm run lint`.
   - _Requirements: 4.4, 5.2, 5.3, 5.4, 11.1 to 11.5, 12.1, 12.2, 14.1 to 14.7, 15.1, 16.1 to 16.6, 20.4_
   - _Decisions: D8, D14, D15, D16, D18_
 
-- [ ] 8. Add the session helpers and the search property
+- [x] 8. Add the session helpers and the search property
   - Write `src/session/room-search-cap.ts` and `judge-headphone-check.ts` with their tests. `room-search-cap.test.ts`: the bracketed grid values in the room-top table of `design.md`; a top exactly on the grid; a top above +15; the result passes `validateSearchSettings` when used as the cap.
   - Add a type-level test in `src/session/` that the output stage's `Ear` and the engine's `Ear` are the same type.
   - Write the CP8 property file, driving `createThresholdSearch` through the shell with the fake backend and listeners from `tests/listeners/`.
@@ -71,7 +71,7 @@ Until task 12, nothing in this spec can make a sound in a browser. Task 16 is fo
   - _Requirements: 9.6, 11.6, 17.3, 17.7, 20.4_
   - _Decisions: D7, D15, D20_
 
-- [ ] 9. Add the copy
+- [x] 9. Add the copy
   - Write `calibration-copy.ts`, `headphone-check-copy.ts`, `output-state-copy.ts` and `listening-page-copy.ts` under `src/copy/` with the lines in `design.md` (calibration table, headphone check table, the stop control, a line for each stop reason, a line for each unsupported reason, and the listening page's labels). `roomsShortLine(count, total)`, `levelLabel(levelDb)` (always "relative to your calibration") and `clampLine(limit)` are functions.
   - `output-copy.test.ts`: `findBannedTerms` with `bannedTerms` over every string and over the output of every function for counts 0 to 5 and a range of levels; no line contains "turn up", "turn the volume up" or "raise", except the two lines of R16.8 and R16.9, which say not to and are listed by name in the test (R16.10).
   - Check: `npm test`, `npm run lint`, `npm run check:copy`.
