@@ -8,14 +8,6 @@
       "matcher": "(^|/)src/(audio/synth/.+|config/(audio-safety-config|sound-rules-config|ghost-sound-config|sound-id))\\.ts$",
       "action": { "type": "command", "command": "npm run --silent render:sounds -- --hook" },
       "timeout": 120
-    },
-    {
-      "name": "Render check after an agent write",
-      "description": "The PostToolUse fallback of D20. Runs the same render check after every built-in file write by the agent. See .kiro/specs/ghost-sounds/design.md.",
-      "trigger": "PostToolUse",
-      "matcher": "write",
-      "action": { "type": "command", "command": "npm run --silent render:sounds -- --hook" },
-      "timeout": 120
     }
   ]
 }

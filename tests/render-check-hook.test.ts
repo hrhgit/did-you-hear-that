@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Checks the render check hook file against the ghost-sounds design (R14, D18, D20). Kiro reads
-// the file. This test cannot show the hook firing, which needs a new session (D19).
+// Checks the render check hook file against the ghost-sounds design (R14, D18). Kiro reads the
+// file. This test cannot show the hook firing, which needs a new session (D19).
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const hookPath = path.join(
@@ -21,13 +21,12 @@ interface HookFile {
 const hookFile = JSON.parse(readFileSync(hookPath, "utf8")) as HookFile;
 const hook = hookFile.hooks[0];
 const matcher = String(hook.matcher);
-const fallbackHook = hookFile.hooks[1];
 
 describe("the render check hook", () => {
-  it("is a v1 standalone hook file with the save hook and the PostToolUse fallback of D20", () => {
+  it("is a v1 standalone hook file with one hook", () => {
     expect(hookFile.version).toBe("v1");
     expect(Array.isArray(hookFile.hooks)).toBe(true);
-    expect(hookFile.hooks).toHaveLength(2);
+    expect(hookFile.hooks).toHaveLength(1);
   });
 
   it("runs the render tool in hook mode after a file save, with a timeout of 120 seconds", () => {
@@ -47,18 +46,6 @@ describe("the render check hook", () => {
     expect(Object.keys(hook).sort()).toEqual(
       ["action", "description", "matcher", "name", "timeout", "trigger"].sort(),
     );
-  });
-
-  it("has a PostToolUse fallback that runs the same command after every agent write (D20)", () => {
-    expect(fallbackHook.name).toBe("Render check after an agent write");
-    expect(typeof fallbackHook.description).toBe("string");
-    expect(fallbackHook.trigger).toBe("PostToolUse");
-    expect(fallbackHook.matcher).toBe("write");
-    expect(fallbackHook.action).toEqual(hook.action);
-    expect(fallbackHook.timeout).toBe(120);
-    expect(fallbackHook).not.toHaveProperty("confirm");
-    expect(fallbackHook.enabled).not.toBe(false);
-    expect(Object.keys(fallbackHook).sort()).toEqual(Object.keys(hook).sort());
   });
 
   it("matches every synthesis file and the four sound config files, absolute or relative", () => {
@@ -107,9 +94,7 @@ describe("the render check hook", () => {
       /\(\?>/,
     ];
     for (const feature of unsupported) {
-      for (const each of [matcher, String(fallbackHook.matcher)]) {
-        expect(feature.test(each), `${String(feature)} in ${each}`).toBe(false);
-      }
+      expect(feature.test(matcher), String(feature)).toBe(false);
     }
   });
 });
