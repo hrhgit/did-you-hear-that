@@ -73,7 +73,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 5.5, 5.7, 5.8, 6.1, 7.1, 7.2, 7.3, 8.1, 8.2, 9.1, 9.2, 10.1, 10.3, 11.5, 11.6, 11.7, 16.1, 16.2, 16.3, 16.4, 16.5, 16.6_
   - _Decisions: D21_
 
-- [ ] 9. Replace the render tool
+- [x] 9. Replace the render tool
   - Write the files under `tools/sound-render/` and their tests: `parse-render-arguments` (no arguments, repeated `--changed`, `--hook`, unknown arguments, `--changed` without a path); `sounds-for-changed-path` (D17, with Windows-style and absolute paths); `hook-event-paths` (paths at any depth, in arrays, under any key; empty, non-JSON and pathless input); `measure-sounds` (with the real renderer for one sound, and with an injected throwing renderer); `format-sound-report` (fixed decimals, worst value with its seed, the rules column, no date, the Notes section).
   - Replace `tools/run-sound-render.ts` with the core of the Interface section of `design.md`, and replace `tools/run-sound-render.test.ts` with tests of the three modes using injected renderers: one meeting every rule, one breaking the band rule, one skipping the fade, and one that throws. Check exit codes, which lines go to standard output and which to standard error in hook mode, that a report is returned only in full mode, and that a witness line is returned only in hook mode, with the input cut to 4000 characters. Remove the stub's tests (D27).
   - Add a test that runs `findBannedTerms` with `bannedTerms` over a report built from real measurements and over every line the core can print, including each broken-rule description (R12.7, D22).
@@ -83,7 +83,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7, 13.8, 13.9, 13.10_
   - _Decisions: D16, D17, D18, D22, D27_
 
-- [ ] 10. Write the sound report
+- [x] 10. Write the sound report
   - Run `npm run render:sounds`. It must exit 0 and write `docs/reports/sounds.md`. Run it a second time and confirm with `git diff` that the report does not change.
   - Read the report against the Feasibility table in `design.md`. If any sound's margin to a limit is under 3 dB or 3 ms, note it in the commit message body. Do not change a rule.
   - Run `npm run render:sounds -- --changed src/audio/synth/cellar-knock.ts` (one sound, no report written), `-- --changed src/config/ghost-sound-config.ts` (every sound) and `-- --changed src/ui/base.css` (nothing checked, exit 0). Confirm with `git status` that only the report changed.
@@ -91,7 +91,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 10.4, 12.1, 12.2, 12.3, 12.5, 13.1, 13.2, 13.3, 13.4, 13.10_
   - _Decisions: D16_
 
-- [ ] 11. Add the hook
+- [x] 11. Add the hook
   - Write `.kiro/hooks/render-check-on-synth-save.json` exactly as in "The hook" in `design.md`.
   - Write `tests/render-check-hook.test.ts` with the field checks, the matching and non-matching paths, and the check for regular expression features the Rust `regex` crate lacks.
   - Run the hook's command by hand the way Kiro will:
@@ -102,14 +102,14 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 13.5, 13.6, 13.7, 13.9, 14.1, 14.2, 14.3, 14.4, 14.5_
   - _Decisions: D18, D19_
 
-- [ ] 12. Update the READMEs
+- [x] 12. Update the READMEs
   - `src/audio/synth/README.md`: the six sounds and their files, the plan and render split, `finishSound`, the `measure/` subdirectory and who may use it (D13), and that nothing here plays sound.
   - `tools/README.md`: the render tool's three modes, the report, and the witness log.
   - `docs/README.md`: `reports/sounds.md`, and `experiments/hook-catches.md` once task 14 writes it.
   - Run `findBannedTerms` over the changed READMEs, for example with a short `npx tsx -e` call, and expect no match.
   - _Requirements: 18.1, 18.2_
 
-- [ ] 13. Final checks before the hook demonstration
+- [x] 13. Final checks before the hook demonstration
   - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` and `npm run render:sounds`. All exit 0, and the report does not change.
   - Search `src/audio/synth`, `tools/sound-render`, `tools/run-sound-render.ts` and the new tests for the literals `20` and `1500` used as a fade or a duration. Every such use reads `audioSafetyConfig` (R1.4).
   - Confirm that `git ls-files` lists no `.wav`, `.mp3`, `.ogg`, `.flac` or `.m4a` file and that no file under `tools/lint/` or `eslint.config.js` changed (R17).
