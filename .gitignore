@@ -1,0 +1,9 @@
+# Keep the .kiro directory tracked. The hackathon rules require it in the repository.
+
+.DS_Store
+node_modules/
+dist/
+.env
+.env.*
+*.log
+cli.json.lock
