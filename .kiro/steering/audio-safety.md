@@ -17,3 +17,15 @@ These rules protect the visitor's ears. They outrank every other requirement, in
 9. **No jump scares.** No loud stingers, no screams, no sudden full-screen flashes. This applies to video and marketing material too.
 
 When a requested change conflicts with a rule here, stop and say so instead of working around it.
+
+## Initial values
+
+These numbers live in `src/config`. They are starting values chosen on the cautious side. Nobody has listened to them yet. They may be made stricter at any time. Making one looser (a shorter fade, a longer sound, a higher ceiling) needs the project owner's approval first.
+
+| Quantity | Initial value |
+|---|---|
+| Shortest fade in and fade out | 20 ms |
+| Longest ghost sound | 1.5 s |
+| Absolute digital ceiling | no output sample beyond 0.25 of full scale, about 12 dB below full scale |
+
+The ceiling is low on purpose. The product cannot know the system volume, and the visitor can raise it after calibration (rule 8). A low ceiling limits how loud the worst case can get. Its cost is range: on some headphones the quietest levels may fall below what the device can play. That trade is reviewed after the first listening session with real headphones.
