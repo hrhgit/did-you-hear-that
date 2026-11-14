@@ -21,6 +21,12 @@ The single place where sound leaves the product, and the place where the safety 
 
 The level arithmetic (calibration gain, level, cap, fades, channel routing) should be a pure function from a request to the two channel buffers that will be played. Web Audio then only plays those buffers. That keeps the safety properties testable without a browser.
 
+## Findings from the ghost-sounds spec to handle here
+
+- **Peaks sit far above the average level.** The ghost sounds share one average (RMS) level, and the search's levels are average levels. The digital ceiling limits single samples. Measured crest factors run from about 4 dB (attic) to about 17 dB (stairs). So the highest level a sound can be played at without touching the ceiling differs by sound, and depends on the calibration gain. Specify what happens when a requested level would push a sample past the ceiling. The sound must never be clipped, because clipping spreads energy outside the room's band. The level actually played must be the level reported back, so the search never records a level that was not played. Say how the caller learns, before a room starts, what the highest playable level is for that room's sound with the current calibration, so the search can use it as its cap.
+- **Calibration decides how much range is left.** A high calibration gain leaves little room under the ceiling. A low one pushes the quietest levels towards what the device cannot play. Specify what the calibration control allows, what it tells the visitor when the chosen setting leaves too little range upward, and what the output stage reports about the range that is left. Do not raise the ceiling to make room.
+- **Sample rate.** The ghost-sounds spec supports sample rates from 22050 Hz up, because a lower rate cannot carry the attic room. Specify what the output stage does when the `AudioContext` runs below that, as some Bluetooth headsets in call mode do.
+
 ## Properties
 
 1. For any buffer, any requested level and any calibration gain, no output sample exceeds the absolute ceiling, and the level never exceeds the cap relative to the anchor.
