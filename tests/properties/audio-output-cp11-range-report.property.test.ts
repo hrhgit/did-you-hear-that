@@ -8,6 +8,7 @@ import { soundRulesConfig } from "../../src/config/sound-rules-config";
 import { decibelsToGain } from "../../src/audio/synth/decibels-to-gain";
 import { gainToDecibels } from "../../src/audio/output/gain-to-decibels";
 import { rangeReport } from "../../src/audio/output/range-report";
+import { roomSearchCapDb } from "../../src/session/room-search-cap";
 
 /** Runs (design.md, Correctness properties). */
 const runs = 300;
@@ -17,9 +18,7 @@ const gainArbitrary = fc
   .double({ min: -6, max: 2, noNaN: true })
   .map((exponent) => 10 ** exponent);
 
-// The second half of CP11, on roomSearchCapDb in src/session, is added with that function by
-// task 8 (design.md, D38).
-describe("audio output CP11. The range report (Universal; R9.2, R9.5)", () => {
+describe("audio output CP11. The range report (Universal; R9.2, R9.5, R9.6)", () => {
   it("gives every room the top of the formula, at most the anchor cap, named by the smaller limit", () => {
     const { capRelativeToAnchorDb } = hearingMethodConfig;
     fc.assert(
@@ -41,6 +40,29 @@ describe("audio output CP11. The range report (Universal; R9.2, R9.5)", () => {
             ceilingLimitedDb < capRelativeToAnchorDb ? "ceiling" : "anchorCap",
           );
           expect(room.belowAnchorCapDb).toBeGreaterThanOrEqual(0);
+        }
+      }),
+      { numRuns: runs },
+    );
+  }, 120_000);
+
+  it("rounds every room's top down to a grid level within one step of it, at most the anchor cap", () => {
+    const { capRelativeToAnchorDb, startingLevelDb, upwardStepDb } =
+      hearingMethodConfig;
+    // roomSearchCapDb counts a top 10⁻⁹ steps below a grid level as on it (D44).
+    const gridToleranceDb = 1e-9 * upwardStepDb;
+    fc.assert(
+      fc.property(gainArbitrary, (calibrationGain) => {
+        const report = rangeReport(calibrationGain);
+        for (const soundId of soundIds) {
+          const topDb = report.rooms[soundId].topLevelDb;
+          const capDb = roomSearchCapDb(topDb, hearingMethodConfig);
+          expect(
+            Number.isInteger((capDb - startingLevelDb) / upwardStepDb),
+          ).toBe(true);
+          expect(capDb).toBeLessThanOrEqual(topDb + gridToleranceDb);
+          expect(capDb).toBeGreaterThan(topDb - upwardStepDb);
+          expect(capDb).toBeLessThanOrEqual(capRelativeToAnchorDb);
         }
       }),
       { numRuns: runs },
