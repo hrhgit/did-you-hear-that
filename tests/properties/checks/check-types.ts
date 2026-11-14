@@ -51,3 +51,52 @@ export interface SpecOnlyUniversalCheck extends CheckIdentity {
 
 export type UniversalCheck =
   HarnessNeutralUniversalCheck | SpecOnlyUniversalCheck;
+
+/**
+ * What a statistical check found: whether it holds, the first counterexample when it does not,
+ * and the numbers it measured. The property CLI writes all three to its JSON summary.
+ */
+export interface StatisticalVerdict {
+  readonly holds: boolean;
+  /** A description of the first case that does not hold, when there is one. */
+  readonly firstCounterexample?: unknown;
+  readonly metrics: Readonly<Record<string, unknown>>;
+}
+
+/** How a statistical check runs: its fixed seed, its run counts and its Vitest timeout (D19). */
+export interface StatisticalCheckParameters {
+  readonly seed: number;
+  readonly timeoutMs: number;
+  readonly [name: string]: number;
+}
+
+/**
+ * A statistical check that runs against any `SearchUnderTest` (D21). `evaluate` throws a
+ * `NotCheckableError` when a run lacks what the check needs (R16.5).
+ */
+export interface HarnessNeutralStatisticalCheck extends CheckIdentity {
+  readonly kind: "statistical";
+  readonly harnessNeutral: true;
+  notCheckableReason(search: SearchUnderTest): string | undefined;
+  evaluate(
+    search: SearchUnderTest,
+    settings: ThresholdSearchSettings,
+  ): StatisticalVerdict;
+  readonly parameters: StatisticalCheckParameters;
+}
+
+/** A statistical check of this spec's own design, run against the spec engine only (D21). */
+export interface SpecOnlyStatisticalCheck extends CheckIdentity {
+  readonly kind: "statistical";
+  readonly harnessNeutral: false;
+  evaluate(settings: ThresholdSearchSettings): StatisticalVerdict;
+  readonly parameters: StatisticalCheckParameters;
+}
+
+export type StatisticalCheck =
+  HarnessNeutralStatisticalCheck | SpecOnlyStatisticalCheck;
+
+export type HarnessNeutralCheck =
+  HarnessNeutralUniversalCheck | HarnessNeutralStatisticalCheck;
+
+export type SpecOnlyCheck = SpecOnlyUniversalCheck | SpecOnlyStatisticalCheck;

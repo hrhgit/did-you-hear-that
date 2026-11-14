@@ -16,7 +16,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "check:copy": "tsx tools/check-copy.ts",
-    "render:sounds": "tsx tools/render-sounds.ts"
+    "render:sounds": "tsx tools/render-sounds.ts",
+    "experiment:properties": "tsx tests/properties/checks/run-brief-properties.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

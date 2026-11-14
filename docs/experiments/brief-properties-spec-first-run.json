@@ -1,0 +1,1783 @@
+{
+  "search": "spec",
+  "commit": "37215f8f3e70652c7588b74a8987c6fa3fe4a682",
+  "workingTreeClean": false,
+  "command": "npm run experiment:properties -- --search spec",
+  "takesSettings": true,
+  "takesSeed": true,
+  "settings": {
+    "downwardStepDb": 10,
+    "upwardStepDb": 5,
+    "startingLevelDb": -25,
+    "capRelativeToAnchorDb": 15,
+    "floorDb": -70,
+    "responseWindowMs": 2000,
+    "gapBetweenTrialsMinMs": 1500,
+    "gapBetweenTrialsMaxMs": 4000,
+    "noSoundTrialShareMinFraction": 0.15,
+    "noSoundTrialShareMaxFraction": 0.25,
+    "falseAlarmRateUnreliableAboveFraction": 0.3,
+    "trialLimitPerEarPerRoomCount": 20,
+    "swappedRepeatDifferenceDb": 15,
+    "roomFrequenciesHz": {
+      "quick": [
+        1000,
+        4000,
+        8000
+      ],
+      "full": [
+        500,
+        1000,
+        2000,
+        4000,
+        8000
+      ]
+    },
+    "noSoundTrialProbabilityFraction": 0.2,
+    "thresholdCatchesMinCount": 2,
+    "thresholdCatchShareMinFraction": 0.5,
+    "floorCatchesForBetterThanFloorCount": 2,
+    "capMissesForWorseThanCapCount": 2,
+    "inconsistentCatchMarginDb": 10
+  },
+  "briefProperties": [
+    {
+      "number": 1,
+      "statement": "Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within 5 dB or the result is unreliable.",
+      "holds": false,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP1",
+          "title": "Exact listeners get the exact answer",
+          "kind": "universal",
+          "requirements": [
+            "R5",
+            "R6",
+            "R7",
+            "R8.2",
+            "R8.3"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": 609549580
+          },
+          "durationMs": 14
+        },
+        {
+          "id": "CP2",
+          "title": "Accurate or flagged",
+          "kind": "statistical",
+          "requirements": [
+            "R13.8"
+          ],
+          "holds": false,
+          "checkable": true,
+          "firstCounterexample": {
+            "shrunk": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -55.1,
+                  "right": 0
+                },
+                "widthDb": 1,
+                "lapseFraction": 0,
+                "falseAlarmFraction": 0,
+                "wrongSideFraction": 0
+              },
+              "setSeed": 4263754660,
+              "accurateFraction": 0.78,
+              "flaggedFraction": 0,
+              "wrongFraction": 0.22,
+              "unfinishedRoomCount": 0,
+              "wrongExamples": [
+                {
+                  "room": 4,
+                  "engineSeed": 4013931742,
+                  "listenerSeed": 3365959432,
+                  "ear": "left",
+                  "trueThresholdDb": -55.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -50
+                  }
+                },
+                {
+                  "room": 5,
+                  "engineSeed": 527927061,
+                  "listenerSeed": 883471820,
+                  "ear": "left",
+                  "trueThresholdDb": -55.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -50
+                  }
+                },
+                {
+                  "room": 6,
+                  "engineSeed": 2169098418,
+                  "listenerSeed": 1565324398,
+                  "ear": "left",
+                  "trueThresholdDb": -55.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -50
+                  }
+                },
+                {
+                  "room": 8,
+                  "engineSeed": 2171079308,
+                  "listenerSeed": 4173957933,
+                  "ear": "left",
+                  "trueThresholdDb": -55.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -50
+                  }
+                },
+                {
+                  "room": 9,
+                  "engineSeed": 2197209126,
+                  "listenerSeed": 932629074,
+                  "ear": "left",
+                  "trueThresholdDb": -55.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": -50
+                  }
+                }
+              ]
+            },
+            "firstInDrawOrder": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -55.7,
+                  "right": -0.6
+                },
+                "widthDb": 1.2,
+                "lapseFraction": 0.061,
+                "falseAlarmFraction": 0.186,
+                "wrongSideFraction": 0.097
+              },
+              "setSeed": 2182460547,
+              "accurateFraction": 0.49875,
+              "flaggedFraction": 0.425,
+              "wrongFraction": 0.07625,
+              "unfinishedRoomCount": 0
+            },
+            "fastCheck": {
+              "seed": 20261116,
+              "path": "1:7:0:1:1:1:1:1",
+              "numShrinks": 7
+            }
+          },
+          "metrics": {
+            "accurateOrFlaggedMinFraction": 0.93,
+            "accurateOrFlaggedTargetFraction": 0.95,
+            "seed": 20261116,
+            "setCount": 100,
+            "roomsPerSet": 400,
+            "earCount": 80000,
+            "accurateFraction": 0.4748,
+            "flaggedFraction": 0.4416,
+            "wrongFraction": 0.0836,
+            "unfinishedRoomCount": 0,
+            "setsNotMeetingLimitCount": 36,
+            "worstSet": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -21.2,
+                  "right": -35.3
+                },
+                "widthDb": 7.4,
+                "lapseFraction": 0.086,
+                "falseAlarmFraction": 0.006,
+                "wrongSideFraction": 0.006
+              },
+              "setSeed": 502916274,
+              "accurateFraction": 0.4975,
+              "flaggedFraction": 0.105,
+              "wrongFraction": 0.3975,
+              "unfinishedRoomCount": 0
+            },
+            "setsNotMeetingLimit": [
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -55.7,
+                    "right": -0.6
+                  },
+                  "widthDb": 1.2,
+                  "lapseFraction": 0.061,
+                  "falseAlarmFraction": 0.186,
+                  "wrongSideFraction": 0.097
+                },
+                "setSeed": 2182460547,
+                "accurateFraction": 0.49875,
+                "flaggedFraction": 0.425,
+                "wrongFraction": 0.07625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.9,
+                    "right": 0.3
+                  },
+                  "widthDb": 6.5,
+                  "lapseFraction": 0.004,
+                  "falseAlarmFraction": 0.007,
+                  "wrongSideFraction": 0.003
+                },
+                "setSeed": 2386470059,
+                "accurateFraction": 0.82125,
+                "flaggedFraction": 0.0625,
+                "wrongFraction": 0.11625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -69.9,
+                    "right": -0.3
+                  },
+                  "widthDb": 7.9,
+                  "lapseFraction": 0.098,
+                  "falseAlarmFraction": 0.149,
+                  "wrongSideFraction": 0.095
+                },
+                "setSeed": 2415111707,
+                "accurateFraction": 0.5025,
+                "flaggedFraction": 0.37,
+                "wrongFraction": 0.1275,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -60.3,
+                    "right": -0.5
+                  },
+                  "widthDb": 7.6,
+                  "lapseFraction": 0.063,
+                  "falseAlarmFraction": 0.099,
+                  "wrongSideFraction": 0.096
+                },
+                "setSeed": 840977642,
+                "accurateFraction": 0.395,
+                "flaggedFraction": 0.305,
+                "wrongFraction": 0.3,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 11,
+                    "right": -0.6
+                  },
+                  "widthDb": 2.8,
+                  "lapseFraction": 0.033,
+                  "falseAlarmFraction": 0.004,
+                  "wrongSideFraction": 0.005
+                },
+                "setSeed": 800419599,
+                "accurateFraction": 0.88625,
+                "flaggedFraction": 0.01,
+                "wrongFraction": 0.10375,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 0.8,
+                    "right": -0.3
+                  },
+                  "widthDb": 6.8,
+                  "lapseFraction": 0.011,
+                  "falseAlarmFraction": 0.157,
+                  "wrongSideFraction": 0.005
+                },
+                "setSeed": 1999428237,
+                "accurateFraction": 0.4175,
+                "flaggedFraction": 0.49,
+                "wrongFraction": 0.0925,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 9.8,
+                    "right": -22.2
+                  },
+                  "widthDb": 2.9,
+                  "lapseFraction": 0.078,
+                  "falseAlarmFraction": 0.003,
+                  "wrongSideFraction": 0.095
+                },
+                "setSeed": 622930060,
+                "accurateFraction": 0.65625,
+                "flaggedFraction": 0.01625,
+                "wrongFraction": 0.3275,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -15.1,
+                    "right": -61.5
+                  },
+                  "widthDb": 7.9,
+                  "lapseFraction": 0.05,
+                  "falseAlarmFraction": 0.166,
+                  "wrongSideFraction": 0.043
+                },
+                "setSeed": 15821387,
+                "accurateFraction": 0.43,
+                "flaggedFraction": 0.3975,
+                "wrongFraction": 0.1725,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -22.5,
+                    "right": -10.6
+                  },
+                  "widthDb": 5.8,
+                  "lapseFraction": 0.008,
+                  "falseAlarmFraction": 0.003,
+                  "wrongSideFraction": 0.023
+                },
+                "setSeed": 4142036842,
+                "accurateFraction": 0.785,
+                "flaggedFraction": 0.0325,
+                "wrongFraction": 0.1825,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -18.4,
+                    "right": 4
+                  },
+                  "widthDb": 4.2,
+                  "lapseFraction": 0.054,
+                  "falseAlarmFraction": 0.038,
+                  "wrongSideFraction": 0.049
+                },
+                "setSeed": 2892915344,
+                "accurateFraction": 0.7875,
+                "flaggedFraction": 0.115,
+                "wrongFraction": 0.0975,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.5,
+                    "right": 5.4
+                  },
+                  "widthDb": 7.7,
+                  "lapseFraction": 0.078,
+                  "falseAlarmFraction": 0.158,
+                  "wrongSideFraction": 0.065
+                },
+                "setSeed": 735524768,
+                "accurateFraction": 0.3575,
+                "flaggedFraction": 0.54125,
+                "wrongFraction": 0.10125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -67,
+                    "right": -10.8
+                  },
+                  "widthDb": 4.4,
+                  "lapseFraction": 0.001,
+                  "falseAlarmFraction": 0.295,
+                  "wrongSideFraction": 0.095
+                },
+                "setSeed": 2520871014,
+                "accurateFraction": 0.36125,
+                "flaggedFraction": 0.56375,
+                "wrongFraction": 0.075,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -60.1,
+                    "right": -0.9
+                  },
+                  "widthDb": 6.4,
+                  "lapseFraction": 0.092,
+                  "falseAlarmFraction": 0.31,
+                  "wrongSideFraction": 0.013
+                },
+                "setSeed": 1681992900,
+                "accurateFraction": 0.17875,
+                "flaggedFraction": 0.69375,
+                "wrongFraction": 0.1275,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -48.4,
+                    "right": -0.3
+                  },
+                  "widthDb": 6.2,
+                  "lapseFraction": 0.096,
+                  "falseAlarmFraction": 0.239,
+                  "wrongSideFraction": 0.014
+                },
+                "setSeed": 2965885960,
+                "accurateFraction": 0.31875,
+                "flaggedFraction": 0.5975,
+                "wrongFraction": 0.08375,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 0.3,
+                    "right": -55.4
+                  },
+                  "widthDb": 1.6,
+                  "lapseFraction": 0.081,
+                  "falseAlarmFraction": 0.18,
+                  "wrongSideFraction": 0.097
+                },
+                "setSeed": 602631194,
+                "accurateFraction": 0.44,
+                "flaggedFraction": 0.45,
+                "wrongFraction": 0.11,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 14.7,
+                    "right": -0.3
+                  },
+                  "widthDb": 7.8,
+                  "lapseFraction": 0.019,
+                  "falseAlarmFraction": 0.007,
+                  "wrongSideFraction": 0.099
+                },
+                "setSeed": 2512912095,
+                "accurateFraction": 0.72625,
+                "flaggedFraction": 0.0725,
+                "wrongFraction": 0.20125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 14.9,
+                    "right": 9.5
+                  },
+                  "widthDb": 7.5,
+                  "lapseFraction": 0.093,
+                  "falseAlarmFraction": 0.002,
+                  "wrongSideFraction": 0.076
+                },
+                "setSeed": 667108274,
+                "accurateFraction": 0.7325,
+                "flaggedFraction": 0.0375,
+                "wrongFraction": 0.23,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 0.7,
+                    "right": -36.9
+                  },
+                  "widthDb": 7.6,
+                  "lapseFraction": 0.097,
+                  "falseAlarmFraction": 0.085,
+                  "wrongSideFraction": 0.006
+                },
+                "setSeed": 2636062857,
+                "accurateFraction": 0.61,
+                "flaggedFraction": 0.28625,
+                "wrongFraction": 0.10375,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -45.6,
+                    "right": 11.3
+                  },
+                  "widthDb": 2.5,
+                  "lapseFraction": 0.008,
+                  "falseAlarmFraction": 0.203,
+                  "wrongSideFraction": 0.002
+                },
+                "setSeed": 4100264996,
+                "accurateFraction": 0.435,
+                "flaggedFraction": 0.485,
+                "wrongFraction": 0.08,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -21.2,
+                    "right": -35.3
+                  },
+                  "widthDb": 7.4,
+                  "lapseFraction": 0.086,
+                  "falseAlarmFraction": 0.006,
+                  "wrongSideFraction": 0.006
+                },
+                "setSeed": 502916274,
+                "accurateFraction": 0.4975,
+                "flaggedFraction": 0.105,
+                "wrongFraction": 0.3975,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -16.6,
+                    "right": -66
+                  },
+                  "widthDb": 5.4,
+                  "lapseFraction": 0.034,
+                  "falseAlarmFraction": 0.04,
+                  "wrongSideFraction": 0.001
+                },
+                "setSeed": 892001287,
+                "accurateFraction": 0.72,
+                "flaggedFraction": 0.0775,
+                "wrongFraction": 0.2025,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -60.4,
+                    "right": -38.7
+                  },
+                  "widthDb": 7.8,
+                  "lapseFraction": 0.1,
+                  "falseAlarmFraction": 0.019,
+                  "wrongSideFraction": 0.024
+                },
+                "setSeed": 2296256317,
+                "accurateFraction": 0.6375,
+                "flaggedFraction": 0.125,
+                "wrongFraction": 0.2375,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.3,
+                    "right": -67.2
+                  },
+                  "widthDb": 6.9,
+                  "lapseFraction": 0.006,
+                  "falseAlarmFraction": 0.166,
+                  "wrongSideFraction": 0.057
+                },
+                "setSeed": 3566041311,
+                "accurateFraction": 0.51375,
+                "flaggedFraction": 0.355,
+                "wrongFraction": 0.13125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -15.4,
+                    "right": -8.2
+                  },
+                  "widthDb": 1.2,
+                  "lapseFraction": 0.038,
+                  "falseAlarmFraction": 0.004,
+                  "wrongSideFraction": 0.024
+                },
+                "setSeed": 1313144589,
+                "accurateFraction": 0.915,
+                "flaggedFraction": 0.0125,
+                "wrongFraction": 0.0725,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -46.1,
+                    "right": -52.1
+                  },
+                  "widthDb": 5.7,
+                  "lapseFraction": 0.098,
+                  "falseAlarmFraction": 0.006,
+                  "wrongSideFraction": 0.096
+                },
+                "setSeed": 1044455728,
+                "accurateFraction": 0.595,
+                "flaggedFraction": 0.0875,
+                "wrongFraction": 0.3175,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -59.4,
+                    "right": -35.7
+                  },
+                  "widthDb": 7.8,
+                  "lapseFraction": 0.004,
+                  "falseAlarmFraction": 0.005,
+                  "wrongSideFraction": 0.005
+                },
+                "setSeed": 4080304241,
+                "accurateFraction": 0.69625,
+                "flaggedFraction": 0.09125,
+                "wrongFraction": 0.2125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -40.4,
+                    "right": 7.1
+                  },
+                  "widthDb": 7.7,
+                  "lapseFraction": 0.082,
+                  "falseAlarmFraction": 0.311,
+                  "wrongSideFraction": 0.064
+                },
+                "setSeed": 2552481985,
+                "accurateFraction": 0.1625,
+                "flaggedFraction": 0.74125,
+                "wrongFraction": 0.09625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -69.6,
+                    "right": -0.3
+                  },
+                  "widthDb": 7.7,
+                  "lapseFraction": 0.022,
+                  "falseAlarmFraction": 0.008,
+                  "wrongSideFraction": 0.036
+                },
+                "setSeed": 3666333208,
+                "accurateFraction": 0.75,
+                "flaggedFraction": 0.0575,
+                "wrongFraction": 0.1925,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 0,
+                    "right": -55.5
+                  },
+                  "widthDb": 3.8,
+                  "lapseFraction": 0.037,
+                  "falseAlarmFraction": 0.007,
+                  "wrongSideFraction": 0.036
+                },
+                "setSeed": 3237431928,
+                "accurateFraction": 0.74875,
+                "flaggedFraction": 0.02375,
+                "wrongFraction": 0.2275,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -52.5,
+                    "right": -65
+                  },
+                  "widthDb": 3.5,
+                  "lapseFraction": 0.068,
+                  "falseAlarmFraction": 0,
+                  "wrongSideFraction": 0.094
+                },
+                "setSeed": 2474040103,
+                "accurateFraction": 0.895,
+                "flaggedFraction": 0.02875,
+                "wrongFraction": 0.07625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -45.2,
+                    "right": 0.6
+                  },
+                  "widthDb": 7.8,
+                  "lapseFraction": 0.017,
+                  "falseAlarmFraction": 0.002,
+                  "wrongSideFraction": 0.003
+                },
+                "setSeed": 455792709,
+                "accurateFraction": 0.67875,
+                "flaggedFraction": 0.06875,
+                "wrongFraction": 0.2525,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -43.7,
+                    "right": -36.9
+                  },
+                  "widthDb": 5.6,
+                  "lapseFraction": 0.051,
+                  "falseAlarmFraction": 0.089,
+                  "wrongSideFraction": 0.089
+                },
+                "setSeed": 3383044570,
+                "accurateFraction": 0.695,
+                "flaggedFraction": 0.2,
+                "wrongFraction": 0.105,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 11.2,
+                    "right": 14.7
+                  },
+                  "widthDb": 4.3,
+                  "lapseFraction": 0.062,
+                  "falseAlarmFraction": 0.299,
+                  "wrongSideFraction": 0.006
+                },
+                "setSeed": 1113057956,
+                "accurateFraction": 0.1425,
+                "flaggedFraction": 0.78125,
+                "wrongFraction": 0.07625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -20.1,
+                    "right": -32.1
+                  },
+                  "widthDb": 5.3,
+                  "lapseFraction": 0.097,
+                  "falseAlarmFraction": 0.008,
+                  "wrongSideFraction": 0.1
+                },
+                "setSeed": 790837825,
+                "accurateFraction": 0.585,
+                "flaggedFraction": 0.0625,
+                "wrongFraction": 0.3525,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.6,
+                    "right": -59.7
+                  },
+                  "widthDb": 7.9,
+                  "lapseFraction": 0.061,
+                  "falseAlarmFraction": 0.007,
+                  "wrongSideFraction": 0.069
+                },
+                "setSeed": 2392914453,
+                "accurateFraction": 0.6875,
+                "flaggedFraction": 0.1025,
+                "wrongFraction": 0.21,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -63.6,
+                    "right": -10.3
+                  },
+                  "widthDb": 4,
+                  "lapseFraction": 0.023,
+                  "falseAlarmFraction": 0.005,
+                  "wrongSideFraction": 0.004
+                },
+                "setSeed": 2172835176,
+                "accurateFraction": 0.8,
+                "flaggedFraction": 0.01,
+                "wrongFraction": 0.19,
+                "unfinishedRoomCount": 0
+              }
+            ]
+          },
+          "durationMs": 1505
+        },
+        {
+          "id": "CP3",
+          "title": "Useful for attentive listeners",
+          "kind": "statistical",
+          "requirements": [
+            "R13.8"
+          ],
+          "holds": false,
+          "checkable": true,
+          "firstCounterexample": {
+            "shrunk": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -0.1,
+                  "right": 0
+                },
+                "widthDb": 1,
+                "lapseFraction": 0,
+                "falseAlarmFraction": 0,
+                "wrongSideFraction": 0
+              },
+              "setSeed": 3252736698,
+              "accurateFraction": 0.82625,
+              "flaggedFraction": 0,
+              "wrongFraction": 0.17375,
+              "unfinishedRoomCount": 0,
+              "wrongExamples": [
+                {
+                  "room": 2,
+                  "engineSeed": 8732231,
+                  "listenerSeed": 1146233547,
+                  "ear": "left",
+                  "trueThresholdDb": -0.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                },
+                {
+                  "room": 6,
+                  "engineSeed": 422803071,
+                  "listenerSeed": 2434470317,
+                  "ear": "left",
+                  "trueThresholdDb": -0.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                },
+                {
+                  "room": 19,
+                  "engineSeed": 4092410404,
+                  "listenerSeed": 347879947,
+                  "ear": "left",
+                  "trueThresholdDb": -0.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                },
+                {
+                  "room": 22,
+                  "engineSeed": 1749828601,
+                  "listenerSeed": 503835832,
+                  "ear": "left",
+                  "trueThresholdDb": -0.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                },
+                {
+                  "room": 23,
+                  "engineSeed": 3947601879,
+                  "listenerSeed": 1668293692,
+                  "ear": "left",
+                  "trueThresholdDb": -0.1,
+                  "result": {
+                    "state": "found",
+                    "thresholdDb": 5
+                  }
+                }
+              ]
+            },
+            "firstInDrawOrder": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -0.2,
+                  "right": -31.1
+                },
+                "widthDb": 1.3,
+                "lapseFraction": 0.004,
+                "falseAlarmFraction": 0.003,
+                "wrongSideFraction": 0.001
+              },
+              "setSeed": 3529292030,
+              "accurateFraction": 0.8525,
+              "flaggedFraction": 0.00375,
+              "wrongFraction": 0.14375,
+              "unfinishedRoomCount": 0
+            },
+            "fastCheck": {
+              "seed": 20261117,
+              "path": "1:1:1:1:1:1:1:1:1",
+              "numShrinks": 8
+            }
+          },
+          "metrics": {
+            "accurateMinFraction": 0.88,
+            "accurateTargetFraction": 0.9,
+            "flaggedMaxFraction": 0.1,
+            "seed": 20261117,
+            "setCount": 50,
+            "roomsPerSet": 400,
+            "earCount": 40000,
+            "accurateFraction": 0.92495,
+            "flaggedFraction": 0.023225,
+            "wrongFraction": 0.051825,
+            "unfinishedRoomCount": 0,
+            "setsNotMeetingLimitCount": 11,
+            "worstSet": {
+              "parameters": {
+                "trueThresholdDb": {
+                  "left": -0.5,
+                  "right": -35.5
+                },
+                "widthDb": 3.6,
+                "lapseFraction": 0.019,
+                "falseAlarmFraction": 0,
+                "wrongSideFraction": 0.006
+              },
+              "setSeed": 2469605998,
+              "accurateFraction": 0.64125,
+              "flaggedFraction": 0.0025,
+              "wrongFraction": 0.35625,
+              "unfinishedRoomCount": 0
+            },
+            "setsNotMeetingLimit": [
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.2,
+                    "right": -31.1
+                  },
+                  "widthDb": 1.3,
+                  "lapseFraction": 0.004,
+                  "falseAlarmFraction": 0.003,
+                  "wrongSideFraction": 0.001
+                },
+                "setSeed": 3529292030,
+                "accurateFraction": 0.8525,
+                "flaggedFraction": 0.00375,
+                "wrongFraction": 0.14375,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -45.3,
+                    "right": 14.2
+                  },
+                  "widthDb": 3.7,
+                  "lapseFraction": 0.003,
+                  "falseAlarmFraction": 0.001,
+                  "wrongSideFraction": 0.019
+                },
+                "setSeed": 3911862649,
+                "accurateFraction": 0.74,
+                "flaggedFraction": 0.00375,
+                "wrongFraction": 0.25625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -36.3,
+                    "right": -0.2
+                  },
+                  "widthDb": 1.4,
+                  "lapseFraction": 0.002,
+                  "falseAlarmFraction": 0.005,
+                  "wrongSideFraction": 0.012
+                },
+                "setSeed": 78152182,
+                "accurateFraction": 0.84875,
+                "flaggedFraction": 0.01625,
+                "wrongFraction": 0.135,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 4.9,
+                    "right": 14.6
+                  },
+                  "widthDb": 1.4,
+                  "lapseFraction": 0.004,
+                  "falseAlarmFraction": 0.015,
+                  "wrongSideFraction": 0.01
+                },
+                "setSeed": 1082852937,
+                "accurateFraction": 0.75875,
+                "flaggedFraction": 0.06375,
+                "wrongFraction": 0.1775,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.7,
+                    "right": -8.7
+                  },
+                  "widthDb": 3.5,
+                  "lapseFraction": 0.003,
+                  "falseAlarmFraction": 0.02,
+                  "wrongSideFraction": 0.009
+                },
+                "setSeed": 2867132293,
+                "accurateFraction": 0.83375,
+                "flaggedFraction": 0.0675,
+                "wrongFraction": 0.09875,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 0.4,
+                    "right": 4
+                  },
+                  "widthDb": 3.8,
+                  "lapseFraction": 0.018,
+                  "falseAlarmFraction": 0.016,
+                  "wrongSideFraction": 0.014
+                },
+                "setSeed": 3798556507,
+                "accurateFraction": 0.85125,
+                "flaggedFraction": 0.05,
+                "wrongFraction": 0.09875,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.1,
+                    "right": -62
+                  },
+                  "widthDb": 1.9,
+                  "lapseFraction": 0.001,
+                  "falseAlarmFraction": 0.012,
+                  "wrongSideFraction": 0.019
+                },
+                "setSeed": 3874813264,
+                "accurateFraction": 0.76375,
+                "flaggedFraction": 0.03,
+                "wrongFraction": 0.20625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": 9.9,
+                    "right": -47.6
+                  },
+                  "widthDb": 3.2,
+                  "lapseFraction": 0.003,
+                  "falseAlarmFraction": 0.012,
+                  "wrongSideFraction": 0.003
+                },
+                "setSeed": 870795751,
+                "accurateFraction": 0.75125,
+                "flaggedFraction": 0.03625,
+                "wrongFraction": 0.2125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -11.6,
+                    "right": -30.7
+                  },
+                  "widthDb": 4,
+                  "lapseFraction": 0.02,
+                  "falseAlarmFraction": 0.013,
+                  "wrongSideFraction": 0.001
+                },
+                "setSeed": 4265009948,
+                "accurateFraction": 0.81125,
+                "flaggedFraction": 0.0375,
+                "wrongFraction": 0.15125,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -0.5,
+                    "right": -35.5
+                  },
+                  "widthDb": 3.6,
+                  "lapseFraction": 0.019,
+                  "falseAlarmFraction": 0,
+                  "wrongSideFraction": 0.006
+                },
+                "setSeed": 2469605998,
+                "accurateFraction": 0.64125,
+                "flaggedFraction": 0.0025,
+                "wrongFraction": 0.35625,
+                "unfinishedRoomCount": 0
+              },
+              {
+                "parameters": {
+                  "trueThresholdDb": {
+                    "left": -13,
+                    "right": -60.1
+                  },
+                  "widthDb": 1,
+                  "lapseFraction": 0.016,
+                  "falseAlarmFraction": 0.019,
+                  "wrongSideFraction": 0.004
+                },
+                "setSeed": 3236405988,
+                "accurateFraction": 0.77375,
+                "flaggedFraction": 0.05875,
+                "wrongFraction": 0.1675,
+                "unfinishedRoomCount": 0
+              }
+            ]
+          },
+          "durationMs": 780
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "statement": "Always ends within the trial limit.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP4",
+          "part": "ending and per-ear limit",
+          "title": "Every room ends",
+          "kind": "universal",
+          "requirements": [
+            "R10.1"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1205541453
+          },
+          "durationMs": 15
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "statement": "Levels requested never leave the range between floor and cap, and never rise by more than one upward step between consecutive trials for an ear.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP5",
+          "title": "Levels stay in range and climb gently",
+          "kind": "universal",
+          "requirements": [
+            "R5.4",
+            "R5.5",
+            "R5.7"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -487353669
+          },
+          "durationMs": 12
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "statement": "No-sound trials: share within range, positions not predictable.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP7",
+          "title": "The no-sound share is always in range",
+          "kind": "universal",
+          "requirements": [
+            "R9.3",
+            "R9.4"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": -1965542324
+          },
+          "durationMs": 11
+        },
+        {
+          "id": "CP8",
+          "title": "No-sound positions cannot be predicted",
+          "kind": "statistical",
+          "requirements": [
+            "R9.1",
+            "R9.5"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "seed": 20261118,
+            "roomCount": 2000,
+            "minimumTrialsPerValueCount": 400,
+            "allowedDeviationFraction": 0.1,
+            "trialCount": 57655,
+            "noSoundShare": 0.1886740091926112,
+            "largestDeviation": 0.059674009192611205,
+            "valuesOutsideCount": 0,
+            "valuesOutside": [],
+            "roomsEndingWithNoSoundFraction": 0.318,
+            "unfinishedRoomCount": 0,
+            "features": {
+              "trialsSinceLastNoSound": [
+                {
+                  "value": "none yet",
+                  "trialCount": 10032,
+                  "noSoundShare": 0.19936204146730463,
+                  "checked": true
+                },
+                {
+                  "value": "1",
+                  "trialCount": 10242,
+                  "noSoundShare": 0.1718414372192931,
+                  "checked": true
+                },
+                {
+                  "value": "2",
+                  "trialCount": 8169,
+                  "noSoundShare": 0.15081405312767782,
+                  "checked": true
+                },
+                {
+                  "value": "3",
+                  "trialCount": 6683,
+                  "noSoundShare": 0.16654197216818795,
+                  "checked": true
+                },
+                {
+                  "value": "4",
+                  "trialCount": 5368,
+                  "noSoundShare": 0.19914307004470938,
+                  "checked": true
+                },
+                {
+                  "value": "5",
+                  "trialCount": 4151,
+                  "noSoundShare": 0.19657913755721512,
+                  "checked": true
+                },
+                {
+                  "value": "6",
+                  "trialCount": 3218,
+                  "noSoundShare": 0.22591671845866998,
+                  "checked": true
+                },
+                {
+                  "value": "7",
+                  "trialCount": 2397,
+                  "noSoundShare": 0.21401752190237797,
+                  "checked": true
+                },
+                {
+                  "value": "8 or more",
+                  "trialCount": 7395,
+                  "noSoundShare": 0.22285327924273157,
+                  "checked": true
+                }
+              ],
+              "positionInRoom": [
+                {
+                  "value": "1",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1915,
+                  "checked": true
+                },
+                {
+                  "value": "2",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1585,
+                  "checked": true
+                },
+                {
+                  "value": "3",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.129,
+                  "checked": true
+                },
+                {
+                  "value": "4",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.203,
+                  "checked": true
+                },
+                {
+                  "value": "5",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.183,
+                  "checked": true
+                },
+                {
+                  "value": "6",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1445,
+                  "checked": true
+                },
+                {
+                  "value": "7",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.154,
+                  "checked": true
+                },
+                {
+                  "value": "8",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1715,
+                  "checked": true
+                },
+                {
+                  "value": "9",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.186,
+                  "checked": true
+                },
+                {
+                  "value": "10",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1775,
+                  "checked": true
+                },
+                {
+                  "value": "11 or more",
+                  "trialCount": 37655,
+                  "noSoundShare": 0.19867215509228522,
+                  "checked": true
+                }
+              ],
+              "previousTrialOutcome": [
+                {
+                  "value": "none",
+                  "trialCount": 2000,
+                  "noSoundShare": 0.1915,
+                  "checked": true
+                },
+                {
+                  "value": "caught",
+                  "trialCount": 17676,
+                  "noSoundShare": 0.20451459606245756,
+                  "checked": true
+                },
+                {
+                  "value": "wrongSide",
+                  "trialCount": 5270,
+                  "noSoundShare": 0.18804554079696395,
+                  "checked": true
+                },
+                {
+                  "value": "missed",
+                  "trialCount": 22467,
+                  "noSoundShare": 0.18378065607335203,
+                  "checked": true
+                },
+                {
+                  "value": "noResponse",
+                  "trialCount": 7601,
+                  "noSoundShare": 0.174056045257203,
+                  "checked": true
+                },
+                {
+                  "value": "falseAlarm",
+                  "trialCount": 2641,
+                  "noSoundShare": 0.16546762589928057,
+                  "checked": true
+                }
+              ],
+              "previousSoundTrialEar": [
+                {
+                  "value": "none",
+                  "trialCount": 2383,
+                  "noSoundShare": 0.16072177926982795,
+                  "checked": true
+                },
+                {
+                  "value": "right",
+                  "trialCount": 27325,
+                  "noSoundShare": 0.18843549862763037,
+                  "checked": true
+                },
+                {
+                  "value": "left",
+                  "trialCount": 27947,
+                  "noSoundShare": 0.19129065731563316,
+                  "checked": true
+                }
+              ]
+            }
+          },
+          "durationMs": 82
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "statement": "Same seed and same outcomes give the same trials.",
+      "holds": true,
+      "checkable": true,
+      "parts": [
+        {
+          "id": "CP9",
+          "title": "Same seed, same responses, same room",
+          "kind": "universal",
+          "requirements": [
+            "R1.5"
+          ],
+          "holds": true,
+          "checkable": true,
+          "metrics": {
+            "numRuns": 200,
+            "fastCheckSeed": 1743981733
+          },
+          "durationMs": 17
+        }
+      ]
+    }
+  ],
+  "otherChecks": [
+    {
+      "id": "CP10",
+      "part": "gaps in range",
+      "title": "Gaps do not depend on the trial",
+      "kind": "universal",
+      "requirements": [
+        "R3.6"
+      ],
+      "holds": true,
+      "checkable": true,
+      "metrics": {
+        "numRuns": 200,
+        "fastCheckSeed": 1561556790
+      },
+      "durationMs": 10
+    },
+    {
+      "id": "CP10",
+      "part": "mean gaps",
+      "title": "Gaps do not depend on the trial",
+      "kind": "statistical",
+      "requirements": [
+        "R3.6"
+      ],
+      "holds": true,
+      "checkable": true,
+      "metrics": {
+        "seed": 20261118,
+        "roomCount": 2000,
+        "largestMeanDifferenceMs": 50,
+        "meanGapMs": {
+          "noSound": 2741.8159588159588,
+          "sound": 2748.7695021057357,
+          "left": 2752.561542368577,
+          "right": 2744.8996587620404
+        },
+        "trialCounts": {
+          "noSound": 10878,
+          "sound": 46777,
+          "left": 23626,
+          "right": 23151
+        },
+        "kindDifferenceMs": 6.953543289776917,
+        "earDifferenceMs": 7.661883606536776
+      },
+      "durationMs": 12
+    }
+  ],
+  "population": {
+    "listenerCount": 3000,
+    "seed": 20261120,
+    "range": "plausible",
+    "earCount": 6000,
+    "accurateCount": 2432,
+    "flaggedCount": 3164,
+    "wrongCount": 404,
+    "accurateFraction": 0.4053333333333333,
+    "flaggedFraction": 0.5273333333333333,
+    "wrongFraction": 0.06733333333333333,
+    "medianTrialCount": 28,
+    "largestTrialCount": 53,
+    "budgetExceededCount": 0,
+    "threwCount": 0
+  },
+  "specOnly": {
+    "note": "Checks of this spec's own design. The comparison does not count them (D21).",
+    "checks": [
+      {
+        "id": "CP4",
+        "part": "room total",
+        "title": "Every room ends within Room_Trial_Limit",
+        "kind": "universal",
+        "requirements": [
+          "R10.1",
+          "R10.2",
+          "R10.3"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": 430762384
+        },
+        "durationMs": 9
+      },
+      {
+        "id": "CP6",
+        "title": "The result agrees with its own record",
+        "kind": "universal",
+        "requirements": [
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8",
+          "R11"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": 1163104843
+        },
+        "durationMs": 20
+      },
+      {
+        "id": "CP11",
+        "title": "Ears are mixed at random",
+        "kind": "statistical",
+        "requirements": [
+          "R3.7",
+          "R3.8"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261118,
+          "roomCount": 2000,
+          "leftShareMinFraction": 0.47,
+          "leftShareMaxFraction": 0.53,
+          "largestConditionalDifferenceFraction": 0.05,
+          "bothSearchingSoundTrialCount": 35356,
+          "leftShare": 0.5007070935626202,
+          "leftAfterLeft": 0.505439980870397,
+          "leftAfterRight": 0.49819581428915083,
+          "conditionalDifference": 0.007244166581246159,
+          "oneEarViolationCount": 0
+        },
+        "durationMs": 5
+      },
+      {
+        "id": "CP12",
+        "part": "examples",
+        "title": "Extreme listeners",
+        "kind": "statistical",
+        "requirements": [
+          "R8",
+          "R10",
+          "R13.5"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261119,
+          "roomsPerListenerCount": 20,
+          "listeners": [
+            "neverAnswers",
+            "alwaysAnswers",
+            "alwaysAnswersWrongSide",
+            "alwaysPressesLeft"
+          ],
+          "roomsNotShowingExpectationCount": 0
+        },
+        "durationMs": 2
+      },
+      {
+        "id": "CP12",
+        "part": "answers at random",
+        "title": "Extreme listeners",
+        "kind": "statistical",
+        "requirements": [
+          "R8",
+          "R13.5"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "seed": 20261119,
+          "roomCount": 500,
+          "bothUnreliableMinFraction": 0.95,
+          "bothUnreliableFraction": 0.978,
+          "reasonCountsOverEars": {
+            "trialLimit": 284,
+            "falseAlarmRate": 974,
+            "inconsistentCatch": 295
+          },
+          "roomsNotFlagged": [
+            {
+              "room": 30,
+              "engineSeed": 4231532939,
+              "listenerSeed": 4214867879,
+              "left": {
+                "presentationCount": 14,
+                "catchCount": 4,
+                "wrongSideCount": 3,
+                "missCount": 7,
+                "state": "found",
+                "thresholdDb": -5
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 3,
+                "wrongSideCount": 1,
+                "missCount": 2,
+                "state": "found",
+                "thresholdDb": -30
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 4
+            },
+            {
+              "room": 93,
+              "engineSeed": 854193321,
+              "listenerSeed": 2449851597,
+              "left": {
+                "presentationCount": 10,
+                "catchCount": 4,
+                "wrongSideCount": 3,
+                "missCount": 3,
+                "state": "found",
+                "thresholdDb": -25
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 2,
+                "wrongSideCount": 3,
+                "missCount": 1,
+                "state": "found",
+                "thresholdDb": -15
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 4
+            },
+            {
+              "room": 221,
+              "engineSeed": 3366188223,
+              "listenerSeed": 200460567,
+              "left": {
+                "presentationCount": 11,
+                "catchCount": 3,
+                "wrongSideCount": 4,
+                "missCount": 4,
+                "state": "found",
+                "thresholdDb": -5
+              },
+              "right": {
+                "presentationCount": 10,
+                "catchCount": 5,
+                "wrongSideCount": 3,
+                "missCount": 2,
+                "state": "found",
+                "thresholdDb": -40
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 4
+            },
+            {
+              "room": 299,
+              "engineSeed": 4267685729,
+              "listenerSeed": 912700742,
+              "left": {
+                "presentationCount": 20,
+                "catchCount": 8,
+                "wrongSideCount": 6,
+                "missCount": 6,
+                "state": "unreliable",
+                "reasons": [
+                  "trialLimit"
+                ]
+              },
+              "right": {
+                "presentationCount": 6,
+                "catchCount": 3,
+                "wrongSideCount": 2,
+                "missCount": 1,
+                "state": "found",
+                "thresholdDb": -30
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 5
+            },
+            {
+              "room": 322,
+              "engineSeed": 3931416189,
+              "listenerSeed": 3850211804,
+              "left": {
+                "presentationCount": 16,
+                "catchCount": 8,
+                "wrongSideCount": 4,
+                "missCount": 4,
+                "state": "found",
+                "thresholdDb": -55
+              },
+              "right": {
+                "presentationCount": 9,
+                "catchCount": 3,
+                "wrongSideCount": 3,
+                "missCount": 3,
+                "state": "found",
+                "thresholdDb": -15
+              },
+              "falseAlarmCount": 1,
+              "noSoundTrialCount": 5
+            }
+          ]
+        },
+        "durationMs": 16
+      },
+      {
+        "id": "CP13",
+        "title": "Settings validation",
+        "kind": "universal",
+        "requirements": [
+          "R2"
+        ],
+        "holds": true,
+        "checkable": true,
+        "metrics": {
+          "numRuns": 200,
+          "fastCheckSeed": -895180994
+        },
+        "durationMs": 7
+      }
+    ],
+    "noSoundScheduleReport": {
+      "seed": 20261118,
+      "roomCount": 2000,
+      "searchTrialCount": 56527,
+      "forcedSoundShareOfSearchTrials": 0.13620039980894086,
+      "roomsWithClosingTrialsFraction": 0.318,
+      "closingTrialShareOfTrials": 0.019564651808169284
+    }
+  }
+}

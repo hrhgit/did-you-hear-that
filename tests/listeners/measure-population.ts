@@ -1,22 +1,12 @@
-import {
-  createSeededRandom,
-  type RandomSource,
-} from "../../src/config/seeded-random";
 import type { ThresholdSearchSettings } from "../../src/engine/search-types";
 import { classifyAccuracy, type AccuracyClass } from "./classify-accuracy";
 import {
-  drawListenerParameters,
   plausibleListenerRange,
   type ListenerParameterRange,
 } from "./listener-parameter-arbitraries";
 import type { ListenerEar } from "./listener-types";
-import { createPsychometricListener } from "./psychometric-listener";
-import {
-  generousTrialBudgetCount,
-  type RoomRun,
-  type RunEarResult,
-  type SearchUnderTest,
-} from "./search-under-test";
+import { playPopulationRooms } from "./play-population-rooms";
+import type { RunEarResult, SearchUnderTest } from "./search-under-test";
 
 /** One ear of one simulated listener: the columns of the scatter data (design.md, Scatter data). */
 export interface PopulationRow {
@@ -61,13 +51,6 @@ export interface PopulationMeasurement {
   readonly summary: PopulationSummary;
 }
 
-/** The number of distinct seeds a `RandomSource` accepts: 2^32. */
-const seedCount = 2 ** 32;
-
-/** One seed for a room's engine or listener, drawn from the population's source. */
-const drawSeed = (random: RandomSource): number =>
-  Math.floor(random.next() * seedCount);
-
 const estimateOf = (
   earResult: RunEarResult,
   settings: ThresholdSearchSettings,
@@ -99,9 +82,8 @@ function median(values: readonly number[]): number {
  * Runs one room for each of `listenerCount` Psychometric_Listeners drawn uniformly from a
  * parameter range, and returns one row per ear with a summary (R15.1, D36).
  *
- * Everything comes from one seed. A `RandomSource` made from it gives, for each listener in
- * turn, its six parameters, then its room's engine seed, then its listener seed. The same seed,
- * settings and search therefore give equal rows (R15.3).
+ * The rooms come from `playPopulationRooms`, so everything comes from one seed and the same
+ * seed, settings and search give equal rows (R15.3).
  */
 export function measurePopulation(
   search: SearchUnderTest,
@@ -113,31 +95,11 @@ export function measurePopulation(
     trialBudget?: number;
   },
 ): PopulationMeasurement {
-  const {
-    listenerCount,
-    seed,
-    settings,
-    range = plausibleListenerRange,
-    trialBudget = generousTrialBudgetCount,
-  } = options;
-  const population = createSeededRandom(seed);
+  const { listenerCount, seed, settings } = options;
+  const range = options.range ?? plausibleListenerRange;
+  const rooms = playPopulationRooms(search, { ...options, range });
   const rows: PopulationRow[] = [];
-  const runs: RoomRun[] = [];
-
-  for (let listener = 1; listener <= listenerCount; listener += 1) {
-    const parameters = drawListenerParameters(range, settings, population);
-    const engineSeed = drawSeed(population);
-    const listenerSeed = drawSeed(population);
-    const run = search.runRoom({
-      seed: engineSeed,
-      settings,
-      listener: createPsychometricListener(
-        parameters,
-        createSeededRandom(listenerSeed),
-      ),
-      trialBudget,
-    });
-    runs.push(run);
+  for (const { listener, parameters, run } of rooms) {
     for (const ear of ["left", "right"] as const) {
       const earResult = run.ears[ear];
       const estimateDb = estimateOf(earResult, settings);
@@ -162,6 +124,7 @@ export function measurePopulation(
       );
     }
   }
+  const runs = rooms.map((room) => room.run);
 
   const countOf = (accuracy: AccuracyClass): number =>
     rows.filter((row) => row.accuracy === accuracy).length;
