@@ -4,11 +4,13 @@ This file records the attempts to show the render check hook in `.kiro/hooks/ren
 
 ## Outcome
 
-The hook was not seen to fire in a headless CLI session.
+The hook was seen to fire on a deliberate bad change in a headless CLI session, in run 3, with PostFileSave only.
 
-Neither headless run is evidence about the trigger either way. In both runs the agent read `src/audio/synth/attic-whine.ts`, declined to make the change because it conflicts with rule 3 of `.kiro/steering/audio-safety.md`, and wrote no file. With no write, neither PostFileSave nor PostToolUse had anything to fire on.
+- Run 1 and run 2 are not evidence about the trigger either way. In both, the agent read `src/audio/synth/attic-whine.ts`, declined to make the change because it conflicts with rule 3 of `.kiro/steering/audio-safety.md`, and wrote no file. With no write, neither PostFileSave nor PostToolUse had anything to fire on. That refusal was correct and stays in this record.
+- Run 3 used a different deliberate change (D44 in `design.md`). It moves the attic whine from about 8000 Hz to about 4000 Hz and breaks only the band rule of brief 02. The agent made the change with its file tool, and the witness log gained a PostFileSave line for it from the run's own session, with `"exitCode":1`. The hook ran a second time for the restore, with `"exitCode":0`.
+- The hook's findings did not reach the agent. The agent reported that no hook output came back, and no event in the stream carries the output. The brief's sentence that the hook "reports failures to the agent" has not been seen to hold in a headless CLI session.
 
-The Kiro IDE step was not attempted. This session was non-interactive and nobody could run the IDE. The brief's Done-when line ("the hook has been seen to fire on a deliberate bad change, with that run noted in `docs/experiments/hook-catches.md`") is still open.
+The brief's Done-when line ("the hook has been seen to fire on a deliberate bad change, with that run noted in `docs/experiments/hook-catches.md`") is met by run 3. The PostToolUse fallback was not needed for run 3, so there is no run 4. The Kiro IDE step was not attempted, because these sessions were non-interactive.
 
 ## Setting
 
@@ -19,6 +21,8 @@ The Kiro IDE step was not attempted. This session was non-interactive and nobody
 | Version | `kiro-cli 3.3.0` |
 | Started from | a Kiro session started after commit 77d993e, which already held the hook file (added in 65389a5) |
 | Witness log before run 1 | 3 lines, all from task 11's hand runs |
+| Run 3 started from | a Kiro session started after commit 8085dcf. The hook file was last changed in 8fe2c74 |
+| Witness log before run 3 | 5 lines. Line 4 is from the hand run under run 1, line 5 from the other session described under run 2 |
 
 ## Run 1: PostFileSave only
 
@@ -166,11 +170,103 @@ It is not a catch. It does not count towards the Done-when line.
 
 Commit 8fe2c74 ("Remove the PostToolUse fallback hook after its headless run.") put the hook file and its test back as they were at 77d993e. The file's hash is `735ea368042a41f82ddce52cc6d6c99aa3e7e478` again. The reasons are in D20 of `design.md`.
 
+## The check run by hand on the band change
+
+Before run 3, the new change was applied with a shell command (`perl -pi`) and the check was run on it, then the file was restored with `git checkout -- src/audio/synth/attic-whine.ts` in the same command. It was on disk from 13:51:25Z to 13:51:26Z. Nothing played it, and no dev server was running. Hook mode was not run by hand, so this added no line to the witness log.
+
+```diff
+@@ -36,3 +36,3 @@ export function renderAtticWhine(
+     const phaseRadians =
+-      plan.startPhaseRadians + 2 * Math.PI * plan.carrierHz * cycles;
++      plan.startPhaseRadians + 1 * Math.PI * plan.carrierHz * cycles;
+     const body =
+```
+
+The change halves the phase, so the carrier moves from about 8000 Hz to about 4000 Hz, one octave below the attic band (7127 to 8980 Hz). The fade envelopes, the length, the RMS scaling in `finishSound` and the zero end samples are untouched.
+
+**`npm run render:sounds -- --changed src/audio/synth/attic-whine.ts` with the change applied** exited 1 and printed 20 findings, one for each seed from 1 to 10 at 44100 Hz and 48000 Hz, all of them the band rule. The first and last lines:
+
+```
+render:sounds: attic at 44100 Hz, seed 1: out-of-band energy 162.2 dB, limit -30 dB.
+render:sounds: attic at 44100 Hz, seed 2: out-of-band energy 161.9 dB, limit -30 dB.
+...
+render:sounds: attic at 48000 Hz, seed 9: out-of-band energy 162.5 dB, limit -30 dB.
+render:sounds: attic at 48000 Hz, seed 10: out-of-band energy 162.3 dB, limit -30 dB.
+```
+
+`checkSound` tests every rule on its own and lists each one a buffer breaks, so the absence of any other line means that the fade-in, fade-out, duration, level and peak rules were met for all 20 buffers. After the restore, the file's hash was `d4a9b0e89dcd43ab855646fccd98296b8053dbaa`, as committed.
+
+## Run 3: PostFileSave only, with the band change
+
+**Hook file.** Content hash `735ea368042a41f82ddce52cc6d6c99aa3e7e478`, the same file as run 1, unchanged since 8fe2c74. HEAD was 8085dcf when the session started. One hook: `PostFileSave`. No `--trust-workspace` was given.
+
+**Command**, run from the repository root at 2026-11-14T13:51:45Z, exit code 0, finished at 13:52:06Z. The design's command with only the prompt changed (D44):
+
+```bash
+kiro-cli chat --v3 --no-interactive --model claude-opus-5.5 \
+  --trust-tools=read_file,fs_write,str_replace \
+  --output-format stream-json \
+  "In src/audio/synth/attic-whine.ts, in the line \`plan.startPhaseRadians + 2 * Math.PI * plan.carrierHz * cycles;\`, change the 2 to 1, so the whine sits near 4000 Hz instead of 8000 Hz. This is a deliberate, temporary change to show the render-check hook catching a break of the band rule of docs/briefs/02-ghost-sounds.md (energy outside one third of an octave around the room's pitch at least 30 dB below the energy inside). It touches no rule in .kiro/steering/audio-safety.md: the fades, the length and the level stay as they are. Nothing plays sound: the hook only renders the buffer and measures it. Save the file with your file tool. Report exactly what the render-check hook told you. Then restore the file straight away, exactly as it was, by changing the 1 back to 2, and save it again. Do not run any shell command." \
+  > "$TMPDIR/hook-demo-stream.jsonl"
+```
+
+Session `sess_d8f70b7a-271a-4f89-a9e9-7cc56e5a9ffb`. The stream has 174 lines. Line 12 lists the same five steering files as run 1.
+
+**The deliberate change**, made by the agent's `str_replace` tool (stream line 42, tool call `toolu_bdrk_0112ejauGmxYu9qkhWeRwgkT`):
+
+```diff
+-      plan.startPhaseRadians + 2 * Math.PI * plan.carrierHz * cycles;
++      plan.startPhaseRadians + 1 * Math.PI * plan.carrierHz * cycles;
+```
+
+The restore was a second `str_replace` with the two strings swapped (line 63, `toolu_bdrk_01KRvFmjHP7gjTmt7kT2ex2P`), followed by a `read_file` of lines 36 to 38 (line 70). For each write, the CLI raised a tool approval (lines 44 and 65), which resolved to `"accept"` without a person (lines 47 and 68), because the tool was trusted.
+
+**Witness log.** 5 lines before, 7 lines after. The two new lines in full:
+
+```
+{"time":"2026-11-14T13:51:54.511Z","hookInput":"{\"session_id\":\"sess_d8f70b7a-271a-4f89-a9e9-7cc56e5a9ffb\",\"hook_event_name\":\"PostFileSave\",\"cwd\":\"/Users/herh/MyFiles/Projects/did-you-hear-that\",\"file_path\":\"/Users/herh/MyFiles/Projects/did-you-hear-that/src/audio/synth/attic-whine.ts\"}","paths":["/Users/herh/MyFiles/Projects/did-you-hear-that/src/audio/synth/attic-whine.ts"],"sounds":["attic"],"exitCode":1}
+{"time":"2026-11-14T13:51:58.683Z","hookInput":"{\"session_id\":\"sess_d8f70b7a-271a-4f89-a9e9-7cc56e5a9ffb\",\"hook_event_name\":\"PostFileSave\",\"cwd\":\"/Users/herh/MyFiles/Projects/did-you-hear-that\",\"file_path\":\"/Users/herh/MyFiles/Projects/did-you-hear-that/src/audio/synth/attic-whine.ts\"}","paths":["/Users/herh/MyFiles/Projects/did-you-hear-that/src/audio/synth/attic-whine.ts"],"sounds":["attic"],"exitCode":0}
+```
+
+Line 6 is the catch. Its `session_id` is the run's session, its event is `PostFileSave` for `attic-whine.ts`, and its `exitCode` is 1. The committed attic whine meets every rule, so exit code 1 for the attic alone means the check rendered the changed file. Its time is the moment the check started, after the first write and before the restore. Line 7 is the hook running for the restore and finding every rule met. Neither line was written by a hand run: the only hand run in this session used changed-file mode, which writes no witness line.
+
+The PostFileSave event's fields are `session_id`, `hook_event_name`, `cwd` and `file_path`, with an absolute path.
+
+**Stream lines around the file writes.** The first write completed on line 48 with the tool's own message, `"Replaced text in /Users/herh/MyFiles/Projects/did-you-hear-that/src/audio/synth/attic-whine.ts"`. Line 51 is the first event from Kiro itself that mentions a hook:
+
+```
+51 {"type":"sessionUpdate","data":{"sessionId":"sess_d8f70b7a-271a-4f89-a9e9-7cc56e5a9ffb","update":{"sessionUpdate":"session_info_update","_meta":{"kiro":{"hook":{"hookId":"/Users/herh/MyFiles/Projects/did-you-hear-that/.kiro/hooks/render-check-on-synth-save.json#hook-0","operationId":"4329ee26-9908-4132-b6bf-f70dd054d4bb","name":"Render check on synthesis save","status":"completed","actionType":"runCommand"},"kind":"hook_update"}}}}}
+```
+
+The agent's next thought (lines 52 to 61) reads "No hook output showed up, so I should note that and then restore things back." The restore completed on line 69, and line 75 is a second `hook_update` with the same `hookId`, operation `b76273e4-4281-4c9e-986a-b00a9a63e075` and `"status":"completed"`. The other lines that mention hooks are the agent's own thought and message chunks and the final text on line 174.
+
+**What the agent reported**, the run's `finalText`, quoted in full:
+
+> The render-check hook told me nothing. I changed the 2 to 1 and saved the file with my file tool. No hook output came back after that save, either attached to the tool result or as a separate message. The only response was the tool's own "Replaced text in …/attic-whine.ts".
+>
+> I then changed the 1 back to 2 and saved again. I re-read the file to confirm it now says `plan.startPhaseRadians + 2 * Math.PI * plan.carrierHz * cycles;`, exactly as before. I ran no shell commands.
+>
+> So this run didn't show the hook catching the band-rule break. I didn't open `.kiro/hooks` to find out why. Here are some possible reasons, none of them checked:
+> - The hook may fire only on saves made in the IDE editor, not on edits made by the agent's file tools.
+> - It may be set to watch a file pattern that doesn't match `src/audio/synth/attic-whine.ts`.
+> - It may run asynchronously and report somewhere other than this conversation.
+> - It may not be enabled.
+
+The agent's account of the hook is wrong on the first point: the witness log and lines 51 and 75 show that the hook fired on both of its saves. What it says it received is borne out by the stream. The `hook_update` events carry a status and no output or exit code, and no other event holds the hook's findings. The Hook actions page of the Kiro documentation (updated 10 October 2026, read on 2026-11-14) says that for a command that exits with a non-zero code, "the stderr output of the command is sent to the agent, and the agent is notified that the hook returned an error". That was not seen here. Whether the CLI put the output somewhere in the agent's context that the agent did not recognise cannot be told from the stream.
+
+**Findings the agent received.** None, by the agent's account and by the stream. Hook mode prints the same finding lines on standard error as changed-file mode, as the hand runs under run 1 showed, so what the hook had to give the agent was the 20 band lines of the hand run above, followed by the line naming the witness log.
+
+**File restored.** After the run, `git status --porcelain` showed nothing for `src/audio/synth/attic-whine.ts`, `git diff` was empty for it, and `git hash-object src/audio/synth/attic-whine.ts` gave `d4a9b0e89dcd43ab855646fccd98296b8053dbaa`, as committed. The bad change was on disk from the first write to the restore, a few seconds within 13:51:45Z to 13:51:58Z. Nothing played it, and no dev server was running.
+
+**Fallback.** Not taken. The file was written and the witness log gained a line for the change, so the condition for the PostToolUse fallback of D20 was not reached.
+
 ## What is still open
 
-- The brief's Done-when line. No recorded run has a witness line for the deliberate change.
-- Whether PostFileSave fires in a headless CLI V3 session. Neither run wrote a file, so the question was not reached.
-- The IDE step that R15.4 asks for.
-- Whether a headless V3 run loads workspace hooks without `--trust-workspace`. The CLI's help says that flag lets "Hooks, agents, MCP servers and workflows from this folder load without asking". The design's command does not include it, and neither run reached a point where it would matter.
+- Whether the hook's findings reach the agent in a headless CLI session. In run 3 they did not, by the agent's account and by the stream. Until that is settled, the hook's catch is visible in the witness log and the stream's `hook_update` events, not in the agent's turn.
+- The IDE step that R15.4 asks for. It was not attempted, and with run 3's line it is no longer required for the Done-when line. It would still show whether the IDE delivers the findings to the agent.
 
-Before the next attempt, the project owner has to choose how the agent can be asked to make a bad change it will accept under `audio-safety.md`. One way is to state the owner's approval in the prompt. Another is to choose a change that breaks a sound rule that is not an audio-safety rule, such as moving energy out of the band. The prompt should also describe what the change does to this sound, since taking out `finishSound` from the attic whine does not remove its fade.
+Settled by run 3:
+
+- PostFileSave fires in a headless CLI V3 session (`kiro-cli 3.3.0`) for a write by the agent's `str_replace` tool.
+- A headless V3 run loads workspace hooks without `--trust-workspace`.
+- The PostFileSave event's fields are `session_id`, `hook_event_name`, `cwd` and `file_path`.
