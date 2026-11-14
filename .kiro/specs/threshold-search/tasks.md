@@ -106,6 +106,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - Done when every check holds under `npm test` and in the CLI, no property file is skipped, and every regression test is an ordinary `it`.
   - _Requirements: 14.4, 14.5, 14.6, 17.2_
   - _Properties: CP1 to CP13_
+  - Status (commit 6158997): not done, because CP2 and CP3 still do not hold. Every exact and universal check held on the first run, so there was nothing to handle there. Regression 1 (CP2) and regression 2 (CP3) led to D40, which holds a found level while the level one step quieter could still reach 2 of 3. Regression 2 is now an ordinary `it`. What remains are ears found one grid step too loud. Removing them needs a value task 10 may not move silently, so regression 1 and regression 3 (CP3) stay `it.fails`, the CP2 and CP3 property files stay skipped, and D41 records the measured numbers: CP2 has 26 of 100 sets below 93 percent, and CP3 has 8 of 50 sets below its limits. The project owner has to choose one of the options in D41 before this task can be marked done.
 
 - [ ] 11. Write the scatter data
   - Write `tests/listeners/write-scatter-data.ts` as in the Scatter data section of `design.md`, and add `"experiment:scatter": "tsx tests/listeners/write-scatter-data.ts"` to `package.json`.
