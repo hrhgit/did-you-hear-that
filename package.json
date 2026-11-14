@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "check:copy": "tsx tools/check-copy.ts",
     "render:sounds": "tsx tools/render-sounds.ts",
-    "experiment:properties": "tsx tests/properties/checks/run-brief-properties.ts"
+    "experiment:properties": "tsx tests/properties/checks/run-brief-properties.ts",
+    "experiment:scatter": "tsx tests/listeners/write-scatter-data.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
