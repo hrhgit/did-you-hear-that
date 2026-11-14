@@ -6,8 +6,10 @@ import { cp2AccurateOrFlaggedCheck as check } from "./checks/cp2-accurate-or-fla
 describe("CP2. Accurate or flagged (Statistical; brief property 1)", () => {
   // Skipped: this check did not hold on the first complete run (task 9 status line in
   // .kiro/specs/threshold-search/tasks.md). After the amended band of property 1 (D42) one of
-  // its 100 parameter sets is still below the limit (task 10 status line). Remove this skip
-  // together with the change that makes the check hold (D20).
+  // its 100 parameter sets is still below the limit: a guesser just under the false alarm limit
+  // whose guessed catches are found as a threshold far below its true one. D43 records the
+  // measured numbers and leaves regression case 4 as `it.fails`. Remove this skip together with
+  // the change that makes the check hold (D20).
   it.skip(
     "gives at least 93 percent Accurate or Flagged ear results for each of 100 Plausible_Range listeners (seed 20261116)",
     () => {
