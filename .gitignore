@@ -7,3 +7,6 @@ dist/
 .env.*
 *.log
 cli.json.lock
+coverage/
+playwright-report/
+test-results/
