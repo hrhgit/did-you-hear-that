@@ -10,14 +10,14 @@ If a property finds a counterexample, keep it as a named regression test in `tes
 
 Until task 12, nothing in this spec can make a sound in a browser. Task 16 is for the project owner, not for an agent.
 
-- [ ] 1. Add the ceiling and the output config
+- [x] 1. Add the ceiling and the output config
   - In `src/config/audio-safety-config.ts`, add `ceilingFraction: 0.25` with the comment quoting its row of the Initial values table, and reword the file comment to say the ceiling has been added. In its test, add the field to the exact-value check and a third loosening guard, `ceilingFraction <= 0.25`, with the message of R1.2.
   - Write `src/config/audio-output-config.ts` with the fields and values of the Config section of `design.md`, each comment naming its decision, its own `deepFreeze`, and `peakBoundDb` keyed by `SoundId`. Write `audio-output-config.test.ts` with every config test listed there, including the loosening guards of D32.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`.
   - _Requirements: 1.1, 1.2, 1.4, 2.1, 2.2, 2.3, 2.4, 2.6_
   - _Decisions: D1, D2, D6, D8, D10, D13, D14, D17, D20, D32_
 
-- [ ] 2. Add the output types and the two small helpers
+- [x] 2. Add the output types and the two small helpers
   - Write `src/audio/output/output-types.ts` as in "Types" in `design.md`.
   - Write `gain-to-decibels.ts` and its test (round trip with `decibelsToGain` within 10⁻¹² dB from −200 to +60 dB; 1 gives 0).
   - Write `apply-output-fade.ts` (64-bit output, input untouched, F not rounded) and its test: first and last samples exactly `+0`; a constant buffer measures a fade of 25 ms within one sample at 44100 and 48000 Hz with `measureFadeLengths`; a buffer shorter than two fades is still zero at both ends.
@@ -25,14 +25,14 @@ Until task 12, nothing in this spec can make a sound in a browser. Task 16 is fo
   - _Requirements: 3.1, 10.1_
   - _Decisions: D13, D25_
 
-- [ ] 3. Add `preparePlayback`
+- [x] 3. Add `preparePlayback`
   - Write `prepare-playback.ts` following the eleven steps in `design.md`, in that order, never throwing.
   - `prepare-playback.test.ts`: one case for each refusal reason; the anchor cap (request +20 gives +15, limit `anchorCap`); the ceiling (a buffer with peak 0.5 at gain 1 and Level 0 gives a peak within 10⁻⁶ of 0.25, limit `ceiling`, and the played level that gain implies); the rise limit for one ear and for `both`, and its tolerance (a rise of exactly 5 dB through `decibelsToGain` is not clamped); `-0` turned into `+0`; the other channel all `+0`; the input unchanged; with no limit, the played level is the requested level exactly.
   - Check: `npm test`, `npm run lint`.
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 7.1 to 7.7, 8.1, 8.2, 10.1 to 10.5, 11.2, 11.3_
   - _Decisions: D1, D2, D5, D13, D15, D21_
 
-- [ ] 4. Add playable buffers, room tops, the range report and the calibration control functions
+- [x] 4. Add playable buffers, room tops, the range report and the calibration control functions
   - Write `render-playable-buffer.ts`, `room-top-level.ts`, `range-report.ts`, `calibration-setting-top.ts` and `next-calibration-setting.ts` as described in `design.md`, each with its test.
   - `render-playable-buffer.test.ts`: with injected renderers, a buffer above the bound is rendered again from the same source; the eighth failure gives `peakBoundNotMet`; a throwing renderer gives `renderFailed`; with the real renderers, every sound at seeds 1 to 10 at 44100 and 48000 Hz is accepted, and the attempt count is noted.
   - `room-top-level.test.ts` and `range-report.test.ts`: the table of room tops in `design.md` at settings −40, −19, −10 and −4 dB, to 0.01 dB; `setBy`; `floorRmsFraction`.
@@ -42,7 +42,7 @@ Until task 12, nothing in this spec can make a sound in a browser. Task 16 is fo
   - _Requirements: 2.4, 2.5, 9.1, 9.2, 9.4, 9.5, 16.1, 16.2_
   - _Decisions: D6, D7, D8_
 
-- [ ] 5. Write the properties of the pure core
+- [x] 5. Write the properties of the pure core
   - Write `tests/properties/output-arbitraries.ts` as described under "Correctness properties" in `design.md`, reusing the sample rate and seed arbitraries of `tests/properties/sound-arbitraries.ts`.
   - Write the files for CP1, CP2, CP3, CP4, CP5, CP6, CP11 and CP12 with the run counts given there, each with a timeout of 120 seconds. Write `audio-output-regressions.test.ts` with a comment on the naming rule and one `it.todo`, as the ghost-sounds spec did (its D38).
   - Run `npm test` three times and note the times of CP3 and CP6 in the commit message body.
