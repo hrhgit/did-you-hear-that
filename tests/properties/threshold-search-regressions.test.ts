@@ -129,4 +129,24 @@ describe("threshold search regressions", () => {
       2093169249,
     );
   });
+
+  // After D42: a listener who presses at nothing on almost 30 percent of trials, with both true
+  // thresholds near the cap. Two guessed catches at one ascending level far below the threshold
+  // end the ear as found, no catch lies 10 dB below that level, and with few no-sound trials the
+  // room's false alarm rate stays at or below the limit. 734 of 800 ears are Accurate or Flagged.
+  it.fails(
+    "regression 4: guesser just under the false alarm limit found far below its threshold (CP2, seed 4040559320)",
+    () => {
+      expectAccurateOrFlagged(
+        {
+          trueThresholdDb: { left: 4.2, right: 14.7 },
+          widthDb: 4.3,
+          lapseFraction: 0.062,
+          falseAlarmFraction: 0.299,
+          wrongSideFraction: 0.006,
+        },
+        4040559320,
+      );
+    },
+  );
 });
