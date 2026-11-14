@@ -6,9 +6,15 @@ The visit from the front door to the result, as a state machine that connects th
 
 ## Stages
 
-entry → headphone check → calibration → rules → rooms in order → last door (full visit only, if built) → missed-sound replay → result → optional swapped repeat
+entry → calibration → headphone check → rules → rooms in order → last door (full visit only, if built) → missed-sound replay → result → optional swapped repeat
+
+Calibration comes before the headphone check, as in `product.md`. Before calibration the output stage plays only the calibration noise, so the check uses that noise at the level the visitor has just matched (audio-output decision D20).
 
 The quick visit has three rooms and the full visit has five, as listed in `src/config`.
+
+## What the output stage asks of this spec
+
+The section "What the visit-flow spec must do" in `.kiro/specs/audio-output/design.md` lists the calls this spec has to make: start sound only from a gesture, begin each room, give each room's search the highest level the house can play there as its cap, record the level that was played and not the level that was asked for, mark replays as replays, and calibrate again after the audio device changes. Treat that list as requirements here.
 
 ## Behaviour to specify
 

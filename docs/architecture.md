@@ -55,7 +55,7 @@ The single door to the speakers. It owns the `AudioContext`.
 
 ### session
 
-The visit as a state machine: entry, headphone check, calibration, rules, rooms, last door, missed-sound replay, result, swapped repeat. It is the only part that knows the order of things.
+The visit as a state machine: entry, calibration, headphone check, rules, rooms, last door, missed-sound replay, result, swapped repeat. It is the only part that knows the order of things.
 
 - Asks the engine for the next trial, asks the output to play it, waits for an answer or for the response window to close, and tells the engine the outcome.
 - Records every trial in a visit log: time, room, ear, level, outcome. The replay, the result page, the stored result and the no-headphone replay mode are all drawn from this log.
