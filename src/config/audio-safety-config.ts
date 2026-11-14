@@ -3,14 +3,17 @@
  * values chosen on the cautious side. They may be made stricter at any time. Loosening one (a
  * shorter fade, a longer sound, a higher ceiling) needs the project owner's approval first.
  *
- * The absolute digital ceiling from the same table is added to this file by the audio-output
- * spec, which owns it (ghost-sounds design.md, D1). Every field name ends in its unit.
+ * The absolute digital ceiling from the same table has been added to this file by the
+ * audio-output spec, which owns it (ghost-sounds design.md, D1; audio-output design.md, D1).
+ * Every field name ends in its unit.
  */
 export interface AudioSafetyConfig {
   /** Shortest fade in and fade out of any sound. */
   readonly fadeMinMs: number;
   /** Longest single ghost sound. Also applied to the calibration noise (ghost-sounds D8). */
   readonly ghostSoundMaxDurationMs: number;
+  /** Largest absolute value of any output sample, as a fraction of full scale. Equal is allowed. */
+  readonly ceilingFraction: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -29,4 +32,6 @@ export const audioSafetyConfig: AudioSafetyConfig = deepFreeze({
   fadeMinMs: 20,
   // "Longest ghost sound | 1.5 s"
   ghostSoundMaxDurationMs: 1500,
+  // "Absolute digital ceiling | no output sample beyond 0.25 of full scale, about 12 dB below full scale"
+  ceilingFraction: 0.25,
 });

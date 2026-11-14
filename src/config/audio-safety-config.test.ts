@@ -5,10 +5,11 @@ const loosening =
   "needs the project owner's approval first (.kiro/steering/audio-safety.md, Initial values)";
 
 describe("audioSafetyConfig", () => {
-  it("holds the shortest fade and the longest ghost sound from audio-safety.md, and nothing else", () => {
+  it("holds the shortest fade, the longest ghost sound and the ceiling from audio-safety.md, and nothing else", () => {
     expect(audioSafetyConfig).toEqual({
       fadeMinMs: 20,
       ghostSoundMaxDurationMs: 1500,
+      ceilingFraction: 0.25,
     });
   });
 
@@ -35,6 +36,13 @@ describe("audioSafetyConfig", () => {
         audioSafetyConfig.ghostSoundMaxDurationMs,
         `ghostSoundMaxDurationMs is above the 1.5 s of audio-safety.md. A longer sound ${loosening}.`,
       ).toBeLessThanOrEqual(1500);
+    });
+
+    it("keeps the absolute digital ceiling at 0.25 of full scale or lower (audio-output R1.2)", () => {
+      expect(
+        audioSafetyConfig.ceilingFraction,
+        `ceilingFraction is above the 0.25 of full scale of audio-safety.md. A higher ceiling ${loosening}.`,
+      ).toBeLessThanOrEqual(0.25);
     });
   });
 });
