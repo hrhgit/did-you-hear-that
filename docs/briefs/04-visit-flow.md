@@ -20,6 +20,7 @@ The quick visit has three rooms and the full visit has five, as listed in `src/c
 - If the tab is hidden during a trial, that trial is discarded and repeated later, and the visit pauses.
 - Time is read only through the injected timer.
 - The flow exposes snapshots of its state and a stream of events for the interface to draw from. Events that concern a trial are released only after that trial has been scored.
+- False alarms are also counted over the whole visit. One room has only about six no-sound trials, which is too few to catch a visitor who presses on a little under 30 percent of silent trials. The threshold-search spec measured this (its decision D43, regression 4): such a listener, with thresholds near the cap, gets an unflagged result far below the true threshold in about 6 percent of ears. A visit has three or five rooms, so its pooled count is three to five times larger. Specify a visit-level rule that uses the pooled count, say what it marks, and measure with the simulated listeners how much of that case it removes. The per-room limit in `hearing-method.md` stays as it is. Any new number is a config value and needs the project owner's approval before it changes a steering file.
 
 ## Properties
 
