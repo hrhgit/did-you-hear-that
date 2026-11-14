@@ -78,39 +78,39 @@ Until task 12, nothing in this spec can make a sound in a browser. Task 16 is fo
   - _Requirements: 5.5, 16.6 to 16.10, 17.4 to 17.6, 18.1 to 18.4_
   - _Decisions: D9, D10, D11, D12, D20_
 
-- [ ] 10. Add the Web Audio backend and the output graph
+- [x] 10. Add the Web Audio backend and the output graph
   - Write `channel-index.ts`, `output-graph.ts` and `web-audio-backend.ts` as in "The Web Audio backend" in `design.md`. These are the only files that name Web Audio types.
   - There is no Node test for these two files beyond type-checking. They are checked in a browser by task 13.
   - Check: `npm run typecheck`, `npm run lint`, and a search that no file under `src/` outside these two names `AudioContext`, `AudioBuffer`, `GainNode` or `copyToChannel`.
   - _Requirements: 3.2, 3.4, 4.1, 4.5, 5.1, 5.3, 5.4, 6.5, 6.6, 10.6, 13.2, 14.3 to 14.6_
   - _Decisions: D3, D11, D12, D14, D17, D18, D24, D25_
 
-- [ ] 11. Add the calibration controller and the listening page session
+- [x] 11. Add the calibration controller and the listening page session
   - Write `src/session/calibration-controller.ts` and `listening-page-session.ts` as described in `design.md`, with the timer injected. The session creates the Web Audio backend from the `window` it is given, the shell and the controller, and gives the UI a snapshot and actions.
   - Tests with the fake backend (passed in place of the window-built backend through an option) and the manual timer: repeats follow one another with the gap; the control shows the played setting; stopping ends the loop; the sound rows start at the lower of −25 and the rounded top and move one grid step; play outcomes and clamp limits appear in the snapshot; the headphone check answers give their lines.
   - Check: `npm test`, `npm run lint`.
   - _Requirements: 16.7 to 16.11, 17.3 to 17.7, 19.4 to 19.9_
   - _Decisions: D8, D9, D20, D26, D27_
 
-- [ ] 12. Add the listening page
+- [x] 12. Add the listening page
   - Write `listen.html` at the repository root, `src/ui/listening-page/start-listening-page.ts`, `render-listening-page.ts` and `listening-page.css`, in the order of the page described in `design.md`. Every string comes from `src/copy/`. The stop button is in the page before any script runs and stays fixed at the top. The Start button calls the session's start inside its click handler, with no `await` before it.
   - Check: `npm run typecheck`, `npm run lint`, `npm run build`, and confirm that `dist/` holds no `listen.html`.
   - _Requirements: 14.8, 19.1 to 19.9_
   - _Decisions: D26_
 
-- [ ] 13. Add the Browser_Suite
+- [x] 13. Add the Browser_Suite
   - Write `tests/e2e/dev-server.ts` and `tests/e2e/listening-page.spec.ts`, and add the development server to `playwright.config.ts` (D31). The probes and the offline render are described under "Testing strategy" in `design.md`.
   - Cover R21.1 to R21.5: no context before Start and one after; the first recorded buffer is a calibration repeat whose RMS matches the bottom of the control within 0.01 dB; no recorded sample beyond 0.25; exact zero on the other channel of every one-ear sound; the offline render of a left-only and a right-only buffer, and of a stop, which reaches exact zero within 20 ms and stays there; the stop button and a hidden page stop sound and nothing new starts until Start; and the built `dist/` holds none of the listening page's strings. The existing placeholder test stays as it is.
   - Check: `npm run test:e2e`, `npm run lint`.
   - _Requirements: 3.7, 21.1 to 21.5_
   - _Decisions: D14, D25, D26, D31_
 
-- [ ] 14. Update the READMEs
+- [x] 14. Update the READMEs
   - Describe the output stage, its layers and its one entry point in `src/audio/output/README.md`; the calibration controller, the listening page session and the session helpers in `src/session/README.md`; the new copy files in `src/copy/README.md`; the listening page in `src/ui/README.md`, with how to open it; the manual record in `docs/README.md`.
   - Check: `findBannedTerms` over the changed READMEs, `npm run lint`.
   - _Requirements: 23.1, 23.2_
 
-- [ ] 15. Final checks
+- [x] 15. Final checks
   - Run `npm run typecheck`, `npm test` (three times, noting the time of CP3, CP6 and CP8; apply D28 if needed), `npm run lint`, `npm run check:copy`, `npm run build` and `npm run test:e2e`.
   - Search `dist/` for `createFakeAudioBackend`, `listen.html` and the listening page's header line. None may be found.
   - Search `src/`, `tests/` and `tools/` for the literal `0.25` and for `20` or `1500` used as a fade or a duration outside `src/config`. Only config and tests that quote the config may hold them.
