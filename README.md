@@ -6,7 +6,7 @@ An entry for Kiroween 2026 (Costume Contest category).
 
 ## Status
 
-Early setup. There is no application code yet.
+The project scaffold exists: the toolchain, the directory layout, the shared config and a placeholder page that says the house is not open yet. The house itself is not built yet.
 
 ## What it will be
 
@@ -17,6 +17,36 @@ It is not a hearing test in the medical sense and it does not diagnose anything.
 ## How it is built
 
 The application is built with Kiro. The `.kiro` directory holds the specs, steering files, hooks and settings used during development.
+
+## Development
+
+You need Node.js 26, the version in `.nvmrc`. With nvm, run `nvm use`. Then install the exact versions from the lockfile:
+
+```sh
+npm ci
+```
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Local dev server |
+| `npm run build` | Type-check and build to `dist/` |
+| `npm test` | Unit and property tests, run once |
+| `npm run test:e2e` | Playwright tests against a local build. Installs Chromium and builds first |
+| `npm run lint` | ESLint and Prettier check |
+| `npm run typecheck` | Type-check the browser code and the Node code |
+| `npm run format` | Rewrite code and config files in Prettier style |
+| `npm run render:sounds` | Render every ghost sound offline and write a spectrum report. Until the ghost sounds exist it only says there is nothing to render |
+| `npm run check:copy` | Scan user-facing text for banned words |
+
+On Linux, Playwright's Chromium may need system libraries. Install them once with:
+
+```sh
+npx playwright install-deps chromium
+```
+
+### Publishing
+
+Every push runs `.github/workflows/ci.yml`. Pushes to `main` also run `.github/workflows/deploy.yml`, which repeats the checks and publishes `dist/` to GitHub Pages. Before the first deployment, choose GitHub Actions as the Pages source once in the repository settings: **Settings, Pages, Source: GitHub Actions**.
 
 ## License
 
