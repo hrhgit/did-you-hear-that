@@ -51,7 +51,8 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 - **Step_Listener**: a Psychometric_Listener with zero width, zero lapse rate, zero false alarm rate and zero wrong-side rate. It catches a sound exactly when its Level is at or above the Ear's true threshold.
 - **Extreme_Listeners**: the Simulated_Listeners that always answer, never answer, answer at random, always answer on the wrong side, or always press one side (D17).
 - **True_Threshold**: the Level at which a Psychometric_Listener's psychometric function, before lapses, gives a detection probability of one half.
-- **Accurate**: an Ear_Result that agrees with the True_Threshold within 5 dB, as defined in D18.
+- **Accurate**: an Ear_Result that agrees with the True_Threshold within one step of the Level_Grid, as defined in D42 after the amendment of property 1 on 2026-11-14. For `found`, take the lowest Level_Grid level at or above the True_Threshold; the estimate is that level or lies one `upwardStepDb` either side of it. `betterThanFloor` and `worseThanCap` follow the matching rule in D42.
+- **Within_5_dB**: an Ear_Result that is not Flagged and agrees with the True_Threshold within 5 dB, the definition of Accurate before the amendment (D18, D37). It is reported beside Accurate and decides no property (D42).
 - **Flagged**: an Ear_Result in the state `unreliable`.
 - **Wrong**: an Ear_Result that is neither Accurate nor Flagged.
 - **Plausible_Range** and **Attentive_Range**: the two ranges of Psychometric_Listener parameters that the property tests draw from (D17).
@@ -264,14 +265,14 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 
 ### Requirement 15: Scatter plot data
 
-**User story:** As the author of the write-up, I want true threshold against estimate for a few thousand simulated listeners, so that the scatter plot with the 5 dB band can be drawn from real output.
+**User story:** As the author of the write-up, I want true threshold against estimate for a few thousand simulated listeners, so that the scatter plot with the band of property 1 can be drawn from real output.
 
 #### Acceptance criteria
 
 1. WHEN `npm run experiment:scatter` runs, THE Scatter_Script SHALL run one Room for each of 3000 Psychometric_Listeners drawn from the Plausible_Range with a fixed seed, using the shipped Settings.
 2. THE Scatter_Script SHALL write `docs/experiments/threshold-search-scatter-<search name>.csv` with one row per Ear and the columns listed in `design.md`.
 3. WHEN the Scatter_Script runs twice on the same code, THE Scatter_Script SHALL write byte-identical files.
-4. THE Scatter_Script SHALL print the number of Ears that are Accurate, Flagged and Wrong.
+4. THE Scatter_Script SHALL print the number of Ears that are Accurate, Flagged and Wrong, and the number that are Within_5_dB (D42).
 5. THE Scatter_Script SHALL live under `tests/listeners/`, because code in `tools/` may not import from `tests/` (D22).
 
 ### Requirement 16: Comparison with the no-spec version
@@ -285,7 +286,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 3. THE adapter for the No_Spec_Version SHALL translate names, units and call shapes only. It SHALL not add clamping, stopping, flagging, scheduling or any other search logic.
 4. IF the No_Spec_Version cannot take the Settings, THEN THE comparison SHALL run it with its own values and record those values in the Comparison_Document.
 5. IF a property cannot be checked for a version because the version does not report what the property needs, THEN THE Comparison_Document SHALL record that property as not checkable for that version and not count it as holding.
-6. THE Comparison_Document SHALL record, for each version: which of the brief's five properties hold, with the first counterexample of each that does not; the share of Plausible_Range Ears that are Accurate, Flagged and Wrong; the median and largest number of trials per Room; the commit measured; and the commands that reproduce the numbers.
+6. THE Comparison_Document SHALL record, for each version: which of the brief's five properties hold, with the first counterexample of each that does not; the share of Plausible_Range Ears that are Accurate, Flagged and Wrong, and the share that are Within_5_dB; the median and largest number of trials per Room; the commit measured; and the commands that reproduce the numbers.
 7. THE Comparison_Document SHALL also record the Spec_Version's numbers from its first complete run, before any counterexample was fixed.
 8. THE Comparison_Document SHALL state that the numbers describe simulated listeners only and say nothing about how well the product works for people, and SHALL follow `wording.md`.
 

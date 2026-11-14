@@ -1,5 +1,6 @@
 import type { ThresholdSearchSettings } from "../../src/engine/search-types";
 import { classifyAccuracy, type AccuracyClass } from "./classify-accuracy";
+import { isWithinFiveDb } from "./is-within-five-db";
 import {
   plausibleListenerRange,
   type ListenerParameterRange,
@@ -21,7 +22,10 @@ export interface PopulationRow {
   readonly state: RunEarResult["state"];
   /** The threshold for found, the floor for better than floor, the cap for worse than cap. */
   readonly estimateDb?: number;
+  /** Accurate, Flagged or Wrong under the grid band of property 1 (D42). */
   readonly accuracy: AccuracyClass;
+  /** Whether the ear meets the original "within 5 dB" of property 1, kept for comparison (D42). */
+  readonly withinFiveDb: boolean;
   /** The number of trials in the listener's room, the same for both ears. */
   readonly trialCount: number;
 }
@@ -35,6 +39,9 @@ export interface PopulationSummary {
   readonly accurateFraction: number;
   readonly flaggedFraction: number;
   readonly wrongFraction: number;
+  /** Ears within the original 5 dB of property 1, not unreliable (D42). Not the Accurate count. */
+  readonly withinFiveDbCount: number;
+  readonly withinFiveDbFraction: number;
   readonly medianTrialCount: number;
   readonly largestTrialCount: number;
   /** Rooms the harness stopped because they asked for more trials than the budget. */
@@ -119,6 +126,11 @@ export function measurePopulation(
             parameters.trueThresholdDb[ear],
             settings,
           ),
+          withinFiveDb: isWithinFiveDb(
+            earResult,
+            parameters.trueThresholdDb[ear],
+            settings,
+          ),
           trialCount: run.trials.length,
         }),
       );
@@ -135,6 +147,7 @@ export function measurePopulation(
   const accurateCount = countOf("accurate");
   const flaggedCount = countOf("flagged");
   const wrongCount = countOf("wrong");
+  const withinFiveDbCount = rows.filter((row) => row.withinFiveDb).length;
 
   return Object.freeze({
     search: search.name,
@@ -150,6 +163,8 @@ export function measurePopulation(
       accurateFraction: shareOf(accurateCount),
       flaggedFraction: shareOf(flaggedCount),
       wrongFraction: shareOf(wrongCount),
+      withinFiveDbCount,
+      withinFiveDbFraction: shareOf(withinFiveDbCount),
       medianTrialCount: median(trialCounts),
       largestTrialCount: trialCounts.reduce(
         (largest, count) => Math.max(largest, count),

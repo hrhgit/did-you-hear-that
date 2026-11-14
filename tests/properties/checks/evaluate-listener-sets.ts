@@ -26,6 +26,11 @@ export function evaluateListenerSets(options: {
   readonly setCount: number;
   readonly roomsPerSet: number;
   readonly meets: (measurement: ListenerSetMeasurement) => boolean;
+  /**
+   * The same limits with the original "within 5 dB" in place of Accurate (D42). It decides
+   * nothing: the number of sets it leaves below the limits is reported beside the verdict.
+   */
+  readonly meetsWithinFiveDb: (measurement: ListenerSetMeasurement) => boolean;
   /** Orders sets from worst to best for the "worst set" metric. Lower is worse. */
   readonly sortKey: (measurement: ListenerSetMeasurement) => number;
   readonly limits: Readonly<Record<string, number>>;
@@ -42,8 +47,10 @@ export function evaluateListenerSets(options: {
   const worst = [...measurements].sort(
     (a, b) => options.sortKey(a) - options.sortKey(b),
   )[0];
-  const total = (field: "accurateCount" | "flaggedCount" | "wrongCount") =>
-    measurements.reduce((sum, measurement) => sum + measurement[field], 0);
+  const total = (
+    field:
+      "accurateCount" | "flaggedCount" | "wrongCount" | "withinFiveDbCount",
+  ) => measurements.reduce((sum, measurement) => sum + measurement[field], 0);
   const earCount = measurements.reduce(
     (sum, measurement) => sum + measurement.earCount,
     0,
@@ -58,6 +65,10 @@ export function evaluateListenerSets(options: {
     accurateFraction: total("accurateCount") / earCount,
     flaggedFraction: total("flaggedCount") / earCount,
     wrongFraction: total("wrongCount") / earCount,
+    withinFiveDbFraction: total("withinFiveDbCount") / earCount,
+    withinFiveDbSetsNotMeetingLimitCount: measurements.filter(
+      (measurement) => !options.meetsWithinFiveDb(measurement),
+    ).length,
     unfinishedRoomCount: measurements.reduce(
       (sum, measurement) => sum + measurement.unfinishedRoomCount,
       0,

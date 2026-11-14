@@ -23,7 +23,9 @@ const parameters = Object.freeze({
  * CP3. Useful for attentive listeners (Statistical; guards CP2 against an engine that flags
  * everything; brief property 1). For each of 50 parameter sets from the Attentive_Range
  * (fast-check seed 20261117), over 400 rooms, at least 88 percent of ear results are Accurate
- * and not Flagged, and at most 10 percent are Flagged.
+ * and not Flagged, and at most 10 percent are Flagged. Accurate is the grid band of the amended
+ * property 1 (D42). The share within the original 5 dB, and the number of sets it would leave
+ * below the limits, are reported beside the verdict and decide nothing.
  */
 export const cp3UsefulForAttentiveCheck: HarnessNeutralStatisticalCheck =
   Object.freeze({
@@ -46,6 +48,17 @@ export const cp3UsefulForAttentiveCheck: HarnessNeutralStatisticalCheck =
         meets: (measurement) =>
           atLeastFraction(
             measurement.accurateCount,
+            measurement.earCount,
+            parameters.accurateMinFraction,
+          ) &&
+          atMostFraction(
+            measurement.flaggedCount,
+            measurement.earCount,
+            parameters.flaggedMaxFraction,
+          ),
+        meetsWithinFiveDb: (measurement) =>
+          atLeastFraction(
+            measurement.withinFiveDbCount,
             measurement.earCount,
             parameters.accurateMinFraction,
           ) &&

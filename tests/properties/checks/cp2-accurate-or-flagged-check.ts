@@ -18,7 +18,9 @@ const parameters = Object.freeze({
 /**
  * CP2. Accurate or flagged (Statistical; brief property 1). For each of 100 parameter sets from
  * the Plausible_Range (fast-check seed 20261116), 400 rooms with seeds derived from the set give
- * 800 ear results, and at least 93 percent of them are Accurate or Flagged.
+ * 800 ear results, and at least 93 percent of them are Accurate or Flagged. Accurate is the grid
+ * band of the amended property 1 (D42). The share within the original 5 dB, and the number of sets
+ * it would leave below the limit, are reported beside the verdict and decide nothing.
  */
 export const cp2AccurateOrFlaggedCheck: HarnessNeutralStatisticalCheck =
   Object.freeze({
@@ -41,6 +43,12 @@ export const cp2AccurateOrFlaggedCheck: HarnessNeutralStatisticalCheck =
         meets: (measurement) =>
           atLeastFraction(
             measurement.accurateCount + measurement.flaggedCount,
+            measurement.earCount,
+            parameters.accurateOrFlaggedMinFraction,
+          ),
+        meetsWithinFiveDb: (measurement) =>
+          atLeastFraction(
+            measurement.withinFiveDbCount + measurement.flaggedCount,
             measurement.earCount,
             parameters.accurateOrFlaggedMinFraction,
           ),

@@ -76,6 +76,10 @@ describe("measurePopulation (R15.1, R15.3)", () => {
       rows.filter((row) => row.accuracy === "accurate").length,
     );
     expect(summary.accurateFraction).toBe(summary.accurateCount / 100);
+    expect(summary.withinFiveDbCount).toBe(
+      rows.filter((row) => row.withinFiveDb).length,
+    );
+    expect(summary.withinFiveDbFraction).toBe(summary.withinFiveDbCount / 100);
     expect(summary.budgetExceededCount).toBe(0);
     expect(summary.threwCount).toBe(0);
     const trialCounts = rows.map((row) => row.trialCount);
@@ -86,6 +90,20 @@ describe("measurePopulation (R15.1, R15.3)", () => {
     expect(summary.medianTrialCount).toBeLessThanOrEqual(
       summary.largestTrialCount,
     );
+  });
+
+  it("counts every found or better-than-floor ear within the original 5 dB as Accurate, and no flagged ear as within", () => {
+    // Worse than cap is left out: a true threshold exactly one step below the cap is within the
+    // original 5 dB but not Accurate under the grid band (D42).
+    const { rows } = measure(8);
+    for (const row of rows) {
+      if (row.withinFiveDb && row.state !== "worseThanCap") {
+        expect(row.accuracy).toBe("accurate");
+      }
+      if (row.accuracy === "flagged") {
+        expect(row.withinFiveDb).toBe(false);
+      }
+    }
   });
 
   it("draws from another range when asked", () => {

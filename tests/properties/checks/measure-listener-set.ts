@@ -5,6 +5,7 @@ import {
   type AccuracyClass,
 } from "../../listeners/classify-accuracy";
 import type { ListenerEar } from "../../listeners/listener-types";
+import { isWithinFiveDb } from "../../listeners/is-within-five-db";
 import { drawSeed } from "../../listeners/play-population-rooms";
 import {
   createPsychometricListener,
@@ -39,6 +40,9 @@ export interface ListenerSetMeasurement {
   readonly accurateFraction: number;
   readonly flaggedFraction: number;
   readonly wrongFraction: number;
+  /** Ears within the original 5 dB of property 1, not unreliable (D42). Not the Accurate count. */
+  readonly withinFiveDbCount: number;
+  readonly withinFiveDbFraction: number;
   /** Rooms that did not finish within the generous budget, or threw. */
   readonly unfinishedRoomCount: number;
   /** The first few wrong ears, so that a counterexample can be replayed room by room. */
@@ -76,7 +80,8 @@ export function listenerSetSeed(
 
 /**
  * Runs `roomCount` rooms of `search` with one Psychometric_Listener parameter set and counts its
- * ear results as Accurate, Flagged or Wrong (D18). The engine and listener seed of each room are
+ * ear results as Accurate, Flagged or Wrong (D42), and separately those within the original 5 dB.
+ * The engine and listener seed of each room are
  * drawn in turn from a source made from `listenerSetSeed(parameters)`.
  */
 export function measureListenerSet(
@@ -93,6 +98,7 @@ export function measureListenerSet(
     wrong: 0,
   };
   const wrongExamples: WrongEarExample[] = [];
+  let withinFiveDbCount = 0;
   let unfinishedRoomCount = 0;
   for (let room = 1; room <= roomCount; room += 1) {
     const engineSeed = drawSeed(seeds);
@@ -117,6 +123,9 @@ export function measureListenerSet(
         settings,
       );
       counts[accuracy] += 1;
+      if (isWithinFiveDb(run.ears[ear], trueThresholdDb, settings)) {
+        withinFiveDbCount += 1;
+      }
       if (accuracy === "wrong" && wrongExamples.length < wrongExampleCount) {
         wrongExamples.push(
           Object.freeze({
@@ -143,6 +152,8 @@ export function measureListenerSet(
     accurateFraction: counts.accurate / earCount,
     flaggedFraction: counts.flagged / earCount,
     wrongFraction: counts.wrong / earCount,
+    withinFiveDbCount,
+    withinFiveDbFraction: withinFiveDbCount / earCount,
     unfinishedRoomCount,
     wrongExamples: Object.freeze(wrongExamples),
   });
@@ -157,5 +168,6 @@ export const summarizeListenerSet = (
   accurateFraction: measurement.accurateFraction,
   flaggedFraction: measurement.flaggedFraction,
   wrongFraction: measurement.wrongFraction,
+  withinFiveDbFraction: measurement.withinFiveDbFraction,
   unfinishedRoomCount: measurement.unfinishedRoomCount,
 });

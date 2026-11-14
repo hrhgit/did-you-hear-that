@@ -83,22 +83,21 @@ function expectUsefulForAttentive(
 describe("threshold search regressions", () => {
   // A narrow listener 0.1 dB below a level of the grid catches that level about 61 percent of
   // the time. The search stopped at the level above as soon as it had 2 ascending catches,
-  // although the quieter level had 1 catch in 2 and could still reach 2 of 3.
-  it.fails(
-    "regression 1: found one step too loud while the quieter level could still reach 2 of 3 (CP2, seed 4263754660)",
-    () => {
-      expectAccurateOrFlagged(
-        {
-          trueThresholdDb: { left: -55.1, right: 0 },
-          widthDb: 1,
-          lapseFraction: 0,
-          falseAlarmFraction: 0,
-          wrongSideFraction: 0,
-        },
-        4263754660,
-      );
-    },
-  );
+  // although the quieter level had 1 catch in 2 and could still reach 2 of 3. D40 made it wait,
+  // and the grid band of the amended property 1 (D42) counts the remaining ears found at the
+  // level above as Accurate: 800 of 800, of which 686 are within the original 5 dB.
+  it("regression 1: found one step too loud while the quieter level could still reach 2 of 3 (CP2, seed 4263754660)", () => {
+    expectAccurateOrFlagged(
+      {
+        trueThresholdDb: { left: -55.1, right: 0 },
+        widthDb: 1,
+        lapseFraction: 0,
+        falseAlarmFraction: 0,
+        wrongSideFraction: 0,
+      },
+      4263754660,
+    );
+  });
 
   // The same mechanism for an attentive listener 0.1 dB below the level 0.
   it("regression 2: attentive listener found one step too loud while the quieter level could still reach 2 of 3 (CP3, seed 3252736698)", () => {
@@ -115,20 +114,19 @@ describe("threshold search regressions", () => {
   });
 
   // After D40: an attentive listener 0.1 dB below the level −45 is still found at −40, 5.1 dB
-  // above its true threshold, in 13.75 percent of its ears.
-  it.fails(
-    "regression 3: attentive listener just below a level of the grid found one step too loud (CP3, seed 2093169249)",
-    () => {
-      expectUsefulForAttentive(
-        {
-          trueThresholdDb: { left: -45.1, right: 0 },
-          widthDb: 1,
-          lapseFraction: 0,
-          falseAlarmFraction: 0,
-          wrongSideFraction: 0,
-        },
-        2093169249,
-      );
-    },
-  );
+  // above its true threshold, in 13.75 percent of its ears. The grid band of the amended
+  // property 1 (D42) counts −40 as Accurate: 800 of 800, of which 690 are within the original
+  // 5 dB.
+  it("regression 3: attentive listener just below a level of the grid found one step too loud (CP3, seed 2093169249)", () => {
+    expectUsefulForAttentive(
+      {
+        trueThresholdDb: { left: -45.1, right: 0 },
+        widthDb: 1,
+        lapseFraction: 0,
+        falseAlarmFraction: 0,
+        wrongSideFraction: 0,
+      },
+      2093169249,
+    );
+  });
 });

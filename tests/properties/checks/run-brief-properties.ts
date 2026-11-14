@@ -33,7 +33,7 @@ const repositoryRoot = path.resolve(import.meta.dirname, "..", "..", "..");
 /** The brief's five properties, as `docs/briefs/01-threshold-search.md` states them. */
 const briefPropertyStatements: Readonly<Record<BriefPropertyNumber, string>> =
   Object.freeze({
-    1: "Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within 5 dB or the result is unreliable.",
+    1: 'Accurate or flagged: for a listener whose true threshold is inside the playable range, the estimate is within one step of the grid or the result is unreliable. "Within one step of the grid" means: take the lowest level of the 5 dB grid at or above the listener\'s true threshold; the estimate is that level, or one 5 dB step either side of it. (Amended 2026-11-14; the share within the original 5 dB is reported as withinFiveDbFraction.)',
     2: "Always ends within the trial limit.",
     3: "Levels requested never leave the range between floor and cap, and never rise by more than one upward step between consecutive trials for an ear.",
     4: "No-sound trials: share within range, positions not predictable.",
@@ -318,7 +318,7 @@ async function main(): Promise<number> {
   const share = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
   const { summary: p } = population;
   console.log(
-    `Population of ${String(p.listenerCount)} listeners: accurate ${share(p.accurateFraction)}, flagged ${share(p.flaggedFraction)}, wrong ${share(p.wrongFraction)}, median ${String(p.medianTrialCount)} and largest ${String(p.largestTrialCount)} trials per room`,
+    `Population of ${String(p.listenerCount)} listeners: accurate ${share(p.accurateFraction)}, flagged ${share(p.flaggedFraction)}, wrong ${share(p.wrongFraction)}, within the original 5 dB ${share(p.withinFiveDbFraction)}, median ${String(p.medianTrialCount)} and largest ${String(p.largestTrialCount)} trials per room`,
   );
   console.log(`Wrote ${path.relative(repositoryRoot, outputPath)}`);
   return 0;

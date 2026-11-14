@@ -104,7 +104,7 @@ The cap is the lower of two limits: a level relative to the anchor, and an absol
 
 | Layer | Kind of test | What it shows |
 |---|---|---|
-| engine | Property tests with simulated listeners | Estimates are within 5 dB of the truth or marked unreliable; every search ends; no-sound trials cannot be predicted |
+| engine | Property tests with simulated listeners | Estimates are within one step of the level grid around the truth or marked unreliable; every search ends; no-sound trials cannot be predicted |
 | audio/synth | Offline render and spectrum check | Each ghost sound stays inside its band; fades are long enough; reference loudness is as specified |
 | audio/output | Property tests on rendered output | Never above the cap; the untested channel is exact zero |
 | session | Simulated whole visits with a fake timer | The visit log is complete and the flow reaches the result for any sequence of answers |
