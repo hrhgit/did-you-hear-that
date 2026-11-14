@@ -116,4 +116,5 @@ If a property test finds a counterexample, keep it as a named regression test an
   - Confirm that `package.json` has no `dependencies`, and that `dist/` contains no audio file and no reference to another origin.
   - Delete the temporary clone.
   - Push a branch and confirm the CI run passes. After the Pages source has been set, merge to `main` and confirm that the deployed address shows the placeholder page, both at the Pages URL and when opened directly at its `index.html`.
+  - Status on 2026-11-14: every local step above passed in a fresh clone at commit bfb68dd with Node 26.10 (433 unit tests, 20 end-to-end runs). The push, CI run and deployed-address checks wait until the repository is published.
   - _Requirements: 1.4, 2.6, 11.1, 12.1, 15.1, 15.2_
