@@ -84,7 +84,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 14.1, 14.2, 14.3_
   - _Properties: CP1, CP4, CP5, CP6, CP7, CP9, CP10, CP13_
 
-- [ ] 9. Write the statistical checks and the property CLI, and record the first complete run
+- [x] 9. Write the statistical checks and the property CLI, and record the first complete run
   - Write one check module each for CP2, CP3, CP8, the statistical part of CP10, CP11 and CP12, with the fixed seeds, run counts and limits from `design.md`.
   - Write `tests/properties/checks/run-brief-properties.ts` and add `"experiment:properties": "tsx tests/properties/checks/run-brief-properties.ts"` to `package.json`. With `--search <name>` it runs every harness-neutral check against that search with the shipped settings. It writes `docs/experiments/brief-properties-<name>.json`, holding the search name, the git commit, the settings, each brief property with its parts (holds, checkable, first counterexample, metrics), and the population numbers from `measurePopulation`. It prints a short table and always exits 0, because it reports and does not judge.
   - Run `npm run experiment:properties -- --search spec`. Copy the output to `docs/experiments/brief-properties-spec-first-run.json`. Commit it with the check modules before changing any engine code (D30).
@@ -94,6 +94,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 14.1, 14.2, 14.3, 14.7, 16.7_
   - _Properties: CP2, CP3, CP8, CP10, CP11, CP12_
   - _Decisions: D19, D20, D30_
+  - Status after the first complete run (commit 0057576, `docs/experiments/brief-properties-spec-first-run.json`): CP2 and CP3 do not hold, and their Vitest files are committed with `it.skip`. Every other check holds. CP2: 36 of 100 Plausible_Range sets are below 93 percent Accurate or Flagged; the shrunk first counterexample is left −55.1 dB, right 0 dB, width 1 dB, all rates 0 (set seed 4263754660), with 78.0 percent Accurate or Flagged because its left ear is found at −50, 5.1 dB above the true threshold. CP3: 11 of 50 Attentive_Range sets are below 88 percent Accurate; the shrunk first counterexample is left −0.1 dB, right 0 dB, width 1 dB, all rates 0 (set seed 3252736698), with 82.6 percent Accurate because its left ear is found at 5, 5.1 dB above.
 
 - [ ] 10. Handle every counterexample
   - Take the checks that do not hold, exact and universal ones first (CP1, CP4 to CP7, CP9, CP13), then the statistical ones. For each counterexample:
