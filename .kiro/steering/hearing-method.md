@@ -15,7 +15,9 @@ The search follows the modified Hughson-Westlake procedure used in manual pure-t
 - After a sound the visitor misses, the next sound for that ear is 5 dB louder.
 - The threshold for an ear at a pitch is the quietest level at which the visitor caught the sound on at least 2 of 3 presentations reached while the level was rising.
 
-The step sizes are documented by several audiometer makers. The 2 of 3 rule is taken from manufacturer descriptions. The professional guideline text has not been read, so treat the exact wording of the rule as unverified.
+Source: American Speech-Language-Hearing Association, Guidelines for Manual Pure-Tone Threshold Audiometry (2005), https://www.asha.org/policy/gl2005-00014/, read on 2026-11-14. It defines threshold as the lowest level at which responses occur in at least one half of a series of ascending trials, with a minimum of two responses out of three presentations at a single level. It gives the same steps: 10 dB down after a response, 5 dB up after no response. The ANSI standard that the guideline cites has not been read.
+
+The guideline describes a trained examiner working in a quiet room with calibrated equipment. This product has neither, so the method is borrowed and the guideline's accuracy does not carry over.
 
 Left ear and right ear searches for one pitch run at the same time and their trials are mixed in random order. The visitor answers by naming the side. A response on the wrong side counts as a miss for the ear that was tested and is recorded separately.
 
