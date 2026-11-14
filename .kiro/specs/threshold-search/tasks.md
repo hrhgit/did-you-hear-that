@@ -6,14 +6,14 @@ Do not check out, read, diff or otherwise look at `experiment/no-spec` or its co
 
 If a property finds a counterexample, keep it as a named regression test and put the fix in a separate commit, as D20 describes.
 
-- [ ] 1. Add the threshold search rule values to the hearing method config
+- [x] 1. Add the threshold search rule values to the hearing method config
   - In `src/config/hearing-method-config.ts`, add the six fields of R12.1 to `HearingMethodConfig` with a one-line JSDoc each, and their values to `hearingMethodConfig`. The comment on each value names its decision in `design.md` (D1, D3, D4, D5 or D8), because none of them is a row of the steering table (D15).
   - Leave every existing field and value as it is.
   - Update `src/config/hearing-method-config.test.ts`. Extend the exact-value check, renaming it to say it holds the hearing method table and the threshold search rule values. Add invariants: `noSoundTrialProbabilityFraction` lies within the no-sound share range, `thresholdCatchShareMinFraction` lies from 0 to 1, the three new counts are positive integers, and `inconsistentCatchMarginDb` is a positive integer. The unit-suffix test already covers the new names.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`.
   - _Requirements: 12.1, 12.2, 12.3_
 
-- [ ] 2. Add the engine types, fraction comparisons, room limits and settings validation
+- [x] 2. Add the engine types, fraction comparisons, room limits and settings validation
   - Write `src/engine/search-types.ts` exactly as in the Types section of `design.md`.
   - Write `src/engine/fraction-comparisons.ts` with `atLeastFraction` and `atMostFraction` and the 10⁻⁹ tolerance (D29). Test boundaries in `fraction-comparisons.test.ts`: 3 of 20 at 0.15 is at least; 13 of 53 at 0.25 is at most; 14 of 54 is not; 3 of 10 at 0.3 is at most; one value just past each limit by more than the tolerance.
   - Write `src/engine/room-limits.ts`. Its test checks the shipped settings give 2, 4, 40, 13 and 53, plus one hand-computed case with other counts.
@@ -25,7 +25,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 1.1, 1.2, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 9.6, 10.2_
   - _Decisions: D6, D14, D29_
 
-- [ ] 3. Add response classification and the per-ear search
+- [x] 3. Add response classification and the per-ear search
   - Write `src/engine/classify-response.ts`. Its test covers the five outcomes of R4.2 to R4.6 for both ears, and a `TypeError` for `"LEFT"`, `""`, `undefined` and `0`.
   - Write `src/engine/ear-search.ts` following `createEarSearch` in `design.md`: the order of the ending rules, the clamping, the direction from the previous outcome (D2) and `remainingPresentationsLowerBound`.
   - Write `ear-search.test.ts`:
@@ -36,13 +36,13 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 5.1, 5.2, 5.3, 5.6, 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 8.1_
   - _Decisions: D1, D2, D3, D4, D6_
 
-- [ ] 4. Add the no-sound schedule and the final ear result
+- [x] 4. Add the no-sound schedule and the final ear result
   - Write `src/engine/no-sound-schedule.ts`. Test it with the shipped settings: at the start (0 no-sound, 0 sound, lower bound 4) a no-sound trial is allowed; with 1 no-sound, 0 sound and lower bound 4 it is not; a room of 4 sound trials and 0 no-sound trials needs a closing trial; 4 sound trials and 1 no-sound trial do not.
   - Write `src/engine/finalize-ear-result.ts`. Test each reason alone and all three together, in the order of R8.5. Test the cap as the reference for worse than cap, that better than floor is never marked inconsistent, trace E, trace G, and the four counts.
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 9.2, 9.3, 11.2_
   - _Decisions: D5, D7, D8, D16_
 
-- [ ] 5. Compose the room search
+- [x] 5. Compose the room search
   - Write `src/engine/threshold-search.ts` (`createThresholdSearch`) following "The room, step by step" in `design.md`, with the draw order 1, 2, 3 and frozen trials, records and results.
   - Write `threshold-search.test.ts` using a stub `RandomSource` that returns scripted values and counts its calls:
     - the first trial exists after creation, and `current()` called repeatedly returns the same trial and draws nothing
@@ -60,14 +60,14 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 1.3, 1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.1, 4.7, 4.8, 9.1, 9.2, 9.3, 9.5, 10.3, 11.1, 11.2, 11.3, 11.4, 11.5_
   - _Decisions: D7, D8, D10, D11, D12, D13_
 
-- [ ] 6. Add the simulated listeners
+- [x] 6. Add the simulated listeners
   - Write `tests/listeners/listener-types.ts`, `psychometric-listener.ts` and `extreme-listeners.ts` as in the Simulated listeners part of `design.md`, with the fixed order of draws per trial.
   - Write `listener-parameter-arbitraries.ts` with the Plausible_Range and Attentive_Range from D17, on the 0.1 dB and 0.001 grids.
   - Write `psychometric-listener.test.ts` with the rate checks the design lists (20 000 trials, fixed seeds, within 0.02), the step case and the false alarm side split. Write `extreme-listeners.test.ts` checking each listener's defining behaviour on sound and no-sound trials.
   - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7, 13.8_
   - _Decisions: D17_
 
-- [ ] 7. Add the harness: the search interface, the spec adapter, accuracy and population
+- [x] 7. Add the harness: the search interface, the spec adapter, accuracy and population
   - Write `tests/listeners/search-under-test.ts` with the interfaces in `design.md`.
   - Write `spec-search-under-test.ts`: `specSearchUnderTest`, which stops a run that exceeds its `trialBudget` and reports `"budgetExceeded"`, and `runSpecRoom`, which returns the full `RoomResult`. Write `searches-under-test.ts` with the registry `{ spec: specSearchUnderTest }`.
   - Write `classify-accuracy.ts` following D18. Its test covers each state at and just past each 5 dB boundary, and `"unreported"`.
@@ -75,7 +75,7 @@ If a property finds a counterexample, keep it as a named regression test and put
   - _Requirements: 13.7, 14.2, 15.1, 15.3_
   - _Decisions: D18, D21_
 
-- [ ] 8. Write the universal property checks
+- [x] 8. Write the universal property checks
   - Write `tests/properties/checks/valid-settings-arbitrary.ts`, which generates settings over the ranges needed to exercise every validation rule and keeps only those `validateSearchSettings` accepts.
   - Write `tests/properties/checks/ear-oracle.ts` from the requirements, without importing engine modules other than `search-types.ts` and `fraction-comparisons.ts`. Write `ear-oracle.test.ts`, feeding it hand-written records for traces A to G and checking the expected endings and levels.
   - Write one check module each for CP1, CP4, CP5, CP6, CP7, CP9, the universal part of CP10, and CP13, as described in `design.md`. Harness-neutral modules take the search and the settings arbitrary as parameters, and import nothing spec-only (D21).
