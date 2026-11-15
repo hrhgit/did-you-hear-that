@@ -8,14 +8,14 @@ Never change a value from a steering file. The visit limit of `visitFlowConfig` 
 
 If a property finds a counterexample, keep it as a named regression test in `tests/properties/visit-flow-regressions.test.ts`, first with `it.fails`, and put the fix in a separate commit, as the Testing strategy in `design.md` describes.
 
-- [ ] 1. Write the interface contract
+- [x] 1. Write the interface contract
   - Write `src/session/visit-flow-types.ts` exactly as the file in "Interface contract" in `design.md`: types and type re-exports only, no statement that runs, nothing else. This file is what the interface is built against, so it comes first and alone.
   - Write `src/session/visit-flow-types.test.ts` with type-level checks only (`expectTypeOf`), as `ear-types-match.test.ts` does: `LoggedEarResult` equals the engine's `EarResult`; `LoggedRoomResult` equals `Omit<RoomResult, "trials">`; `ScoredVisitTrial` with `kind: "sound"` has a `SoundOutcome` and with `kind: "noSound"` a `NoSoundOutcome`; every `VisitSnapshot` member has a different `stage`.
   - Check: `npm run typecheck`, `npm run lint`, `npm test`. Commit the two files alone.
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 1.6, 9.3_
   - _Decisions: D1, D31_
 
-- [ ] 2. Add the visit flow config
+- [x] 2. Add the visit flow config
   - Write `src/config/visit-flow-config.ts` as in "Config" in `design.md`, with its own `deepFreeze`. The comment on `visitFalseAlarmRateUnreliableAboveFraction` says that the value is proposed, not approved, and names D17 and Q1.
   - Write `src/config/visit-flow-config.test.ts`: the exact values; unit endings; deeply frozen; the visit limit above 0 and at most `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction`; the refusal count a positive integer; and a test named for Q1 whose message says the value is a proposal awaiting the project owner's choice.
   - Do not change `hearing-method-config.ts`, `audio-output-config.ts`, `audio-safety-config.ts` or `src/config/README.md`.
@@ -23,7 +23,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 17.7, 20.1, 20.2, 20.3_
   - _Decisions: D17, D25_
 
-- [ ] 3. Add the small pure helpers
+- [x] 3. Add the small pure helpers
   - Write `src/session/visit-rooms.ts` (`visitRooms`), `window-start.ts` (`soundWindowStartMs`, `noSoundWindowStartMs`) and `answer-time.ts` (`answerTimeMs`) as in "The rooms of a visit" and "Time and windows" in `design.md`, each with its test.
   - `visit-rooms.test.ts`: the quick visit is corridor, stairs, attic and the full visit cellar to attic, with indices from 0 and the config's frequencies; results are frozen; a frequency with no ghost sound throws a `RangeError` (through a settings parameter with a default, as `roomSearchCapDb` takes its settings).
   - `window-start.test.ts`: conversion with a pair whose page clock is 1000 ms ahead; no pair gives presentation plus 50 ms; never earlier than the presentation; the no-sound start with offsets of 0, 30 ms and −80 ms.
@@ -32,7 +32,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 2.7, 7.3, 7.4, 7.5, 7.8_
   - _Decisions: D3, D4, D18, D33, D34_
 
-- [ ] 4. Add the visit-level rule and the visit summary
+- [x] 4. Add the visit-level rule and the visit summary
   - Write `src/session/judge-visit-false-alarms.ts` and `summarize-visit.ts` as in "The visit summary and the visit-level rule" in `design.md`. `summarizeVisit` takes its settings as a parameter with the shipped config as the default.
   - `judge-visit-false-alarms.test.ts`: 4 of 20 at 0.2 is not above; 5 of 21 is; 0 no-sound trials gives rate 0 and not above; the counts are sums.
   - `summarize-visit.test.ts`, on hand-built logs: an unmarked visit keeps every ear as the search gave it; a marked visit makes every ear unreliable with `visitFalseAlarmRate` last and offers no repeat; an ear already unreliable keeps its reasons in order; `levelNotAsAsked` on one floor only; an abandoned attempt is left out of the pooled counts; `rightMinusLeftDb` and the offer at 14 dB, 15 dB and −15 dB; the ignored answer count.
