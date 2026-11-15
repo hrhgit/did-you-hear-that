@@ -13,8 +13,108 @@
 // or the visit limit that awaits the project owner's choice (Q1), stays `it.fails`, with a
 // decision in design.md that gives the numbers.
 
-import { describe, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { ListenerTrial } from "../listeners/listener-types";
+import { playVisit, type VisitorScript } from "../listeners/simulated-visitor";
+import { answerDelayMaxMs, restMaxMs } from "./visit-flow-arbitraries";
+import { checkPausesDiscardAndRepeat } from "./visit-flow-cp7-check";
+import { createVisitHarness } from "./visit-flow-harness";
+import {
+  observeVisit,
+  visitStartMs,
+  type TimelineEntry,
+} from "./visit-flow-timeline";
+
+// The visits render with the worst-case renderers, as in the property files (D26, audio-output D43).
+vi.mock("../../src/audio/synth/sound-renderers", async () => {
+  const { worstCaseRenderers } = await import("./worst-case-renderers");
+  return { soundRenderers: worstCaseRenderers };
+});
+
+/**
+ * The moments of a visit that say where its device changes fell: each room run's start and first
+ * presented trial (`roomIndex:attempt`), and each device change with the stage it came in.
+ */
+function roomRunMoments(entries: readonly TimelineEntry[]): string[] {
+  const moments: string[] = [];
+  const presentedRuns = new Set<string>();
+  for (const entry of entries) {
+    if (entry.kind === "event" && entry.event.kind === "roomStarted") {
+      moments.push(
+        `roomStarted ${String(entry.event.room.roomIndex)}:${String(entry.event.attempt)}`,
+      );
+    }
+    if (entry.kind === "presented") {
+      const key = `${String(entry.trial.roomIndex)}:${String(entry.trial.attempt)}`;
+      if (!presentedRuns.has(key)) {
+        presentedRuns.add(key);
+        moments.push(`first trial ${key}`);
+      }
+    }
+    if (entry.kind === "stopReport" && entry.reportKind === "deviceChanged") {
+      moments.push(`deviceChanged in ${entry.snapshotBefore.stage}`);
+    }
+  }
+  return moments;
+}
 
 describe("visit flow regressions", () => {
-  it.todo("no counterexample has been found by a visit flow property yet");
+  // Found by CP7 with fast-check seed -1594251289, path
+  // "40:0:0:3:0:21:0:0:26:5:11:9:3:3:3:3:3:3:3:3:3:3:11:3:1:27:8:8:8:6:3:3:3:3:3:3:3:3:12:4:5:3:4:19:22:3:3:3:17:3:5:8:5:5:6:6:6:11:9:0:2:7:4:4:3:3:2:3:8:8:8:8:8:8:8:8:8:8:8:8:18:8:9:23:27:2:12:2:3:3:2:3:4:4:4:4:4:6:6:6:11:7:11:10:8:9:8:9:12:2:5:6:4:3:2:2:2:2:7:8:2:2:2:11:6:3:2:7:8:7:9:10:9:2:2:10:3:5:8:8:2:2:2:2:2:2:11:4:2:2:2:2:3:5:2:12:3:5:2:2:5:2:13:3:4:6:2:2:2:14:4:2:2:2:5:2:2:15:3:7:2:2:2:2:2:17:2:3:5:2:17:3:5:2:2:19:2:5:2:19:5:2:5:2:23:20:12:2:7:7:4:2:3:5:2:2:10:4:5:4:5:2:11:4:4:7:2:2:2:2:12:5:2:2:2:5:2:2:13:4:5:5:2:14:4:4:5:2:15:4:3:5:2:16:4:5:2:2:18:2:2:5:2:18:6:2:5:2:5:2:23:20:12:2:10:2:2:4:3:3:5:5:5:5:5:5:5:5:5:5:5:5:5:15:8:8:7:7:7".
+  // In the counterexample a device change in the third room abandoned attempt 1; the second device
+  // change came 0.4 ms after attempt 2 started and before it presented a trial, so the flow
+  // abandoned attempt 2 as well and ran attempt 3 (R13.3). CP7 kept the pause of the first device
+  // change open until a trial was presented, so it did not count attempt 2 as stopped and expected
+  // attempt 2's first trial. The flow was right; the property's bookkeeping was not.
+  //
+  // This case keeps the script fast-check drew except its listener, which was a drawn function,
+  // and the time of the second device change. The listener here answers the side of every sound at
+  // or above −30 dB and nothing otherwise. With it, replaying the visit put attempt 2 of the third
+  // room from 286 989 ms to its first trial at 290 149 ms, so the second device change is set at
+  // 288 000 ms, between the two. The case asserts that order first, so that it cannot quietly
+  // stop covering two device changes in a row.
+  it.fails(
+    "regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)",
+    async () => {
+      const script: VisitorScript = {
+        visitType: "quick",
+        calibrationTargetDb: -40,
+        firstHeadphoneCheckAnswer: "left",
+        listener: {
+          kind: "function",
+          respond: (trial: ListenerTrial) =>
+            trial.kind === "sound" && trial.levelDb >= -30 ? trial.ear : "none",
+        },
+        visitorSeed: 4294950317,
+        answerDelayMaxMs,
+        timeStampModes: ["nan"],
+        restMaxMs,
+        extraPresses: [],
+        disturbances: [
+          { atMs: 266_399, kind: "deviceChanged", resumeAfterMs: 0 },
+          { atMs: 288_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        ],
+        ending: null,
+      };
+      const harness = createVisitHarness({ seed: 0, performanceOffsetMs: 0 });
+      const timeline = observeVisit(harness);
+      const run = await playVisit(timeline.driver, script);
+
+      expect(visitStartMs(timeline.entries)).toBe(0);
+      expect(roomRunMoments(timeline.entries)).toEqual([
+        "roomStarted 0:1",
+        "first trial 0:1",
+        "roomStarted 1:1",
+        "first trial 1:1",
+        "roomStarted 2:1",
+        "first trial 2:1",
+        "deviceChanged in room",
+        "roomStarted 2:2",
+        "deviceChanged in room",
+        "roomStarted 2:3",
+        "first trial 2:3",
+      ]);
+      checkPausesDiscardAndRepeat(harness, timeline.entries, run);
+    },
+  );
 });
