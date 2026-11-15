@@ -12,7 +12,7 @@ import type { VisitEarResult } from "../../src/session/visit-flow-types";
 import { visitRooms } from "../../src/session/visit-rooms";
 import {
   listScenarioArbitrary,
-  pictureInputArbitrary,
+  pictureInputWithEarlierArbitrary,
   playListScenario,
 } from "./result-page-arbitraries";
 import {
@@ -30,10 +30,11 @@ import {
 } from "./result-page-text";
 
 // CP2. No text compares floors (Universal; result-page design.md, CP2; R14; brief property "The
-// picture never orders or connects floors"). For the inputs of CP1: a floor's strings name only
-// its own room and pitch, the strings outside the floors name none, no string but the limits
-// statement holds a word of comparison once the allowed forms are removed, every number is one
-// the design allows in its place, and the floors are in the order of the house.
+// picture never orders or connects floors"). For the inputs of CP1, with an earlier visit or none:
+// a floor's strings name only its own room and pitch, the strings outside the floors name none, no
+// string but the limits statement holds a word of comparison once the allowed forms are removed,
+// every number is one the design allows in its place (the comparison line only the earlier
+// visit's date), and the floors are in the order of the house.
 
 /** Runs (design.md, "Run counts and time"). */
 const runs = 1000;
@@ -104,6 +105,7 @@ function floorFaults(
   picture: ResultPicture,
   summary: VisitSummary,
   localDate: string,
+  earlierLocalDate: string | null,
   pictureTextList: readonly PlacedText[],
 ): string[] {
   const faults: string[] = [];
@@ -135,9 +137,14 @@ function floorFaults(
         }
       }
     } else {
-      const allowed = place.endsWith(".imageFileBaseName")
-        ? [...allowedOutside, monthNumber(localDate)]
-        : allowedOutside;
+      // The comparison line shows the earlier visit's date and no other number.
+      const allowed = place.endsWith(".comparison.line")
+        ? earlierLocalDate === null
+          ? []
+          : shownDateNumbers(earlierLocalDate)
+        : place.endsWith(".imageFileBaseName")
+          ? [...allowedOutside, monthNumber(localDate)]
+          : allowedOutside;
       for (const number of numbersIn(text)) {
         if (!allowed.includes(number)) {
           faults.push(
@@ -186,14 +193,20 @@ describe("result page CP2. No text compares floors (Universal; R14)", () => {
     () => {
       fc.assert(
         fc.property(
-          pictureInputArbitrary,
+          pictureInputWithEarlierArbitrary,
           listScenarioArbitrary,
           (drawnInput, scenario) => {
             const picture = resultPicture(drawnInput.input);
             const { summary } = drawnInput.drawn.visit;
             const texts = pictureTexts(picture);
             expect(
-              floorFaults(picture, summary, drawnInput.localDate, texts),
+              floorFaults(
+                picture,
+                summary,
+                drawnInput.localDate,
+                drawnInput.input.earlierVisit?.savedOnLocalDate ?? null,
+                texts,
+              ),
             ).toEqual([]);
 
             const run = playListScenario(scenario);

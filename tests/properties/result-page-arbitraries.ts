@@ -44,7 +44,9 @@ import type { StoreEntryFields } from "../../src/storage/visit-store-types";
 // scenarios of CP1 and CP2, saving through an archive, stored values an archive wrote and then
 // changed, and storage behaviours. The visits are hand-built visit logs whose summaries come from
 // `summarizeVisit` itself, so every summary has every invariant the visit flow gives one.
-// Earlier visits are not drawn yet (tasks 12 and 13).
+// Earlier visits, and the lists and names that `findEarlierVisit` chooses one from, are drawn for
+// the comparison (tasks 12 and 13): CP1 and CP2 draw an earlier visit or none, and CP9 checks the
+// choice and the outlines.
 
 const { floorDb, capRelativeToAnchorDb, swappedRepeatDifferenceDb } =
   hearingMethodConfig;
@@ -566,7 +568,7 @@ export function savedVisitOfDrawn(
 
 /**
  * A picture input: live with a local date, or saved with a `floorDb` from −80 to −40 and a local
- * date. `earlierVisit` is null until the comparison tasks are built.
+ * date. Its `earlierVisit` is null; `pictureInputWithEarlierArbitrary` draws one or none.
  */
 export const pictureInputArbitrary: fc.Arbitrary<DrawnPictureInput> = fc
   .tuple(
@@ -607,6 +609,105 @@ export const pictureInputArbitrary: fc.Arbitrary<DrawnPictureInput> = fc
       localDate: wallTime.localDate,
     };
   });
+
+// ─── Earlier visits (comparison) ────────────────────────────────────────────────────────────
+
+/**
+ * A saved visit to draw as outlines: any drawn visit, of either visit type, with any id, wall
+ * time, typed name, and the shipped `floorDb` or one from −80 to −40 saved with it.
+ */
+export const earlierVisitArbitrary: fc.Arbitrary<SavedVisit> = fc
+  .tuple(
+    drawnVisitArbitrary({ anyDifference: true }),
+    savedVisitIdArbitrary,
+    wallTimeArbitrary,
+    typedNameArbitrary,
+    fc.oneof(
+      fc.constant(floorDb),
+      fc.integer({ min: savedFloorMinDb, max: savedFloorMaxDb }),
+    ),
+  )
+  .map(([drawn, savedVisitId, wallTime, typedName, savedFloorDb]) =>
+    savedVisitOfDrawn(drawn, {
+      savedVisitId,
+      wallTime,
+      typedName,
+      floorDb: savedFloorDb,
+    }),
+  );
+
+/** A picture input of `pictureInputArbitrary` with an earlier visit or none (CP1, CP2). */
+export const pictureInputWithEarlierArbitrary: fc.Arbitrary<DrawnPictureInput> =
+  fc
+    .tuple(
+      pictureInputArbitrary,
+      fc.option(earlierVisitArbitrary, { nil: null }),
+    )
+    .map(([drawnInput, earlierVisit]) => ({
+      ...drawnInput,
+      input: { ...drawnInput.input, earlierVisit },
+    }));
+
+/**
+ * Headphone names CP9 matches, each written as words. Two typed names are the same name exactly
+ * when they come from the same entry here, whatever their letter case, spacing and Unicode form.
+ * Some differ only by a mark or a space, so that near names must not match.
+ */
+export const headphoneNameBases: readonly (readonly string[])[] = Object.freeze(
+  [
+    ["Zorbex"],
+    ["Zorbex", "Quillon"],
+    ["ZorbexQuillon"],
+    ["Zorb\u00e9x"],
+    ["Caf\u00e9", "buds"],
+    ["Vexmira", "buds"],
+    ["Kappelt\u{1F3A7}"],
+  ],
+);
+
+/** A typed name of CP9 and the entry of `headphoneNameBases` it is, or null for no name. */
+export interface DrawnHeadphoneName {
+  readonly typed: string;
+  readonly baseIndex: number | null;
+}
+
+/**
+ * A typed name of CP9: an entry of `headphoneNameBases` in any letter case, NFC or NFD, with any
+ * run of spacing or control characters between its words and around them; or a name of spacing
+ * only, or empty, which is no name.
+ */
+export const drawnHeadphoneNameArbitrary: fc.Arbitrary<DrawnHeadphoneName> =
+  fc.oneof(
+    {
+      arbitrary: fc
+        .tuple(
+          fc.integer({ min: 0, max: headphoneNameBases.length - 1 }),
+          letterCase,
+          fc.constantFrom<"NFC" | "NFD">("NFC", "NFD"),
+          fc.option(nameSpacing, { nil: "" }),
+          fc.array(nameSpacing, { minLength: 3, maxLength: 3 }),
+          fc.option(nameSpacing, { nil: "" }),
+        )
+        .map(([baseIndex, caseOf, form, before, between, after]) => {
+          const words = (headphoneNameBases[baseIndex] ?? []).map((word) =>
+            caseOf(word).normalize(form),
+          );
+          const body = words
+            .map((word, index) =>
+              index === 0 ? word : `${between[index - 1] ?? " "}${word}`,
+            )
+            .join("");
+          return { typed: before + body + after, baseIndex };
+        }),
+      weight: 8,
+    },
+    {
+      arbitrary: fc
+        .array(nameSpacing, { maxLength: 3 })
+        .map((parts) => ({ typed: parts.join(""), baseIndex: null })),
+      weight: 1,
+    },
+  );
 
 // ─── Stored entries written directly ────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import * as comparisonLinesModule from "../../src/copy/comparison-lines";
 import * as limitsStatementModule from "../../src/copy/limits-statement";
 import * as resultLinesModule from "../../src/copy/result-lines";
 import * as resultPageCopyModule from "../../src/copy/result-page-copy";
@@ -167,6 +168,7 @@ export function exportedCopyTexts(): PlacedText[] {
     ...exportedStrings("resultPageCopy", resultPageCopyModule),
     ...exportedStrings("resultLines", resultLinesModule),
     ...exportedStrings("savedVisitLines", savedVisitLinesModule),
+    ...exportedStrings("comparisonLines", comparisonLinesModule),
   ].map(({ path, text }) => placed(path, text));
   return [...limits, ...others];
 }

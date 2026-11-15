@@ -9,7 +9,7 @@ import { limitsStatement } from "../../src/copy/limits-statement";
 import { resultPicture } from "../../src/session/result-picture";
 import {
   listScenarioArbitrary,
-  pictureInputArbitrary,
+  pictureInputWithEarlierArbitrary,
   playListScenario,
 } from "./result-page-arbitraries";
 import {
@@ -24,9 +24,9 @@ import {
 } from "./result-page-text";
 
 // CP1. Safe wording (Universal; result-page design.md, CP1; R12.4, R16, R17, R18; brief
-// property "Safe wording"). For any picture input, and for any list state, unreadable count and
-// refusal, every string the picture, the lists and the outcomes give, and every string exported
-// from this spec's copy files, keeps the rules of wording.md.
+// property "Safe wording"). For any picture input, with an earlier visit or none, and for any list
+// state, unreadable count and refusal, every string the picture, the lists and the outcomes give,
+// and every string exported from this spec's copy files, keeps the rules of wording.md.
 
 /** Runs (design.md, "Run counts and time"). */
 const runs = 1000;
@@ -66,7 +66,7 @@ describe("result page CP1. Safe wording (Universal; R12.4, R16, R17, R18)", () =
       const exported = exportedCopyTexts();
       fc.assert(
         fc.property(
-          pictureInputArbitrary,
+          pictureInputWithEarlierArbitrary,
           listScenarioArbitrary,
           (drawnInput, scenario) => {
             const picture = resultPicture(drawnInput.input);
@@ -88,9 +88,12 @@ describe("result page CP1. Safe wording (Universal; R12.4, R16, R17, R18)", () =
               drawnInput.input.kind === "saved"
                 ? drawnInput.input.savedVisit.headphoneName
                 : null;
+            const earlierName =
+              drawnInput.input.earlierVisit?.headphoneName ?? null;
             const names = [
               ...run.tidyNames,
               ...(pictureName === null ? [] : [pictureName]),
+              ...(earlierName === null ? [] : [earlierName]),
             ].map((name) => name.toLowerCase());
             const holdingNames = generated.filter(({ text }) =>
               names.some((name) => text.toLowerCase().includes(name)),
