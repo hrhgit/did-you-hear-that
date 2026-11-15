@@ -1195,6 +1195,38 @@ It takes a visit flow driver (the harness's `advance`, `snapshot`, actions and p
 
 Universal properties run 50 visits each (CP8 100, CP9 300 runs of the pure part). With worst-case renders a visit takes a few milliseconds per trial. The spec's property files must stay under 60 seconds together on the project machine; if they do not, their counts are halved and the times are recorded as a decision, as the audio-output spec did (its D28).
 
+Note of 2026-11-15, the times of tasks 10 and 11. Task 10 asked for these in a commit message body, but commit messages here are one line, so they are written down here instead. Three runs of `npm test` on 2026-11-15, with every file of this spec present, gave these times per property file, in ms:
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 2645 | 2710 | 2341 |
+| CP2 | 4834 | 4959 | 5652 |
+| CP3 | 3302 | 2709 | 2675 |
+| CP4 | 3089 | 3039 | 2637 |
+| CP5 | 4300 | 4510 | 4503 |
+| CP6 | 2614 | 3240 | 3196 |
+| CP7 | 2966 | 2606 | 2612 |
+| CP8 | 7521 | 8754 | 8051 |
+| CP9 | 4272 | 3958 | 4630 |
+| CP10 | 6282 | 6274 | 6736 |
+| CP11 | 1348 | 1506 | 1479 |
+| Together | 43174 | 44264 | 44511 |
+
+Each total is the one recorded for that run. It differs by 1 ms from the sum of the figures above, which are rounded. Every run was under the 60 second budget, so no count was halved.
+
+### How the property files read the design
+
+The property files of tasks 10 and 11 read the design in these particular ways.
+
+- **The timeline helper.** `tests/properties/visit-flow-timeline.ts`, which "Files" does not list, holds `observeVisit`. It wraps the harness's driver and puts every action, stop report, snapshot notification, event and presented trial of a visit in one ordered list. Each entry has its timer time, its cause, and the lengths of the harness's output-call and schedule lists at that moment. An action or stop report also has the snapshot before and after it. CP1, CP2, CP3, CP4, CP6, CP7 and CP8 use it to ask what came before what. It changes nothing in the harness. It also gives `stopAt`, which stops the clocks at a chosen time on their way to a later one, for CP3's random readings.
+- **CP1, the budget.** The visit runs from the first `chooseVisit` that leaves `entry` to the last snapshot notification. The visitor's waits are all the time during which the snapshot showed a pause or `canProceed`, which covers the rests before each `proceed` and the pauses. The calibrations are the `startCalibration` actions given in `calibration` while no pause held. Each calibration is allowed 60 repeats of `ghostSoundConfig.calibration.durationMs` (the 1500 of the formula) plus `calibrationRepeatGapMs`. The room attempts are the visit type's rooms plus every `deviceChanged` stop report, whether or not it came in a room. Each attempt is allowed `roomTrialLimitCount` from `roomLimits(hearingMethodConfig)` trials of `gapBetweenTrialsMaxMs + scheduleLeadMs + responseWindowMs`.
+- **CP3, the snapshot readings.** A stretch begins at each `roomStarted` and `trialScored` event and ends at the next event. The snapshot is read at each presentation and at three instants drawn from 0 to one longest gap, lead and window after the stretch began. A reading is compared with the stretch's first snapshot unless an action other than `answer`, or a stop report, came in the stretch. Answers do not void the comparison, so answers that decide nothing are checked here as well.
+- **CP4, the answers that count.** An answer is matched against a trial's window only if it was given while that trial waited for its decision, from its presentation to its decision, in `room` with no pause. An answer given after the window had closed, with a time stamp inside the window, comes too late to decide the trial, and CP4 expects it among the ignored answers. This reads "the trial waiting to be Scored" of R7.6 literally. The design's own sentence for CP4 does not say it.
+- **CP6, what the spy sees.** The harness's spy records the flow's calls to the output shell, but not the calibration repeats, which the calibration controller plays. "`beginRoom` after the last sound of the previous stage" is therefore checked against trial plays and headphone check plays: among those calls and `beginRoom`, the last one before each `roomStarted` and before the first `missedSoundReplay` snapshot is a `beginRoom`. That is enough because every calibration is followed by a headphone check. A ghost sound counts as allowed after a kept calibration and a later `answerHeadphoneCheck` that was awaited and gave `correct`.
+- **CP7, order and not time.** "While a pause holds, nothing is scheduled" is checked by order in the timeline: a `schedule` call falls in a pause if it comes after the snapshot that showed the pause and before the snapshot that ended it. For a visit that reaches the result, CP7 also checks by time that no `schedule` call lies strictly inside a logged pause. The trial after a pause in a room must have the same room, attempt and trial number as the one the search was waiting on. When that trial had been presented and not decided, its kind, ear and level must match too.
+- **CP8, the endings and the new visit seed.** Every script in CP8 has an ending, the stop control or a left page, drawn from 0 to 15 minutes (`scriptSpanMs`) after the visit was chosen. An ending before the result must lead to `exit`. A stop that falls in `missedSoundReplay` must lead to `result`, and an ending drawn for a time after the visit has reached the result is never given, because the simulated visitor stops there. At the result, CP8 also checks that `stop` stays on `result`, and that `stop` in `swappedRepeat` returns to it when a room offers the repeat. After an exit, CP8 goes back to the front door and plays a short quick visit to the result. That visit's `visitSeed` must be the second draw `floor(u × 2³²)` from a source seeded with the flow's seed, and must differ from the first draw (D19).
+- **CP10, more than the design names.** Besides the logs, the snapshot sequences and the event sequences, CP10 compares the two runs' presented trials, actions and `schedule` calls, and the simulated visitor's record of each run.
+
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/visit-flow-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the visitor script written out, first with `it.fails`, then turned into `it` by the commit that changes the code, as the earlier specs do. A case that could only be removed by changing a steering value or a value awaiting the owner (Q1) stays an expected break with a decision giving the numbers.
@@ -1334,7 +1366,7 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D29. The front door's third choice is not the flow's.** The 60 second replay needs no headphones and no output shell, and has its own spec. The entry snapshot lists only the two visits; the interface handles the third door.
 
-**D30. What the tasks may touch.** The project owner is building the interface in the same working tree: `src/ui/`, several files in `src/copy/` and `src/config/`, `tests/properties/screen-leak/`, `house-sketch.html`, and edits to `package.json`, `package-lock.json` and the READMEs of `src/config`, `src/copy` and `src/ui`, none of them committed. The tasks never change or stage those files. They add no `package.json` script; the measurement is run with `npx tsx`. Commit messages and READMEs avoid the banned words of `wording.md`; code names such as `trialScored` are not matched by the check, but plain words such as "scored" are, so the prose says "answered" or "decided" instead.
+**D30. What the tasks may touch.** The project owner is building the interface in the same working tree: `src/ui/`, several files in `src/copy/` and `src/config/`, `tests/properties/screen-leak/`, a temporary page `house-sketch.html` (since removed), and edits to `package.json`, `package-lock.json` and the READMEs of `src/config`, `src/copy` and `src/ui`, none of them committed. The tasks never change or stage those files. They add no `package.json` script; the measurement is run with `npx tsx`. Commit messages and READMEs avoid the banned words of `wording.md`; code names such as `trialScored` are not matched by the check, but plain words such as "scored" are, so the prose says "answered" or "decided" instead.
 
 **D31. The contract imports from the output stage and the engine, and the interface imports only the contract.** `src/ui` may import `src/session`, and `src/session` may import the engine and the output stage. Re-exporting their types through the contract gives the interface every type it needs without importing either module, which the structure steering forbids. `BrowserWindow` is `Window & typeof globalThis`, not a Web Audio type.
 
