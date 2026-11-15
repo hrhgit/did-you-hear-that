@@ -88,7 +88,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 22.1, 22.2, 22.3_
   - _Decisions: D26, D27_
 
-- [ ] 10. Write the brief's properties
+- [x] 10. Write the brief's properties
   - Write the files for CP1, CP2, CP3 and CP4 with the run counts of "Correctness properties", each with a timeout of 120 seconds, using the harness, the arbitraries and the simulated visitor.
   - Write `tests/properties/visit-flow-regressions.test.ts` with a comment on the naming rule and one `it.todo`, as the earlier specs did.
   - Run `npm test` three times and note the time of each new property file in the commit message body.
@@ -96,7 +96,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 8.3, 9.4, 9.5, 10.1, 10.2, 11.2, 11.3, 22.4, 22.5, 22.7_
   - _Decisions: D26, D27_
 
-- [ ] 11. Write the other properties
+- [x] 11. Write the other properties
   - Write the files for CP5, CP6, CP7, CP8 and CP10, and add the visit part of CP9 to its file. CP6 uses the harness's spy around the output shell.
   - Run `npm test` three times. If this spec's property files take more than 60 seconds together, halve their counts and record the times as a new decision in `design.md`.
   - Check: `npm test`, `npm run lint`.
