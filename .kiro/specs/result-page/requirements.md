@@ -6,7 +6,7 @@ This spec builds everything the result page needs that is not drawing. It adds s
 
 The page itself is built by hand by the project owner, outside this spec's tasks: everything under `src/ui/`, `index.html`, `src/main.ts`, the CSS, the drawing of the lit cross-section, the layout at phone and desktop sizes, input handling, turning the picture into an image file for the "save picture" control, and the browser tests in `tests/e2e/`. The owner builds the page against the types of one file, `src/session/result-page-types.ts`, which the first task writes with no behaviour. `design.md` gives that file in full in its section "Interface contract", with the names, signatures and full wording of every copy function and constant. The line of the brief's "Done when" about rendering every combination without overlap is the owner's to meet, and no task here claims it.
 
-The input is `docs/briefs/06-result-page.md`; the steering files in `.kiro/steering/`; `docs/architecture.md` and `docs/roadmap.md`; the visit-flow spec under `.kiro/specs/visit-flow/`, above all its contract file `src/session/visit-flow-types.ts` and its decisions D1, D13, D15 and D17 and its open questions Q1 to Q4; and the code in `src/config`, `src/session`, `src/storage` (still empty), `src/copy`, and, read only, `src/ui/house/` and `src/ui/visit/`. Open points are settled in the Decisions section of `design.md` (D1, D2 and so on). Every new number is proposed, not approved, and is listed as a question for the project owner (Q1, Q2 and so on) in the same document. The visit-level false alarm limit of 0.2 (visit-flow Q1) is still proposed, not approved, and visit-flow Q1 to Q4 are still open. This spec describes none of them as decided.
+The input is `docs/briefs/06-result-page.md`; the steering files in `.kiro/steering/`; `docs/architecture.md` and `docs/roadmap.md`; the visit-flow spec under `.kiro/specs/visit-flow/`, above all its contract file `src/session/visit-flow-types.ts` and its decisions D1, D13, D15 and D17 and its open questions Q1 to Q4; and the code in `src/config`, `src/session`, `src/storage` (still empty), `src/copy`, and, read only, `src/ui/house/` and `src/ui/visit/`. Open points are settled in the Decisions section of `design.md` (D1, D2 and so on). Every new number was listed as a question for the project owner (Q1, Q2 and so on) in the same document. Those questions, Q1 to Q7, were decided on 2026-11-15 on the owner's behalf, at the owner's request, and every proposed value was kept; `design.md` gives each decision with its reasons. The visit-level false alarm limit of 0.2 (visit-flow Q1) is still proposed, not approved, and visit-flow Q1 to Q4 are still open. This spec describes none of those as decided.
 
 Comparison with past visits is the second thing the roadmap cuts if time runs short. Its requirement (R20) is met by tasks of its own that come after saving and deleting, so that they can be left out without undoing anything.
 
@@ -63,14 +63,14 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 5. THE spec SHALL add nothing to `src/session/visit-flow-types.ts`, because the Result_Snapshot already gives the Visit_Log and the Visit_Summary and `chooseSwappedRepeat(roomIndex)` already starts the swapped repeat (D2). IF a later task finds that the visit flow's contract must grow, THEN the addition SHALL be stated in `design.md` first and SHALL only add, as visit-flow D1 requires.
 6. THE Contract_File's types `WallClock` and `StorageArea` SHALL be checked by type-level tests to fit `createSystemWallClock` in `src/config` and the Storage_Area of `src/storage`, and the copy's own names for Wing_States and reasons SHALL be checked to equal the session's.
 
-### Requirement 2: New numbers are in config and are proposals
+### Requirement 2: New numbers are in config and name their decision
 
-**User story:** As the project owner, I want every number this spec adds in one config file, marked as a proposal, so that I can choose each one.
+**User story:** As the project owner, I want every number this spec adds in one config file, marked with the question that decided it, so that I can see where each one comes from.
 
 #### Acceptance criteria
 
 1. THE file `src/config/result-page-config.ts` SHALL hold `resultPageConfig` with `foundLightDepthAtCapFraction`, `foundLightDepthAtFloorFraction`, `betterThanFloorLightDepthFraction`, `worseThanCapLightDepthFraction`, `savedVisitsMaxCount` and `headphoneNameMaxCharacterCount`, deeply frozen, every field name ending in its unit, with the values of "Config" in `design.md`.
-2. THE comment of every field that is not fixed by the brief SHALL say `PROPOSED, NOT APPROVED` and name its question in `design.md`, and `design.md` SHALL describe each as proposed, not approved, wherever it mentions it.
+2. THE comment of every field that is not fixed by the brief SHALL say that it was decided on 2026-11-15 on the owner's behalf, at the owner's request, and name its question in `design.md`, and `design.md` SHALL describe each as decided so wherever it mentions it.
 3. THE config test SHALL check the values, the unit endings, deep freezing, that `0 = worseThanCapLightDepthFraction < foundLightDepthAtCapFraction < foundLightDepthAtFloorFraction < betterThanFloorLightDepthFraction = 1`, and that both counts are positive whole numbers.
 4. THE spec SHALL change no value of `hearingMethodConfig`, `audioOutputConfig`, `audioSafetyConfig` or `visitFlowConfig`, and no steering file.
 5. THE code of this spec in `src/session`, `src/storage` and `src/copy` SHALL contain no number that sets a Light_Depth, a limit or a count other than values read from `src/config`, apart from 0 and 1.
@@ -209,7 +209,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 3. THE Light_Depth of a Wing SHALL depend only on its own Visit_Ear_Result, its Floor's `searchCapDb` and `floorDb`.
 4. WHEN two `found` Wings are on the same Floor_Scale, THE Wing with the quieter threshold SHALL have a Light_Depth no shallower than the other's.
 5. THE `floorDb` of a Live_Result SHALL be `hearingMethodConfig.floorDb`, and of a Saved_Visit the `floorDb` saved with it.
-6. THE numbers of this mapping SHALL be proposed, not approved (Q1), and the conflict of R14.5 SHALL be put to the owner (Q2).
+6. THE numbers of this mapping SHALL be those decided in Q1 on 2026-11-15 on the owner's behalf, at the owner's request, and the conflict of R14.5 SHALL be put to the owner (Q2), which was decided on the same day in the same way.
 
 ### Requirement 14: The picture never compares floors
 
@@ -221,7 +221,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 2. THE Floor of a Result_Picture SHALL be the same whatever the other Floors hold, as long as the visit-level marking is the same.
 3. THE Result_Picture SHALL order Floors only by their place in the house, never by a result.
 4. THE strings of a Floor SHALL name no other Floor's room or pitch, and the strings outside the Floors SHALL name no room and no pitch.
-5. WHERE the Page draws the picture, THE design SHALL tell the owner how the drawing can avoid suggesting that Floors can be compared, and SHALL put the remaining conflict between the brief's picture and `product.md` and `wording.md` to the owner as a question without settling it (D16, Q2).
+5. WHERE the Page draws the picture, THE design SHALL tell the owner how the drawing can avoid suggesting that Floors can be compared, and SHALL put the remaining conflict between the brief's picture and `product.md` and `wording.md` to the owner as a question without settling it (D16, Q2). Q2 was decided on 2026-11-15 on the owner's behalf, at the owner's request: the brief's picture is kept, and the drawing SHALL carry no ticks, numbers or axis on a measuring line and nothing that joins one Floor to another.
 
 ### Requirement 15: Left and right, and the swapped repeat
 

@@ -28,7 +28,7 @@ The result page is the picture the visitor leaves with: the cross-section of the
 The design rests on five choices.
 
 - **The page draws a model, never a summary.** `resultPicture` turns a visit summary into frozen plain data: for every floor and wing its state, how far the light reaches, its line, the left and right difference or the dash, and the swapped repeat offer; above the picture the false alarm line and, when the visit is marked, a notice; and the limits statement, always. Every sentence in it comes from `src/copy`. The owner draws what the model says and adds no string.
-- **Depth of light is honest on one floor and means nothing across floors.** A wing's depth is the place of its threshold on its own floor's range, from the floor's own loudest playable level to the quietest playable level. Deeper means a quieter sound was caught on that floor. Each floor is computed from its own summary alone, and nothing in the model spans floors except the false alarm counts. The picture still shows five depths one above the other, and that shape is put to the owner (Q2).
+- **Depth of light is honest on one floor and means nothing across floors.** A wing's depth is the place of its threshold on its own floor's range, from the floor's own loudest playable level to the quietest playable level. Deeper means a quieter sound was caught on that floor. Each floor is computed from its own summary alone, and nothing in the model spans floors except the false alarm counts. The picture still shows five depths one above the other; that shape was put as Q2, decided on 2026-11-15 on the owner's behalf, at the owner's request: the picture is kept, and the drawing carries no ticks, numbers or axis on a measuring line and nothing that joins one floor to another.
 - **Storage keeps envelopes and opaque payloads.** `src/storage` may import only `config`, so it cannot know the visit log. It keeps one value under one versioned key, a list of entries, each with a checksum over all its fields. The session puts the visit log and the summary, as JSON text, in each entry's payload, and checks it on the way out. A corrupt entry is kept as it was and not shown. Nothing throws and nothing wrong is shown.
 - **A saved visit is the visit log, the summary as shown, and the settings it was drawn with.** The log is the flow's own record, unchanged, so the no-headphone replay can take it from storage. The summary is not computed again on reading, so a later change of the summary code, or the owner's choice of the visit limit (visit-flow Q1), never changes an old picture.
 - **Comparison is separable.** The earlier visit is found by a pure function in its own file, and the model's outline fields are null until the comparison tasks fill them. Leaving those tasks out removes nothing else.
@@ -561,57 +561,60 @@ Nothing is added to `src/session/visit-flow-types.ts` (D2). The result stage's `
  */
 export interface ResultPageConfig {
   /**
-   * PROPOSED, NOT APPROVED (result-page design.md, D15 and Q1). How far the light reaches into a
-   * wing, as a fraction of the wing, for a threshold found at its floor's own loudest playable
-   * level (the floor's searchCapDb).
+   * Decided on 2026-11-15 on the owner's behalf, at the owner's request (result-page design.md,
+   * D15 and Q1). How far the light reaches into a wing, as a fraction of the wing, for a
+   * threshold found at its floor's own loudest playable level (the floor's searchCapDb).
    */
   readonly foundLightDepthAtCapFraction: number;
   /**
-   * PROPOSED, NOT APPROVED (D15, Q1). The same, for a threshold found at the quietest playable
-   * level (hearingMethodConfig.floorDb).
+   * Decided on 2026-11-15 on the owner's behalf, at the owner's request (D15, Q1). The same, for
+   * a threshold found at the quietest playable level (hearingMethodConfig.floorDb).
    */
   readonly foundLightDepthAtFloorFraction: number;
   /** Brief 06: "Better than floor: light to the far wall". */
   readonly betterThanFloorLightDepthFraction: number;
   /** Brief 06: "Worse than cap: the wing stays dark". */
   readonly worseThanCapLightDepthFraction: number;
-  /** PROPOSED, NOT APPROVED (D12, Q4). The most saved visits the house keeps in one browser. */
+  /**
+   * Decided on 2026-11-15 on the owner's behalf, at the owner's request (D12, Q4). The most saved
+   * visits the house keeps in one browser.
+   */
   readonly savedVisitsMaxCount: number;
   /**
-   * PROPOSED, NOT APPROVED (D11, Q5). The longest name a visitor may give the headphones, in
-   * Unicode code points after the name is tidied.
+   * Decided on 2026-11-15 on the owner's behalf, at the owner's request (D11, Q5). The longest
+   * name a visitor may give the headphones, in Unicode code points after the name is tidied.
    */
   readonly headphoneNameMaxCharacterCount: number;
 }
 
 export const resultPageConfig: ResultPageConfig = deepFreeze({
-  // D15, Q1: proposed by this spec. Awaits the owner's choice.
+  // D15, Q1: decided on 2026-11-15 on the owner's behalf, at the owner's request.
   foundLightDepthAtCapFraction: 0.1,
-  // D15, Q1: proposed by this spec. Awaits the owner's choice.
+  // D15, Q1: decided on 2026-11-15 on the owner's behalf, at the owner's request.
   foundLightDepthAtFloorFraction: 0.9,
   // Brief 06
   betterThanFloorLightDepthFraction: 1,
   // Brief 06
   worseThanCapLightDepthFraction: 0,
-  // D12, Q4: proposed by this spec. Awaits the owner's choice.
+  // D12, Q4: decided on 2026-11-15 on the owner's behalf, at the owner's request.
   savedVisitsMaxCount: 20,
-  // D11, Q5: proposed by this spec. Awaits the owner's choice.
+  // D11, Q5: decided on 2026-11-15 on the owner's behalf, at the owner's request.
   headphoneNameMaxCharacterCount: 40,
 });
 ```
 
-The file has its own `deepFreeze`, as `visit-flow-config.ts` does. The test checks the six values, that every field name ends in `Fraction` or `Count`, that the object is deeply frozen, that `0 = worseThanCap < atCap < atFloor < betterThanFloor = 1`, and that both counts are positive whole numbers. A test named for Q1, Q4 and Q5 checks the four proposed values with a message saying that they are proposals and that changing them is the project owner's choice.
+The file has its own `deepFreeze`, as `visit-flow-config.ts` does. The test checks the six values, that every field name ends in `Fraction` or `Count`, that the object is deeply frozen, that `0 = worseThanCap < atCap < atFloor < betterThanFloor = 1`, and that both counts are positive whole numbers. A test named for Q1, Q4 and Q5 checks the four decided values with a message saying that they were decided on 2026-11-15 on the owner's behalf, at the owner's request, in Q1, Q4 and Q5.
 
 | Field | Value | Status |
 |---|---|---|
-| `foundLightDepthAtCapFraction` | 0.1 | PROPOSED, NOT APPROVED (Q1) |
-| `foundLightDepthAtFloorFraction` | 0.9 | PROPOSED, NOT APPROVED (Q1) |
+| `foundLightDepthAtCapFraction` | 0.1 | Decided on 2026-11-15 on the owner's behalf, at the owner's request (Q1) |
+| `foundLightDepthAtFloorFraction` | 0.9 | Decided on 2026-11-15 on the owner's behalf, at the owner's request (Q1) |
 | `betterThanFloorLightDepthFraction` | 1 | From brief 06 ("light to the far wall") |
 | `worseThanCapLightDepthFraction` | 0 | From brief 06 ("the wing stays dark") |
-| `savedVisitsMaxCount` | 20 | PROPOSED, NOT APPROVED (Q4) |
-| `headphoneNameMaxCharacterCount` | 40 | PROPOSED, NOT APPROVED (Q5) |
+| `savedVisitsMaxCount` | 20 | Decided on 2026-11-15 on the owner's behalf, at the owner's request (Q4) |
+| `headphoneNameMaxCharacterCount` | 40 | Decided on 2026-11-15 on the owner's behalf, at the owner's request (Q5) |
 
-No other product number is added. The Storage_Key and the format version are names of a data format, not tunable numbers, and live in `src/storage/saved-visits-key.ts`. The run counts and the time budget of the property files are test settings, stated in "Run counts and time" and listed as Q7.
+No other product number is added. The Storage_Key and the format version are names of a data format, not tunable numbers, and live in `src/storage/saved-visits-key.ts`. The run counts and the time budget of the property files are test settings, stated in "Run counts and time" and decided in Q7.
 
 ### `src/config/banned-terms.ts`
 
@@ -709,7 +712,7 @@ The lengths are JavaScript string lengths, in UTF-16 code units, which for this 
 
 The estimate under "Sizes" holds for these two visits: the quick visit's 104 trials and about 48 thousand characters lie inside its estimated 90 to 130 trials and 35 to 50 KB, and the full visit's 67 thousand characters lie inside its estimated 60 to 80 KB, although its 144 trials are a few below the estimated 150 to 210. The estimate's 350 characters per trial is about 15 percent low. At the measured 411 characters per trial a full visit of 210 trials, the slowest tenth, would take about 94 thousand characters, above the estimate's 80 KB.
 
-What this means for Q4, whose options stay open and whose proposed `savedVisitsMaxCount` of 20 is unchanged: 20 full visits take about 1.3 million characters at this visit's size and up to about 1.9 million for the slowest tenth. That is inside 5 MiB of the origin whether a browser counts a character as one byte or as two, but on a `github.io` origin the owner's other project pages share the same quota. 10 visits would take about 0.7 to 0.9 million characters. 50 visits would take about 3.4 to 4.7 million characters: beyond 5 MiB for a browser that counts two bytes a character, and close to it for one that counts one, so `full` would often come before `tooMany`. These figures come from one simulated listener and seeds; a visit with more pauses, device changes or ignored answers is larger.
+What this means for Q4 (decided on 2026-11-15 on the owner's behalf, at the owner's request, with `savedVisitsMaxCount` kept at 20; these sizes are among its reasons): 20 full visits take about 1.3 million characters at this visit's size and up to about 1.9 million for the slowest tenth. That is inside 5 MiB of the origin whether a browser counts a character as one byte or as two, but on a `github.io` origin the owner's other project pages share the same quota. 10 visits would take about 0.7 to 0.9 million characters. 50 visits would take about 3.4 to 4.7 million characters: beyond 5 MiB for a browser that counts two bytes a character, and close to it for one that counts one, so `full` would often come before `tooMany`. These figures come from one simulated listener and seeds; a visit with more pauses, device changes or ignored answers is larger.
 
 ### The Visit_Store
 
@@ -921,7 +924,7 @@ unreliable:       null                                (hatched)
 
 The fraction is a share of the wing's width. 1 is the wing's far wall, as the brief's "light to the far wall" says; where the light enters the wing, and so where 0 lies, is the owner's drawing to decide.
 
-With the proposed values (Q1), a floor whose loudest playable level is 15 dB above the calibration and the quietest playable level of 70 dB below it gives:
+With the values decided in Q1 on 2026-11-15, a floor whose loudest playable level is 15 dB above the calibration and the quietest playable level of 70 dB below it gives:
 
 | Threshold, relative to calibration | +15 dB (the floor's loudest) | 0 dB | −25 dB | −50 dB | −70 dB (the quietest) |
 |---|---|---|---|---|---|
@@ -945,7 +948,7 @@ What it means (D15):
 - Every string of a floor names only that floor's room and pitch. No string outside a floor names a room or a pitch. No string uses a word of comparison across floors (CP2).
 - The limits statement, whose first sentence says floors cannot be compared, is in every picture (CP1).
 
-What only the drawing can do is the owner's. This design suggests, and does not require: no line, curve or gradient that joins the ends of the light from floor to floor; no ticks or level numbers on the measuring line at the left of the house, which is as tall as each room and could be read as a level axis; the limits statement beside the picture at every size; and in the saved image the statement in full. The remaining conflict is Q2.
+What only the drawing can do is the owner's. The decision on Q2 (2026-11-15, on the owner's behalf, at the owner's request) makes two points conditions of the drawing: nothing that joins one floor to another, such as a line, curve or gradient across the ends of the light; and no ticks, numbers or axis on a measuring line, such as the one at the left of the house, which is as tall as each room and could be read as a level axis. The decision also rests on the limits statement beside the picture at every size and in full in the saved image, which `wording.md` and "What the owner builds" already require.
 
 ## The copy
 
@@ -1329,7 +1332,7 @@ The properties and unit tests use `createFakeStorageArea` from `src/storage/fake
 | CP8 | 200 |
 | CP9 | 300 |
 
-The property files of this spec must take at most 30 seconds together on the project machine (proposed, Q7). The pictures and the archive are pure or work on an in-memory map, so the estimate is a few seconds. Tasks 9, 10 and 13 run `npm test` three times and write the time of each file here. If the files take more than 30 seconds together, the task stops and reports the times to the owner; it changes no run count.
+The property files of this spec must take at most 30 seconds together on the project machine (Q7, decided on 2026-11-15 on the owner's behalf, at the owner's request). The pictures and the archive are pure or work on an in-memory map, so the estimate is a few seconds. Tasks 9, 10 and 13 run `npm test` three times and write the time of each file here. If the files take more than 30 seconds together, the task stops and reports the times to the owner; it changes no run count.
 
 The times of tasks 9, 10 and 13 follow.
 
@@ -1343,7 +1346,7 @@ Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks
 | CP4 | 188 | 194 | 225 |
 | Together | 10259 | 11732 | 11422 |
 
-`result-page-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 30 second budget (proposed, Q7). CP3's 1000 runs are two properties of 1000 runs each: the depth on any scale, and the depth of every wing of a picture.
+`result-page-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 30 second budget (Q7). CP3's 1000 runs are two properties of 1000 runs each: the depth on any scale, and the depth of every wing of a picture.
 
 Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 10 present, measured the same way, in ms:
 
@@ -1361,7 +1364,7 @@ Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of task
 | `result-page-simulated-visits.test.ts` | 279 | 244 | 294 |
 | Together, with the simulated visits | 14704 | 15190 | 17227 |
 
-Every run was under the 30 second budget (proposed, Q7), so no run count was questioned. The whole of `npm test` took 46.9, 48.3 and 55.2 seconds in these runs.
+Every run was under the 30 second budget (Q7), so no run count was questioned. The whole of `npm test` took 46.9, 48.3 and 55.2 seconds in these runs.
 
 Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 13 present, measured the same way, in ms. CP1 and CP2 now draw an earlier visit or none, and CP9's 300 runs are two properties of 300 runs each: the choice of the earlier visit from a drawn list, and the outlines and comparison line of a picture with a drawn earlier visit.
 
@@ -1373,11 +1376,11 @@ Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of task
 | Together, CP1 to CP9 | 15240 | 17177 | 16732 |
 | Together, with the simulated visits | 15521 | 17456 | 17043 |
 
-The other files took about what they took in task 10 (CP3 283 to 308, CP4 219 to 228, CP5 1198 to 1286, CP6 884 to 1099, CP7 1306 to 1563, CP8 184 to 231, the simulated visits 279 to 311). Every run was under the 30 second budget (proposed, Q7), so no run count was questioned. The whole of `npm test` took 48.8, 51.0 and 52.8 seconds in these runs, by the shell's clock.
+The other files took about what they took in task 10 (CP3 283 to 308, CP4 219 to 228, CP5 1198 to 1286, CP6 884 to 1099, CP7 1306 to 1563, CP8 184 to 231, the simulated visits 279 to 311). Every run was under the 30 second budget (Q7), so no run count was questioned. The whole of `npm test` took 48.8, 51.0 and 52.8 seconds in these runs, by the shell's clock.
 
 ### Counterexamples
 
-A counterexample becomes a named case in `tests/properties/result-page-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a proposed value (Q1, Q4, Q5) or a steering value stays an expected break, with a decision giving the case.
+A counterexample becomes a named case in `tests/properties/result-page-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a value decided in Q1, Q4 or Q5 or a steering value stays an expected break, with a decision giving the case.
 
 ### Requirement coverage
 
@@ -1444,7 +1447,7 @@ Outside this spec's tasks, by hand: everything under `src/ui/`, `index.html`, `s
 
 ## Questions for the project owner
 
-None of these is decided here. Every new number of this spec is a proposal awaiting the owner's choice, and the proposed values are in `src/config/result-page-config.ts` marked `PROPOSED, NOT APPROVED`. The visit-level false alarm limit of 0.2 is still proposed, not approved, and visit-flow Q1 to Q4 are still open; "Whatever the owner chooses in visit-flow Q1 to Q4" shows that the page works for each answer.
+These seven questions were decided on 2026-11-15 on the owner's behalf, at the owner's request. No value changed: every proposed value is kept. Each question and its options stay as they were put, and the decision with its reasons follows each one. The four numbers of Q1, Q4 and Q5 are in `src/config/result-page-config.ts`, marked as decided on 2026-11-15. The visit-level false alarm limit of 0.2 is still proposed, not approved, and visit-flow Q1 to Q4 are still open; "Whatever the owner chooses in visit-flow Q1 to Q4" shows that the page works for each answer.
 
 **Q1. How the depth of light follows from a level.** Proposed: on each floor, a found threshold at the floor's own loudest playable level (`searchCapDb`) lights 0.1 of the wing (`foundLightDepthAtCapFraction`), one at the quietest playable level (`floorDb`) lights 0.9 (`foundLightDepthAtFloorFraction`), and the light is linear in decibels between them; better than floor reaches the far wall (1) and worse than cap stays dark (0), as the brief says ("How far the light reaches", D15). Options and what each costs:
 
@@ -1455,6 +1458,8 @@ None of these is decided here. Every new number of this spec is a proposal await
 | Other ends, such as 0.05 and 0.95, or 0.2 and 0.8 | Wider ends give finer steps; narrower ends set "found at the loudest" further apart from dark and "found at the quietest" from the far wall | 0.05 to 0.95: a wing that caught only the loudest sound is barely lit. 0.2 to 0.8: each step is 3.5 percent of a wing |
 | Light by the left and right difference only (see Q2) | Draws only what may be compared | Departs from the brief's picture; outlines of an earlier visit would show its difference, not its levels |
 
+**Decision on Q1.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: the proposal, each floor's own range. A threshold found at the floor's own loudest playable level lights 0.1 of the wing (`foundLightDepthAtCapFraction`), one found at the quietest playable level lights 0.9 (`foundLightDepthAtFloorFraction`), and the light is linear in decibels between them. Reasons: deeper means quieter on that floor; a found wing never looks dark and never reaches the far wall, so the four states stay apart; one range for every floor would invite reading floors against each other.
+
 **Q2. The picture's shape can invite comparing floors.** This is a conflict between the brief and the steering that this spec does not settle. The brief's picture lights five floors, one above the other, each as deep as that ear caught a sound there. `product.md` says floors are never compared, and `wording.md` that headphones differ at every pitch, so floors cannot be compared. Five depths stacked by pitch form, at a glance, a chart of level against pitch, the kind of chart `wording.md` keeps out of the text by banning its name; a screenshot will be read that way whatever the text says. The model keeps floors apart as far as data can (D16): no field spans floors, each floor has its own scale, no text compares floors, and the limits statement is always there. But on most visits every room reaches the anchor cap, the floors' scales coincide, and the depths line up. Options:
 
 - (a) Keep the brief's picture, with the model as designed and the drawing suggestions of "How the picture keeps floors apart" (no joining line, nothing on the measuring line, the statement beside the picture). Cost: the shape remains; the limits statement carries the warning.
@@ -1464,19 +1469,31 @@ None of these is decided here. Every new number of this spec is a proposal await
 
 A related point for the owner's drawing: the measuring line at the left of the house in `src/ui/house/draw-house-section.ts` is as tall as each room. Ticks or numbers on it would read as a level axis.
 
+**Decision on Q2.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: option (a). The brief's picture is kept, with the model as designed. Reasons: each floor is on its own scale and no field or text spans floors; the first sentence of the limits statement says that floors cannot be compared, and the statement sits beside the picture and is inside the saved image; the marks of option (b) line up on most visits and say little; option (c) removes the levels that a comparison with one's own later visit needs. A condition goes with this decision: the drawing carries no ticks, numbers or axis on a measuring line, and nothing that joins one floor to another.
+
 **Q3. The pooled false alarm line and "no overall number".** The brief asks both for "the false alarm rate in words ('You answered 2 of 9 times when I made no sound')" above the picture and that floors are never summed and there is no overall number. Nine no-sound trials are more than one room has (about 7), so the brief's example pools the rooms, as the visit summary does. This design reads "no overall number" as no number about hearing made from several floors; the pooled false alarm count is about answers to silence and is what the visit-level rule judges (D17). Options: (a) the pooled line, as designed; (b) one line per floor beside it instead, from each room summary's own counts, which the model could add without removing anything; (c) both. Cost of (b) and (c): more text beside each floor on a phone, and per-floor counts of 0 to 13 say little on their own.
+
+**Decision on Q3.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: option (a), the pooled line as designed. Reason: the line is about answers to silence, not about hearing, and it is what the visit-level rule judges; counts per floor say little on their own.
 
 **Q4. How many saved visits, and what happens at the limit.** Proposed: `savedVisitsMaxCount` 20, and a save beyond it is refused with a line asking the visitor to delete one (D12). Estimated size: up to about 80 KB per full visit, so 20 take up to about 1.6 MB of the origin's 5 MiB, which a `github.io` origin shares with the owner's other project pages ("Sizes"; task 10 measures it). Options: 10 (about 0.8 MB at most; a weekly visitor fills it in ten weeks), 20, or 50 (about 4 MB at most, close to the quota, so `full` becomes likely first). Instead of refusing: delete the oldest automatically. Cost: a visit the visitor kept as the one to compare against may disappear without a word.
 
+**Decision on Q4.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: 20 saved visits (`savedVisitsMaxCount`), and a save beyond the limit is refused with the line that asks the visitor to delete one. Nothing is ever deleted automatically. Reasons: the sizes measured in task 10 ("Measured sizes") fit; a visit kept to compare against must not disappear without a word.
+
 **Q5. How long a headphone name may be.** Proposed: `headphoneNameMaxCharacterCount` 40 code points after tidying (D11). Options: 24 (fits one line on a 360 px phone at the page's text size, but cuts model names such as "Sony WH-1000XM5 left cup repaired"), 40, or 80 (any name, but long names wrap in the list and in the image). The page can set the name field's input limit from the same value.
+
+**Decision on Q5.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: 40 code points (`headphoneNameMaxCharacterCount`).
 
 **Q6. Saving by the visitor's press or by itself.** Proposed: the visit is saved only when the visitor presses "Save this visit in this browser" (D10). Options: (a) by press, as designed: nothing is kept unless asked, which matches the front door's "Nothing you do here leaves this browser" and a visitor on a shared computer; the cost is that a visitor who leaves without pressing has nothing to compare against next time, and the page says so (`notSavedLine`). (b) Saved on reaching the result, with the name added afterwards (`save` again changes the name). Cost: a visit is kept without the visitor asking, which the page must say at once, and a shared computer keeps every visit until someone deletes it. (c) Ask once, on reaching the result. Cost: one more step on the most important screen.
 
+**Decision on Q6.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: option (a). A visit is saved only when the visitor presses the button.
+
 **Q7. The run counts and the time budget of this spec's properties.** Proposed: the run counts of "Run counts and time" and a budget of 30 seconds for this spec's property files together on the project machine. These are test settings, not product numbers, so they are not in `src/config`. If the files take longer, the task stops and reports the times; it does not lower a count.
+
+**Decision on Q7.** Decided on 2026-11-15 on the owner's behalf, at the owner's request: the run counts of "Run counts and time" as they stand, and the budget of 30 seconds for this spec's property files together. The measured times keep it: the largest total of the runs of tasks 9, 10 and 13 is 17456 ms.
 
 ## Decisions
 
-Each point below was open in the brief, the steering, the visit-flow spec or the code, and is settled here without being able to ask, except where a question above leaves it to the owner.
+Each point below was open in the brief, the steering, the visit-flow spec or the code, and is settled here without being able to ask, except where a question above was left to the owner. Those questions were decided on 2026-11-15 on the owner's behalf, at the owner's request, and every decision below agrees with them.
 
 **D1. The contract is one file of types, and it only grows.** The page is built by hand while the rest is written, so it needs something fixed to build against: one file with every type the page may call or read, written first and with no behaviour, as visit-flow D1 does for the flow. It imports only from `src/config` and the visit flow's contract, which both exist before task 1. So that it needs nothing that does not exist yet, it defines its own `WallClock` and `StorageArea`; `createSystemWallClock` and `src/storage`'s `StorageArea` are written later to fit them, and type tests check that they do, as `ear-types-match.test.ts` checks the two `Ear` types. Later changes add fields, types and methods; they never remove or rename.
 
@@ -1496,21 +1513,21 @@ Each point below was open in the brief, the steering, the visit-flow spec or the
 
 **D9. A saved visit is the log unchanged, the summary as shown, and the settings it was drawn with.** The log is the one record (architecture, visit flow). The summary is kept and not computed again, so that a later change of the summary code or of the visit limit (visit-flow Q1) cannot change an old picture or make it unreadable. `floorDb` and the swapped-repeat difference are kept because the depth and the payload checks depend on them. The payload checks are the summary's own invariants and a light check of the log; checking a log against the engine is the no-headphone replay spec's.
 
-**D10. A visit is saved when the visitor presses save.** The front door promises that nothing leaves the browser, and keeping a record of someone's listening without asking sits badly with that on a shared computer. The brief says the visit "is saved", not when. The page says that an unsaved visit is not kept. Q6 gives the other options.
+**D10. A visit is saved when the visitor presses save.** The front door promises that nothing leaves the browser, and keeping a record of someone's listening without asking sits badly with that on a shared computer. The brief says the visit "is saved", not when. The page says that an unsaved visit is not kept. Q6 gives the other options; it was decided on 2026-11-15 for this one.
 
-**D11. The headphone name is the visitor's own text and never part of a sentence.** It is tidied (NFC, one space for any run of white space or control characters, trimmed) and kept in the visitor's letter case; two names match ignoring letter case. An empty name is no name and never matches, because unnamed headphones may be different headphones. The name never goes into a string the copy builds, so a name made of banned words cannot put one into the house's voice, and CP1 can check every sentence the house says. The page shows it in an element of its own after `headphonesLabel`. Its length limit is proposed (Q5).
+**D11. The headphone name is the visitor's own text and never part of a sentence.** It is tidied (NFC, one space for any run of white space or control characters, trimmed) and kept in the visitor's letter case; two names match ignoring letter case. An empty name is no name and never matches, because unnamed headphones may be different headphones. The name never goes into a string the copy builds, so a name made of banned words cannot put one into the house's voice, and CP1 can check every sentence the house says. The page shows it in an element of its own after `headphonesLabel`. Its length limit, 40 code points, was decided on 2026-11-15 (Q5).
 
-**D12. At the limit of saved visits, a save is refused rather than the oldest deleted.** Deleting without asking could remove the visit the visitor keeps for comparison. The limit is proposed (Q4).
+**D12. At the limit of saved visits, a save is refused rather than the oldest deleted.** Deleting without asking could remove the visit the visitor keeps for comparison. The limit, 20, and the refusal were decided on 2026-11-15 (Q4).
 
 **D13. Robot mode neither writes nor reads local storage.** Visit-flow D15 says robot mode saves nothing. Reading would also put the owner's own saved visits, and their outlines, on the robot's screenshots. So in robot mode the archive never calls the storage function, and every save and delete gives a plain line. The robot spec decides how the page knows it is in robot mode.
 
 **D14. Ids come from the injected seed, dates from the injected wall clock, and order from the order of saving.** `src/session` may not read a clock or `Math.random`. The wall clock lives in `src/config`, where `system-timer.ts` already reads the clock. The order of saving is the array's order, not the wall time, so a clock set back cannot make a new visit look earlier, and `savedAtEpochMs` is kept but shown nowhere.
 
-**D15. The depth of light is a place on the floor's own range.** The brief: deeper light means a quieter sound was caught. Of the ways to turn a threshold into a depth, this one uses the floor's own loudest playable level as the shallow end, so that "dark" means the floor's own loudest was not caught and the light is honest on that floor, and holds 0.1 at each end so that the four states can always be told apart. The numbers are proposed (Q1).
+**D15. The depth of light is a place on the floor's own range.** The brief: deeper light means a quieter sound was caught. Of the ways to turn a threshold into a depth, this one uses the floor's own loudest playable level as the shallow end, so that "dark" means the floor's own loudest was not caught and the light is honest on that floor, and holds 0.1 at each end so that the four states can always be told apart. The numbers were decided on 2026-11-15 (Q1).
 
-**D16. The model keeps floors apart; the drawing is the owner's; the remaining conflict is a question.** The model has no field across floors except the false alarm counts, computes each floor alone (CP4), orders floors by the house, and its text never compares floors (CP2). What a drawing of five stacked depths suggests cannot be settled in data, so it is Q2, with options.
+**D16. The model keeps floors apart; the drawing is the owner's; the remaining conflict was a question.** The model has no field across floors except the false alarm counts, computes each floor alone (CP4), orders floors by the house, and its text never compares floors (CP2). What a drawing of five stacked depths suggests cannot be settled in data, so it was put as Q2, with options. Q2 was decided on 2026-11-15: option (a), with no ticks, numbers or axis on a measuring line and nothing that joins one floor to another.
 
-**D17. The pooled false alarm line is about answers to silence.** It counts the no-sound trials and false alarms of every finished room, as the visit summary does, because that is what the visit-level rule judges (visit-flow D17) and what the brief's example counts. It says nothing about any floor's level. Q3 asks whether the owner reads "no overall number" the same way.
+**D17. The pooled false alarm line is about answers to silence.** It counts the no-sound trials and false alarms of every finished room, as the visit summary does, because that is what the visit-level rule judges (visit-flow D17) and what the brief's example counts. It says nothing about any floor's level. Q3 asked whether "no overall number" is read the same way; it was decided on 2026-11-15 that it is (option (a)).
 
 **D18. An unreliable wing has one line and one reason.** The brief asks for a line saying the room should be visited again. The reason line gives the first of the ear's reasons, which is the search's own when it has one, because that is what went wrong in this room. When the whole visit is marked, the notice above the picture says why, and every wing's reason line says the same in short.
 
@@ -1532,7 +1549,7 @@ Each point below was open in the brief, the steering, the visit-flow spec or the
 
 **D27. The page says that a browser can clear saved visits.** Browsers may delete local storage on their own; Safari does so for script-written data of a site the visitor has not touched in seven days of browser use when tracking prevention is on (MDN, see Sources). A visitor who returns after a month may find nothing to compare against. `mayBeClearedLine` says so plainly whenever a visit is listed. Asking the browser for persistent storage would need the Storage API beyond local storage and, in Firefox, a prompt; it is not done.
 
-**D28. Every property is universal, with stated run counts and a time budget.** Nothing here is statistical, so no seed is fixed. If the files exceed the budget, the task stops and reports the times; no count is lowered (Q7).
+**D28. Every property is universal, with stated run counts and a time budget.** Nothing here is statistical, so no seed is fixed. If the files exceed the budget, the task stops and reports the times; no count is lowered. The counts and the budget were decided on 2026-11-15 (Q7).
 
 **D29. What the tasks touch, and how they are committed.** The tasks create and change only the files listed in "Files", never `src/ui/`, `tests/e2e/`, `tests/properties/screen-leak/`, `index.html`, `listen.html`, `src/main.ts`, the root `README.md` or `.kiro/steering/`. They do not commit. A separate run makes one commit per task with a one-line message, so anything a task must record (measured sizes, property times, a counterexample) is written in this design or a README, never in a commit message body.
 

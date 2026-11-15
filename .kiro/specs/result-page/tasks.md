@@ -6,7 +6,7 @@ Tasks do not commit. After each task a separate run makes one commit for it with
 
 The project owner builds the page by hand in the same working tree. No task creates or changes anything under `src/ui/`, `tests/e2e/` or `tests/properties/screen-leak/`, nor `index.html`, `listen.html`, `src/main.ts`, the root `README.md` or anything under `.kiro/steering/` (R23.1). No task changes `src/session/visit-flow-types.ts`, `src/engine/`, `src/audio/`, an existing value in `src/config`, `package.json` or `package-lock.json` (R23.2).
 
-Never change a steering value. The numbers of `resultPageConfig` marked `PROPOSED, NOT APPROVED` (Q1, Q4, Q5) and the visit limit of `visitFlowConfig` (visit-flow Q1) are proposals: do not present them as approved anywhere, and do not change them to make a check hold. Visit-flow Q1 to Q4 stay open.
+Never change a steering value. The numbers of `resultPageConfig` that Q1, Q4 and Q5 name were decided on 2026-11-15 on the owner's behalf, at the owner's request, with every proposed value kept: do not change them to make a check hold. The visit limit of `visitFlowConfig` (visit-flow Q1) is a proposal: do not present it as approved anywhere, and do not change it to make a check hold. Visit-flow Q1 to Q4 stay open.
 
 Run counts of the properties are those of "Run counts and time" in `design.md`. If this spec's property files take more than 30 seconds together, stop, write the times in `design.md` under "Run counts and time", and report them to the owner. Do not change a run count.
 
@@ -22,7 +22,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Decisions: D1, D2_
 
 - [x] 2. Add the config, the wall clock and the allowed terms
-  - Create `src/config/result-page-config.ts` and `src/config/result-page-config.test.ts` as in "Config" in `design.md`, with the file's own `deepFreeze`. The comments of the four proposed fields say `PROPOSED, NOT APPROVED` and name their decision and question. The test checks the values, the unit endings, deep freezing, the order `0 = worseThanCap < atCap < atFloor < betterThanFloor = 1`, that both counts are positive whole numbers, and has a test named for Q1, Q4 and Q5 whose message says that the values are proposals awaiting the owner's choice.
+  - Create `src/config/result-page-config.ts` and `src/config/result-page-config.test.ts` as in "Config" in `design.md`, with the file's own `deepFreeze`. The comments of the four fields that Q1, Q4 and Q5 name say that they were decided on 2026-11-15 on the owner's behalf, at the owner's request, and name their decision and question. The test checks the values, the unit endings, deep freezing, the order `0 = worseThanCap < atCap < atFloor < betterThanFloor = 1`, that both counts are positive whole numbers, and has a test named for Q1, Q4 and Q5 whose message says that the values were decided on 2026-11-15 on the owner's behalf, at the owner's request.
   - Create `src/config/system-wall-clock.ts` and `src/config/system-wall-clock.test.ts` as in "`src/config/system-wall-clock.ts`": fake system time before and after local midnight, and the zero padding of single-digit months and days.
   - Change `src/config/banned-terms.ts` by adding the export `limitsStatementAllowedTerms` as in "`src/config/banned-terms.ts`", and `src/config/banned-terms.test.ts` by adding: frozen; every allowed term is in `bannedTerms`. Change nothing else in the file.
   - Create `src/session/result-page-types-match.test.ts` with one type-level check: the return type of `createSystemWallClock` is assignable to `WallClock`.
@@ -67,7 +67,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Decisions: D4, D5, D6, D7, D8_
 
 - [x] 7. Add the picture model
-  - Create `src/session/light-depth-fraction.ts` (`lightDepthFraction`) and its test as in "How far the light reaches": the table's values with the proposed config; each state; a span of 0 or less; thresholds outside the scale held at its ends; settings given as a parameter with `resultPageConfig` as the default.
+  - Create `src/session/light-depth-fraction.ts` (`lightDepthFraction`) and its test as in "How far the light reaches": the table's values with the config decided in Q1; each state; a span of 0 or less; thresholds outside the scale held at its ends; settings given as a parameter with `resultPageConfig` as the default.
   - Create `src/session/result-picture.ts` (`resultPicture`) and its test as in "`resultPicture(input)`", without the outline step: `earlier` and `comparison` are always null.
   - `result-picture.test.ts`, on summaries made with `summarizeVisit` from hand-built logs: a quick visit has three floors in visit order and the cellar and nursery closed; each state's line, depth and reason line; the difference label and line for null, 0, 15 and −15; the swapped repeat offered on a live picture and never on a saved one; the false alarm line; the notice and its limit when the visit is marked, and none otherwise; the limits statement is the constant itself; `floorDb` from the config for a live picture and from the saved visit otherwise; the date, visit type labels, caption and file name; the picture is deeply frozen and equal for equal inputs.
   - Check: `npm test`, `npm run lint` (no clock read and no `Math.random` in `src/session`), `npm run typecheck`.
@@ -103,9 +103,9 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
 
 - [x] 11. Update the READMEs
   - `src/storage/README.md`: the store, the key and its version, the envelope and opaque payload, the checksum, unreadable entries and values, the failure names, the fake storage area, and that nothing leaves the browser.
-  - `src/session/README.md`: a section on the result page: the contract and its rule of only adding, the archive and robot mode, the payload and how a saved visit relates to the visit log, the picture model and how far the light reaches, with its numbers described as proposed, not approved.
+  - `src/session/README.md`: a section on the result page: the contract and its rule of only adding, the archive and robot mode, the payload and how a saved visit relates to the visit log, the picture model and how far the light reaches, with its numbers described as decided on 2026-11-15 on the owner's behalf, at the owner's request (Q1).
   - `src/copy/README.md`: a section on the result page's copy, the limits statement and its exemption, and that the headphone name never enters a sentence.
-  - `src/config/README.md`: `result-page-config.ts` with its proposed values, `system-wall-clock.ts`, and `limitsStatementAllowedTerms`.
+  - `src/config/README.md`: `result-page-config.ts` with its values and the questions that decided them, `system-wall-clock.ts`, and `limitsStatementAllowedTerms`.
   - `tools/README.md`: the copy check's exemption and hook mode, and the copy hook.
   - `tests/properties/README.md`: a section on the result page's properties, arbitraries, text helpers, simulated visits and regression file.
   - Write nothing about comparison with an earlier visit here; task 12 adds it.
@@ -134,7 +134,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - Run `npm run typecheck`, `npm test` (three times), `npm run lint`, `npm run check:copy` and `npm run build`.
   - Search `src/session/`, `src/storage/` and `src/copy/` for numbers that set a depth, a limit or a count outside `src/config` (R2.5). Search `src/ui/` and confirm that no file this spec could have touched imports `src/storage`.
   - Run `git status` and `git log` for this spec's commits: no file under `src/ui/`, `tests/e2e/`, `tests/properties/screen-leak/` or `.kiro/steering/`, nor `index.html`, `listen.html`, `src/main.ts`, the root `README.md` or `src/session/visit-flow-types.ts` was changed by this spec.
-  - Review the work against `requirements.md` and the coverage table of `design.md`. If tasks 12 and 13 were left out, check that R20.5 holds: every `earlier` and `comparison` is null and nothing refers to a missing file. Confirm that Q1, Q4 and Q5 and the visit limit are still described as proposed, not approved, and that visit-flow Q1 to Q4 are still described as open.
+  - Review the work against `requirements.md` and the coverage table of `design.md`. If tasks 12 and 13 were left out, check that R20.5 holds: every `earlier` and `comparison` is null and nothing refers to a missing file. Confirm that the values of Q1, Q4 and Q5 are described as decided on 2026-11-15 on the owner's behalf, at the owner's request, that the visit limit is still described as proposed, not approved, and that visit-flow Q1 to Q4 are still described as open.
   - Check: every command above.
   - _Requirements: 2.2, 2.5, 22.1 to 22.3, 23.1 to 23.4_
   - _Decisions: D29_
