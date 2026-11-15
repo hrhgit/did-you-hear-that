@@ -55,7 +55,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 1.6, 12.4, 15.1, 15.2, 16.1 to 16.3, 18.1 to 18.6_
   - _Decisions: D11, D17, D18, D19, D21, D22, D30_
 
-- [ ] 6. Add the visit store
+- [x] 6. Add the visit store
   - Create in `src/storage/`: `storage-area.ts`, `saved-visits-key.ts`, `visit-store-types.ts`, `entry-checksum.ts`, `storage-error-kind.ts`, `fake-storage-area.ts` and `create-visit-store.ts`, as in "The stored format" in `design.md`, each with its test where "Files" lists one. Nothing in `src/storage` imports outside `src/config`, reads a clock or draws a random number.
   - `entry-checksum.test.ts`: known values for fixed fields; a change of any one field changes the checksum; eight lowercase hexadecimal digits.
   - `storage-error-kind.test.ts`: `QuotaExceededError` and `NS_ERROR_DOM_QUOTA_REACHED` by name, codes 22 and 1014, `SecurityError`, a plain `Error`, and values that are not errors.
@@ -66,7 +66,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 1.6, 3.4, 3.5, 4.1 to 4.5, 5.1 to 5.3, 6.1 to 6.6, 7.1 to 7.5_
   - _Decisions: D4, D5, D6, D7, D8_
 
-- [ ] 7. Add the picture model
+- [x] 7. Add the picture model
   - Create `src/session/light-depth-fraction.ts` (`lightDepthFraction`) and its test as in "How far the light reaches": the table's values with the proposed config; each state; a span of 0 or less; thresholds outside the scale held at its ends; settings given as a parameter with `resultPageConfig` as the default.
   - Create `src/session/result-picture.ts` (`resultPicture`) and its test as in "`resultPicture(input)`", without the outline step: `earlier` and `comparison` are always null.
   - `result-picture.test.ts`, on summaries made with `summarizeVisit` from hand-built logs: a quick visit has three floors in visit order and the cellar and nursery closed; each state's line, depth and reason line; the difference label and line for null, 0, 15 and −15; the swapped repeat offered on a live picture and never on a saved one; the false alarm line; the notice and its limit when the visit is marked, and none otherwise; the limits statement is the constant itself; `floorDb` from the config for a live picture and from the saved visit otherwise; the date, visit type labels, caption and file name; the picture is deeply frozen and equal for equal inputs.
@@ -74,7 +74,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 12.1 to 12.5, 13.1 to 13.5, 14.1 to 14.3, 15.1 to 15.4, 16.1 to 16.4, 17.2_
   - _Decisions: D15, D16, D18, D19, D20, D21_
 
-- [ ] 8. Add the archive
+- [x] 8. Add the archive
   - Create `src/session/canonical-headphone-name.ts` (`canonicalHeadphoneName`, `sameHeadphoneNameKey`) and its test: NFC, runs of white space and control characters, trimming, empty to null, letter case kept in the tidy form and ignored in the key.
   - Create `src/session/saved-visit-payload.ts` (`savedVisitPayloadJson`, `parseSavedVisitPayload`) and its test as in "The saved visit and the visit log": a payload written and read back deep-equals the JSON round trip of its visit; one case that returns null for each rule of "Checking a payload"; a payload whose summary offers the swapped repeat less often than its difference allows still reads; it never throws for any string. Add to `src/session/result-page-types-match.test.ts` a check that the parser's list of known reasons covers `VisitUnreliableReason` exactly.
   - Create `src/session/create-visit-archive.ts` (`createVisitArchive`) and its test as in "The archive", on `createFakeStorageArea` and a wall clock written in the test: a bad seed throws a `RangeError`; nothing is called at creation; `list` in each state with its lines; `save` writes one entry with the wall clock's time and date and the shipped `floorDb` and difference; a second save of the same log changes only the name, or nothing; `nameTooLong` at one past the limit; `tooMany` at the limit; every store refusal maps to its reason and line; `idTaken` draws again; a clock set back keeps the order of saving; `deleteVisit`, `deleteAll` and `notFound`; `exportVisitLog`; in robot mode the storage function is never called; with a storage function that throws, no method throws.
