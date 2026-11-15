@@ -14,14 +14,14 @@ If a property finds a counterexample, add it to `tests/properties/result-page-re
 
 Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts second. They may be left out. Task 14 is written to hold with or without them.
 
-- [ ] 1. Write the interface contract
+- [x] 1. Write the interface contract
   - Create `src/session/result-page-types.ts` exactly as the file in "Interface contract" in `design.md`: types and type re-exports only, no statement that runs, nothing else. It imports only from `src/config/hearing-method-config.ts`, `src/config/sound-id.ts` and `src/session/visit-flow-types.ts`. This is what the owner builds the page against, so it comes first and alone. Prettier may rewrap lines; that is the only difference allowed.
   - Create `src/session/result-page-types.test.ts` with type-level checks only (`expectTypeOf`), as `ear-types-match.test.ts` does: `ResultSnapshot` is assignable to `VisitToSave`; the DOM's `Storage` is assignable to `StorageArea`; `WingState` equals `VisitEarResult["state"]`; the members of `ResultPictureInput` and of `SaveOutcome` and `DeleteOutcome` are told apart by `kind`, `saved` and `deleted`.
   - Check: `npm run typecheck`, `npm run lint`, `npm test`.
   - _Requirements: 1.1, 1.2, 1.3, 1.5_
   - _Decisions: D1, D2_
 
-- [ ] 2. Add the config, the wall clock and the allowed terms
+- [x] 2. Add the config, the wall clock and the allowed terms
   - Create `src/config/result-page-config.ts` and `src/config/result-page-config.test.ts` as in "Config" in `design.md`, with the file's own `deepFreeze`. The comments of the four proposed fields say `PROPOSED, NOT APPROVED` and name their decision and question. The test checks the values, the unit endings, deep freezing, the order `0 = worseThanCap < atCap < atFloor < betterThanFloor = 1`, that both counts are positive whole numbers, and has a test named for Q1, Q4 and Q5 whose message says that the values are proposals awaiting the owner's choice.
   - Create `src/config/system-wall-clock.ts` and `src/config/system-wall-clock.test.ts` as in "`src/config/system-wall-clock.ts`": fake system time before and after local midnight, and the zero padding of single-digit months and days.
   - Change `src/config/banned-terms.ts` by adding the export `limitsStatementAllowedTerms` as in "`src/config/banned-terms.ts`", and `src/config/banned-terms.test.ts` by adding: frozen; every allowed term is in `bannedTerms`. Change nothing else in the file.
@@ -30,7 +30,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 1.6, 2.1 to 2.4, 3.3, 17.4_
   - _Decisions: D14, D15, D23, D30_
 
-- [ ] 3. Add the limits statement and its exemption in the copy check
+- [x] 3. Add the limits statement and its exemption in the copy check
   - Create `src/copy/limits-statement.ts` with `limitsStatement` exactly as in "`src/copy/limits-statement.ts`", and `src/copy/limits-statement.test.ts`: the heading and the four sentences, in order, character for character; each of `limitsStatementAllowedTerms` that appears comes after the word "not" in the same sentence; no other banned term appears; the object and its array are frozen.
   - Change `tools/run-copy-check.ts` by adding the option `exemptions` as in "The copy check and its one exemption", and `tools/run-copy-check.test.ts` by adding its four cases. Existing behaviour and output without exemptions stay the same.
   - Change `tools/check-copy.ts` to give the one exemption: `src/copy/limits-statement.ts`, `limitsStatement`, `limitsStatementAllowedTerms`.
@@ -38,7 +38,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 17.1, 17.3, 17.4, 17.5_
   - _Decisions: D23_
 
-- [ ] 4. Add the copy hook
+- [x] 4. Add the copy hook
   - Create `tools/copy-check-streams.ts` (`copyCheckStreams`) and `tools/copy-check-streams.test.ts` as in "The copy hook": without hook mode every line goes to standard output; in hook mode with exit code 1 every line goes to standard error; in hook mode with exit code 0 one line goes to standard output.
   - Change `tools/check-copy.ts` to accept `--hook` and print through `copyCheckStreams`. Without `--hook` its output is unchanged.
   - Create `.kiro/hooks/copy-check-on-copy-save.json` exactly as in "The copy hook", and `tests/copy-check-hook.test.ts` with the checks listed there, in the form of `tests/render-check-hook.test.ts`. Do not change `.kiro/hooks/render-check-on-synth-save.json`.
@@ -47,7 +47,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 19.1 to 19.5_
   - _Decisions: D24_
 
-- [ ] 5. Add the result copy
+- [x] 5. Add the result copy
   - Create `src/copy/result-page-copy.ts`, `src/copy/result-lines.ts` and `src/copy/saved-visit-lines.ts` with the constants, types and functions of "The copy" in `design.md`, word for word. They import only from `src/config` and other copy files.
   - Create `src/copy/result-copy.test.ts` as in "The copy tests": every exported string, every output of the tables, the representative inputs against the banned terms, levels labelled relative to the calibration, and the `RangeError` cases.
   - Add to `src/session/result-page-types-match.test.ts`: `WingStateName` equals `WingState`; `UnreliableReasonName` equals `VisitUnreliableReason`; `SaveRefusalName` equals `SaveRefusal`; `DeleteRefusalName` equals `DeleteRefusal`.
