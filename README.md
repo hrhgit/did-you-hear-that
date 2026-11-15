@@ -6,7 +6,7 @@ An entry for Kiroween 2026 (Costume Contest category).
 
 ## Status
 
-The house opens. A visitor can choose a short or a long visit, match the hiss to their hands, check that left and right are the right way round, read the rules and walk through the rooms, and can stop at any time or pause in a room. Three things are not built yet: the replay of the sounds a visitor did not catch, the picture of what each ear caught, and the 60 second replay that needs no headphones. After the last room the house says so and leads back to the front door.
+The house opens. A visitor can choose a short or a long visit, match the hiss to their hands, check that left and right are the right way round, read the rules and walk through the rooms, and can stop at any time or pause in a room. After the last room the house shows a picture of the quietest sound each ear caught in each room, next to a statement of what the picture can and cannot tell. The visitor can save the picture as an image, and can save the visit in the browser, where it stays until they delete it. Nothing leaves the browser. Three things are not built yet: the replay of the sounds a visitor did not catch, the visit of one room again with the headphones swapped, and the 60 second replay that needs no headphones.
 
 ## What it will be
 
