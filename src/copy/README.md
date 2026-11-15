@@ -22,3 +22,22 @@ May import from: `config`.
 - `leaving-copy.ts`: what the page says when a visit is paused, for each reason it can pause, when it is left, for each way it can be left, and after the last room.
 
 `house-copy.test.ts` checks every string and the output of every function above against the banned terms.
+
+## The result page's copy
+
+Every string the result page shows comes from these files, so the page adds none of its own. The design, with the full wording of each string, is in `.kiro/specs/result-page/design.md`, "The copy".
+
+- `result-page-copy.ts`: `resultPageCopy`, the fixed strings of the page: the headings, the labels of the save picture, headphone name, save, show, delete and delete all controls, the question and buttons that confirm "delete all", the lines for a visit saved, renamed, not saved and deleted, the line that a browser can clear what is saved in it, and the lines for a browser that keeps no visits, for saved visits that cannot be read and for robot mode.
+- `result-lines.ts`: the sentences about a floor, a wing and the false alarms. `falseAlarmLine` says how often the visitor answered when the house made no sound, over the whole visit. `visitNoticeLine` names the visit limit the summary was judged by, so it follows whatever value the owner chooses. `wingLine` and `unreliableReasonLine` give a wing's line for each of its four states and each reason. `differenceLabel` and `differenceLine` give the left and right difference by side ("15 dB quieter on the left"), never by ear or earpiece, because only the swapped repeat can tell those apart. `swappedRepeatLine` offers the swapped repeat, and `floorDescription` puts a whole floor in words. Levels are in whole decibels, labelled relative to the visitor's own calibration.
+- `saved-visit-lines.ts`: dates in English month names, read from their "YYYY-MM-DD" text without `Date` or the browser's language; visit types named by their number of rooms ("Short visit, 3 rooms"), not by minutes; the caption and file name of the saved image; the accessible name of each delete control; the line for each reason a save or a delete did not happen; and the line for saved visits that could not be read.
+- `limits-statement.ts`: `limitsStatement`, the heading and the four sentences that `wording.md` requires next to the picture, written once as constants: floors cannot be compared; what can be compared; what this is not and what it has not been checked against; when to see a hearing professional. Every picture holds this object itself.
+
+### The limits statement's exemption
+
+The limits statement is the one place where two of the banned terms may appear, and only in the negative (`wording.md`, "One exception"). The two terms are listed in `limitsStatementAllowedTerms` in `src/config/banned-terms.ts`, beside the banned terms, so the check and the copy share one source. `npm run check:copy` is given one exemption: the file `limits-statement.ts`, the export `limitsStatement`, and those two terms. Every other banned term is still reported there, and the two terms are still reported in any other export, of this file or another. `limits-statement.test.ts` checks the four sentences word for word, and that each of the two terms comes after the word "not" in its sentence.
+
+### The visitor's headphone name
+
+The name the visitor types for the headphones never enters a sentence of the house. No copy function takes it or gives it back. The page shows it as written, in an element of its own after `resultPageCopy.headphonesLabel`, or shows `unnamedHeadphonesLabel` for a visit saved without one. So a name made of banned words cannot put one into the house's voice, and every sentence the house says can be checked without the visitor's text.
+
+`result-copy.test.ts` checks every exported string and the output of every function above, for representative inputs, against the banned terms, checks the outputs of the design's tables, that every level is labelled relative to the calibration, and that values that do not fit throw a `RangeError`. The property CP1 checks the same over every picture, list and outcome the result page can give (`tests/properties/README.md`).
