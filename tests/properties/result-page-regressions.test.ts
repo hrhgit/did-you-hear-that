@@ -10,7 +10,7 @@
 // The `it.fails` rule: a case is first committed on its own as `it.fails`, which records that the
 // code currently breaks it while keeping `npm test` green. The commit that changes the code turns
 // it into an ordinary `it`. A case whose only remedy would change a value from a steering file,
-// or a value that awaits the project owner's choice (Q1, Q4, Q5), stays `it.fails`, with a
+// or a value decided on 2026-11-15 on the owner's behalf (Q1, Q4, Q5), stays `it.fails`, with a
 // decision in design.md that gives the case.
 
 import { describe, it } from "vitest";

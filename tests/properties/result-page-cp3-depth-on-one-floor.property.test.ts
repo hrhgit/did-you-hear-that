@@ -14,7 +14,7 @@ import {
 } from "./result-page-arbitraries";
 
 // CP3. Depth is honest on one floor (Universal; result-page design.md, CP3; R13). On any floor
-// scale, found depths lie between the two proposed found ends (Q1) and follow the threshold,
+// scale, found depths lie between the two found ends decided in Q1 and follow the threshold,
 // better than floor reaches the far wall, worse than cap stays dark, unreliable is hatched, and a
 // picture's every wing is drawn on its own floor's scale.
 

@@ -33,8 +33,8 @@ function requireFinite(value: number, name: string): void {
  * threshold is placed on its own floor's range, linear in decibels from the floor's loudest
  * playable level to the quietest, and held at the ends of that range. It depends on this ear's
  * result and this floor's scale only, so deeper means a quieter sound was caught on this floor and
- * means nothing across floors. The two found ends are proposed values, not approved (Q1). A pure
- * function.
+ * means nothing across floors. The two found ends were decided on 2026-11-15 on the owner's
+ * behalf, at the owner's request (Q1). A pure function.
  */
 export function lightDepthFraction(
   result: VisitEarResult,

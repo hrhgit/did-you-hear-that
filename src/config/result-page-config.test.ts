@@ -52,11 +52,10 @@ describe("resultPageConfig", () => {
     }
   });
 
-  it("Q1, Q4 and Q5: keeps the four proposed values", () => {
+  it("Q1, Q4 and Q5: keeps the four values decided on 2026-11-15", () => {
     const message =
-      "These four values are proposals of the result-page spec, not approved values. Changing " +
-      "them is the project owner's choice, recorded in Q1, Q4 and Q5 of " +
-      ".kiro/specs/result-page/design.md.";
+      "These four values were decided on 2026-11-15 on the project owner's behalf, at the " +
+      "owner's request, in Q1, Q4 and Q5 of .kiro/specs/result-page/design.md.";
     expect(
       {
         foundLightDepthAtCapFraction:

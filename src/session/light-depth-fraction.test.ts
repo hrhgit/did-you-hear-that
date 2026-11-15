@@ -26,7 +26,7 @@ const unreliable: VisitEarResult = {
 const fullScale = { searchCapDb: 15, floorDb: -70 };
 
 describe("lightDepthFraction", () => {
-  it("gives the design's table with the proposed values (Q1, proposed, not approved)", () => {
+  it("gives the design's table with the values decided on 2026-11-15 (Q1)", () => {
     const depths = [15, 0, -25, -50, -70].map((thresholdDb) =>
       lightDepthFraction(found(thresholdDb), fullScale),
     );
