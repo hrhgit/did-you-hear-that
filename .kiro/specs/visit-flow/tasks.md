@@ -103,7 +103,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 6.1, 6.2, 7.9, 12.3 to 12.7, 13.1 to 13.3, 14.1 to 14.7, 16.1, 17.1 to 17.4, 18.1 to 18.5, 19.3, 22.6_
   - _Decisions: D9, D12, D13, D17, D19_
 
-- [ ] 12. Update the READMEs
+- [x] 12. Update the READMEs
   - In `src/session/README.md`, describe the visit flow: the contract file and its rule of only adding, `createVisitFlow`, the room runner, the log recorder, the summary and the visit-level rule with its proposed limit, and what the flow does not do (draw, store).
   - In `tests/listeners/README.md`, describe the simulated visitor and the measurement script, with the command that runs it. In `tests/properties/README.md`, describe the visit harness, the visitor scripts and the regression file.
   - Check: `findBannedTerms` over the three changed READMEs (through a one-off `npx tsx -e` that writes nothing), `npm run lint`.
