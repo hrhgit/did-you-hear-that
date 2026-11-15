@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bannedTerms } from "./banned-terms";
+import { bannedTerms, limitsStatementAllowedTerms } from "./banned-terms";
 
 describe("bannedTerms", () => {
   it("has no empty entries", () => {
@@ -21,5 +21,17 @@ describe("bannedTerms", () => {
 
   it("is frozen", () => {
     expect(Object.isFrozen(bannedTerms)).toBe(true);
+  });
+});
+
+describe("limitsStatementAllowedTerms", () => {
+  it("is frozen", () => {
+    expect(Object.isFrozen(limitsStatementAllowedTerms)).toBe(true);
+  });
+
+  it("holds only terms that are in bannedTerms", () => {
+    for (const term of limitsStatementAllowedTerms) {
+      expect(bannedTerms, JSON.stringify(term)).toContain(term);
+    }
   });
 });

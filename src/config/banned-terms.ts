@@ -29,3 +29,13 @@ export const bannedTerms: readonly string[] = Object.freeze([
   "fail",
   "score",
 ]);
+
+/**
+ * The only banned terms the fixed limits statement may use, and only in the negative
+ * (wording.md, "One exception"). The copy check allows them in the strings of the export
+ * `limitsStatement` of `src/copy/limits-statement.ts` and nowhere else.
+ */
+export const limitsStatementAllowedTerms: readonly string[] = Object.freeze([
+  "diagnosis",
+  "clinical",
+]);
