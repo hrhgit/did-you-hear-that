@@ -34,7 +34,8 @@ export interface HouseSection {
 
 const lampShadeHeight = 11;
 
-function pathData(points: readonly Point[], close: boolean): string {
+/** Path data through the points with straight ruled lines, closed or left open. */
+export function pathData(points: readonly Point[], close: boolean): string {
   const body = points
     .map(([x, y], index) => `${index === 0 ? "M" : "L"}${x} ${y}`)
     .join("");
@@ -42,7 +43,9 @@ function pathData(points: readonly Point[], close: boolean): string {
 }
 
 /** Where the bulb of a room's lamp hangs. */
-function bulbOf(room: RoomGeometry): Point {
+function bulbOf(
+  room: Pick<RoomGeometry, "lampAnchor" | "lampCordLength">,
+): Point {
   return [
     room.lampAnchor[0],
     room.lampAnchor[1] + room.lampCordLength + lampShadeHeight + 3,
@@ -50,7 +53,7 @@ function bulbOf(room: RoomGeometry): Point {
 }
 
 /** Everything that is cut through by the section: walls, floors and roof, as closed shapes. */
-function cutShapes(): string {
+export function cutShapes(): string {
   const w = houseWalls;
   const box = (
     left: number,
@@ -95,7 +98,7 @@ function cutShapes(): string {
 }
 
 /** The pencil lines of the shell: roof, walls, floors, chimney and the ground outside. */
-function shellLines(pen: SketchPen): string {
+export function shellLines(pen: SketchPen): string {
   const w = houseWalls;
   let lines =
     pen.through([w.eaveLeft, w.ridge, w.eaveRight]) +
@@ -135,7 +138,7 @@ function shellLines(pen: SketchPen): string {
 }
 
 /** The draughtsman's sign for earth: groups of three short slanted strokes under the ground. */
-function earthMarks(pen: SketchPen): string {
+export function earthMarks(pen: SketchPen): string {
   let marks = "";
   const groupAt = (x: number, y: number): void => {
     for (let stroke = 0; stroke < 3; stroke += 1) {
@@ -153,7 +156,10 @@ function earthMarks(pen: SketchPen): string {
   return marks;
 }
 
-function drawLamp(doc: Document, room: RoomGeometry): SVGElement {
+export function drawLamp(
+  doc: Document,
+  room: Pick<RoomGeometry, "lampAnchor" | "lampCordLength">,
+): SVGElement {
   const [x, y] = room.lampAnchor;
   const shadeTop = y + room.lampCordLength;
   const shadeBottom = shadeTop + lampShadeHeight;
@@ -176,7 +182,7 @@ function drawLamp(doc: Document, room: RoomGeometry): SVGElement {
 }
 
 /** The room's name and pitch, set beside the house on a short leader line. */
-function drawLevelNote(
+export function drawLevelNote(
   doc: Document,
   pen: SketchPen,
   roomId: GhostSoundId,
