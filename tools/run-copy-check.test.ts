@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { bannedTerms } from "../src/config/banned-terms";
+import {
+  bannedTerms,
+  limitsStatementAllowedTerms,
+} from "../src/config/banned-terms";
+import type { CopyCheckExemption } from "./run-copy-check";
 import { runCopyCheck } from "./run-copy-check";
 
 let rootDir: string;
@@ -27,9 +31,15 @@ async function writeCopyFile(
   await writeFile(file, source);
 }
 
-function check() {
-  return runCopyCheck({ copyDir, terms: bannedTerms, rootDir });
+function check(exemptions?: readonly CopyCheckExemption[]) {
+  return runCopyCheck({ copyDir, terms: bannedTerms, rootDir, exemptions });
 }
+
+const statementExemption: CopyCheckExemption = {
+  file: "src/copy/statement.ts",
+  exportName: "statement",
+  allowedTerms: limitsStatementAllowedTerms,
+};
 
 describe("runCopyCheck", () => {
   it("says there is nothing to check when there are no files", async () => {
@@ -143,6 +153,87 @@ describe("runCopyCheck", () => {
       lines: [
         "check:copy: src/copy exports no strings yet. Nothing to check.",
         "check:copy: 3 function exports were not evaluated. Generated text needs its own property test.",
+      ],
+    });
+  });
+});
+
+describe("runCopyCheck with an exemption (result-page D23)", () => {
+  it("lets the exempt export use an allowed term", async () => {
+    await writeCopyFile(
+      "statement.ts",
+      [
+        "export const statement = {",
+        '  heading: "What this picture can tell you",',
+        '  sentences: ["This is not a diagnosis.", "It has not been checked against clinical equipment."],',
+        "};",
+        "",
+      ].join("\n"),
+    );
+    expect(await check([statementExemption])).toEqual({
+      exitCode: 0,
+      lines: [
+        "check:copy: checked 3 strings in 1 file against 24 banned terms. An exemption applied to 3 strings. No banned terms found.",
+      ],
+    });
+  });
+
+  it("still reports another banned term in the exempt export", async () => {
+    await writeCopyFile(
+      "statement.ts",
+      [
+        "export const statement = {",
+        '  sentences: ["This is not a diagnosis.", "Your hearing is normal."],',
+        "};",
+        "",
+      ].join("\n"),
+    );
+    expect(await check([statementExemption])).toEqual({
+      exitCode: 1,
+      lines: [
+        'check:copy: src/copy/statement.ts export "statement.sentences[1]" contains banned term "normal"',
+        "check:copy: checked 2 strings in 1 file against 24 banned terms. An exemption applied to 2 strings. Found 1 banned term.",
+      ],
+    });
+  });
+
+  it("reports an allowed term in another export of the same file", async () => {
+    await writeCopyFile(
+      "statement.ts",
+      [
+        'export const statement = ["This is not a diagnosis."];',
+        'export const statementNote = "A clinical note.";',
+        'export const other = { line: "Not a diagnosis either." };',
+        "",
+      ].join("\n"),
+    );
+    expect(await check([statementExemption])).toEqual({
+      exitCode: 1,
+      lines: [
+        'check:copy: src/copy/statement.ts export "other.line" contains banned term "diagnosis"',
+        'check:copy: src/copy/statement.ts export "statementNote" contains banned term "clinical"',
+        "check:copy: checked 3 strings in 1 file against 24 banned terms. An exemption applied to 1 string. Found 2 banned terms.",
+      ],
+    });
+  });
+
+  it("changes nothing when its file does not exist", async () => {
+    await writeCopyFile(
+      "lines.ts",
+      'export const statement = ["A calm line.", "Not a diagnosis."];\n',
+    );
+    const without = await check();
+    expect(
+      await check([
+        statementExemption,
+        { ...statementExemption, file: "src/copy/missing.ts" },
+      ]),
+    ).toEqual(without);
+    expect(without).toEqual({
+      exitCode: 1,
+      lines: [
+        'check:copy: src/copy/lines.ts export "statement[1]" contains banned term "diagnosis"',
+        "check:copy: checked 2 strings in 1 file against 24 banned terms. Found 1 banned term.",
       ],
     });
   });
