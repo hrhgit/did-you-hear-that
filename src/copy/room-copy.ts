@@ -1,0 +1,107 @@
+import type { GhostSoundId } from "../config/sound-id";
+
+/** The name of each room as the visitor reads it on the drawing of the house. */
+export const roomNames: Readonly<Record<GhostSoundId, string>> = Object.freeze({
+  cellar: "Cellar",
+  corridor: "Corridor",
+  nursery: "Nursery",
+  stairs: "Stairs",
+  attic: "Attic",
+});
+
+/** The side a sound came from, as the visitor answers it. */
+export type AnswerSide = "left" | "right";
+
+/** What the visitor reads while in a room, apart from what the house says about a sound. */
+export const roomCopy = Object.freeze({
+  /** The name of the picture of the house, for a visitor who cannot see it. */
+  houseLabel: "A house of five rooms, one above the other",
+  /** The two answers. `hint` is the short word shown in the corner of each half of the screen. */
+  answers: Object.freeze({
+    left: Object.freeze({ name: "I heard it on my left", hint: "Left" }),
+    right: Object.freeze({ name: "I heard it on my right", hint: "Right" }),
+  }),
+  /** The keys that give each answer, shown beside the hints where there is a keyboard. */
+  answerKeys: Object.freeze({ left: "← or A", right: "→ or L" }),
+  /** Fixed by wording.md: said after an answer on a trial with no sound. */
+  noSoundLine: "I made no sound that time.",
+  stopButton: "Stop and leave",
+  pauseButton: "Pause",
+  goOnButton: "Go on",
+});
+
+function requireFrequency(frequencyHz: number): void {
+  if (!Number.isFinite(frequencyHz) || frequencyHz <= 0) {
+    throw new RangeError(
+      `A pitch must be a positive number of hertz, but got ${String(frequencyHz)}.`,
+    );
+  }
+}
+
+/** A room's pitch as a label: "500 Hz" below 1000 Hz, "1 kHz" or "2.5 kHz" from there up. */
+export function pitchLabel(frequencyHz: number): string {
+  requireFrequency(frequencyHz);
+  if (frequencyHz < 1000) {
+    return `${String(Math.round(frequencyHz))} Hz`;
+  }
+  const kilohertz = Math.round(frequencyHz / 100) / 10;
+  return `${String(kilohertz)} kHz`;
+}
+
+/**
+ * A level as the visitor reads it: always relative to their own calibration (wording.md), in
+ * whole decibels. "12 dB quieter than your calibration".
+ */
+export function relativeLevelLabel(levelDb: number): string {
+  if (!Number.isFinite(levelDb)) {
+    throw new RangeError(
+      `A level must be a finite number of decibels, but got ${String(levelDb)}.`,
+    );
+  }
+  const whole = Math.round(levelDb);
+  if (whole === 0) {
+    return "as loud as your calibration";
+  }
+  return `${String(Math.abs(whole))} dB ${whole < 0 ? "quieter" : "louder"} than your calibration`;
+}
+
+/** Where the visitor is: "Room 2 of 3". Both numbers are whole, with 1 ≤ number ≤ count. */
+export function roomProgressLine(number: number, count: number): string {
+  if (
+    !Number.isInteger(number) ||
+    !Number.isInteger(count) ||
+    number < 1 ||
+    number > count
+  ) {
+    throw new RangeError(
+      `A room's number must be a whole number from 1 to the number of rooms, but got ${String(number)} of ${String(count)}.`,
+    );
+  }
+  return `Room ${String(number)} of ${String(count)}`;
+}
+
+/**
+ * What the house says when a sound was caught: the side, the pitch and the level. It is said
+ * only after the answer has been taken, beside the ripple.
+ */
+export function caughtLine(
+  side: AnswerSide,
+  frequencyHz: number,
+  levelDb: number,
+): string {
+  return `You caught it on your ${side}. ${pitchLabel(frequencyHz)}, ${relativeLevelLabel(levelDb)}.`;
+}
+
+/** How the house announces each room as the one that comes next. */
+const roomIsNext: Readonly<Record<GhostSoundId, string>> = Object.freeze({
+  cellar: "The cellar is next",
+  corridor: "The corridor is next",
+  nursery: "The nursery is next",
+  stairs: "The stairs are next",
+  attic: "The attic is next",
+});
+
+/** What the house says between two rooms, naming the room that comes next. */
+export function betweenRoomsLine(nextRoomId: GhostSoundId): string {
+  return `This room is quiet now. ${roomIsNext[nextRoomId]}, when you are ready.`;
+}
