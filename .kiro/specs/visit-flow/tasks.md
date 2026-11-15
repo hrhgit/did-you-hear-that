@@ -110,7 +110,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 24.4, 24.5_
   - _Decisions: D30_
 
-- [ ] 13. Final checks
+- [x] 13. Final checks
   - Run `npm run typecheck`, `npm test` (three times), `npm run lint`, `npm run check:copy` and `npm run build`.
   - Search `src/session/` for numbers that set a level, a time or a limit outside `src/config` (R20.4). Search `src/ui/` for `onTrialPresented` and `VisitFlowTestOptions` and confirm neither appears in a file this spec could have touched.
   - Run `git status` and `git log` for this spec's commits: no file under `src/ui/`, nor `index.html`, `listen.html`, `src/main.ts`, nor any file listed as "Not changed" in `design.md` was changed or committed by this spec, and the owner's uncommitted files are still uncommitted.
