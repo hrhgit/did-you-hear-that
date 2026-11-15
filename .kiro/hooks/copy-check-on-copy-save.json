@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Copy check on copy save",
+      "description": "Checks every string exported from src/copy against the banned terms of wording.md, with the one exemption of the limits statement. Findings go to the agent. See .kiro/specs/result-page/design.md.",
+      "trigger": "PostFileSave",
+      "matcher": "(^|/)src/copy/.+\\.ts$",
+      "action": { "type": "command", "command": "npm run --silent check:copy -- --hook" },
+      "timeout": 60
+    }
+  ]
+}
