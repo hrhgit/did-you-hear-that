@@ -1,3 +1,3 @@
-import { renderPlaceholder } from "./ui/render-placeholder";
+import { startVisit } from "./ui/visit/start-visit";
 
-renderPlaceholder(document);
+startVisit(document, window);

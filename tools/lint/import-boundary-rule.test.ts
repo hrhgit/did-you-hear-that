@@ -257,7 +257,7 @@ describe("import boundary rule in the repository configuration", () => {
       linter,
       repositoryRoot,
       "src/engine/probe.ts",
-      'import { renderPlaceholder } from "../ui/render-placeholder";\nexport const probe = renderPlaceholder;\n',
+      'import { startVisit } from "../ui/visit/start-visit";\nexport const probe = startVisit;\n',
     );
     expect(messages.map((message) => message.message)).toEqual([
       expect.stringContaining("engine may import only from: itself, config"),
@@ -276,7 +276,7 @@ describe("import boundary rule in the repository configuration", () => {
 
   it("reports a relative typeof import() type, which the boundary rule cannot see", async () => {
     const [result] = await linter.lintText(
-      'export type Probe = typeof import("../ui/render-placeholder");\n',
+      'export type Probe = typeof import("../ui/visit/start-visit");\n',
       { filePath: path.join(repositoryRoot, "src/engine/probe.ts") },
     );
     expect(result?.messages.map((message) => message.ruleId)).toEqual([
