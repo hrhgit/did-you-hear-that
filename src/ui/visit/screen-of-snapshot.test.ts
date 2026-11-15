@@ -6,6 +6,7 @@ import { visitCopy } from "../../copy/visit-copy";
 import type {
   CalibrationSnapshot,
   HeadphoneCheckSnapshot,
+  MissedSoundReplaySnapshot,
   PauseReason,
   SnapshotBase,
   VisitLog,
@@ -237,7 +238,7 @@ describe("screenOfSnapshot", () => {
     const screen = screenOfSnapshot({
       ...base("missedSoundReplay", 3),
       visitLog: {} as VisitLog,
-    });
+    } as MissedSoundReplaySnapshot);
     expect(screen.sheet).toBe("notice");
     expect(screen.stopShown).toBe(false);
     expect(screen.notice).toEqual({
