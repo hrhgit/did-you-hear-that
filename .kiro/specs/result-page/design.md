@@ -694,7 +694,22 @@ Not measured for this design. An estimate from the visit-flow spec's "How long t
 
 ### Measured sizes
 
-To be written by task 10.
+Measured by task 10 on 2026-11-15 in `tests/properties/result-page-simulated-visits.test.ts`: a quick visit and then a full visit played to the result through the visit flow's harness and simulated visitor, with the worst-case renderers, and saved one after the other through one archive on a fake storage area. The listener is the Plausible_Range listener of the visit flow's simulated visits (true thresholds −12 dB left and −41.3 dB right, width 5.5 dB, lapses 0.06, false alarms 0.12, wrong side 0.04) with listener seed 12; the flow seeds are 20261206 (quick) and 20261207 (full), the visitor seed 20261208, the clock offset P 654321 ms and the archive seed 20261209. The quick visit was saved with the name "White earbuds" and the full visit with none.
+
+| | Quick visit | Full visit |
+|---|---|---|
+| Logged trials | 104 | 144 |
+| Ignored answers | 13 | 18 |
+| Visit log, JSON characters | 41157 | 57249 |
+| Summary, JSON characters | 1438 | 2225 |
+| Length of the stored value after this save | 48220 | 115391 |
+| The visit's own share of the stored value | 48220 | 67171 |
+
+The lengths are JavaScript string lengths, in UTF-16 code units, which for this ASCII text are characters. A logged trial took 366 characters of JSON on average, and 411 once escaped inside `payloadJson`, so the escaping adds about 12 percent.
+
+The estimate under "Sizes" holds for these two visits: the quick visit's 104 trials and about 48 thousand characters lie inside its estimated 90 to 130 trials and 35 to 50 KB, and the full visit's 67 thousand characters lie inside its estimated 60 to 80 KB, although its 144 trials are a few below the estimated 150 to 210. The estimate's 350 characters per trial is about 15 percent low. At the measured 411 characters per trial a full visit of 210 trials, the slowest tenth, would take about 94 thousand characters, above the estimate's 80 KB.
+
+What this means for Q4, whose options stay open and whose proposed `savedVisitsMaxCount` of 20 is unchanged: 20 full visits take about 1.3 million characters at this visit's size and up to about 1.9 million for the slowest tenth. That is inside 5 MiB of the origin whether a browser counts a character as one byte or as two, but on a `github.io` origin the owner's other project pages share the same quota. 10 visits would take about 0.7 to 0.9 million characters. 50 visits would take about 3.4 to 4.7 million characters: beyond 5 MiB for a browser that counts two bytes a character, and close to it for one that counts one, so `full` would often come before `tooMany`. These figures come from one simulated listener and seeds; a visit with more pauses, device changes or ignored answers is larger.
 
 ### The Visit_Store
 
@@ -1316,7 +1331,37 @@ The properties and unit tests use `createFakeStorageArea` from `src/storage/fake
 
 The property files of this spec must take at most 30 seconds together on the project machine (proposed, Q7). The pictures and the archive are pure or work on an in-memory map, so the estimate is a few seconds. Tasks 9, 10 and 13 run `npm test` three times and write the time of each file here. If the files take more than 30 seconds together, the task stops and reports the times to the owner; it changes no run count.
 
-Times of tasks 9, 10 and 13: to be written by those tasks.
+Times of task 13: to be written by that task. The times of tasks 9 and 10 follow.
+
+Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 9 present, gave these times per property file, in ms, as Vitest's JSON reporter gives them (the sum of the file's test durations, without the file's import):
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 5147 | 5849 | 5782 |
+| CP2 | 4599 | 5409 | 5142 |
+| CP3 | 325 | 280 | 273 |
+| CP4 | 188 | 194 | 225 |
+| Together | 10259 | 11732 | 11422 |
+
+`result-page-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 30 second budget (proposed, Q7). CP3's 1000 runs are two properties of 1000 runs each: the depth on any scale, and the depth of every wing of a picture.
+
+Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 10 present, measured the same way, in ms:
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 5595 | 5840 | 6865 |
+| CP2 | 4230 | 4810 | 5297 |
+| CP3 | 291 | 258 | 368 |
+| CP4 | 196 | 236 | 222 |
+| CP5 | 1415 | 1182 | 1335 |
+| CP6 | 893 | 1062 | 1224 |
+| CP7 | 1662 | 1378 | 1359 |
+| CP8 | 143 | 180 | 263 |
+| Together, CP1 to CP8 | 14425 | 14946 | 16933 |
+| `result-page-simulated-visits.test.ts` | 279 | 244 | 294 |
+| Together, with the simulated visits | 14704 | 15190 | 17227 |
+
+Every run was under the 30 second budget (proposed, Q7), so no run count was questioned. The whole of `npm test` took 46.9, 48.3 and 55.2 seconds in these runs.
 
 ### Counterexamples
 

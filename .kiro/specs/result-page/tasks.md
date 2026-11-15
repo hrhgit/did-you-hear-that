@@ -82,7 +82,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 3.1, 3.2, 3.4, 5.4 to 5.6, 7.5, 7.6, 8.1 to 8.4, 9.1 to 9.8, 10.1 to 10.4, 11.1 to 11.4_
   - _Decisions: D3, D9, D10, D11, D12, D13, D14, D26, D27_
 
-- [ ] 9. Write the brief's properties and those of the picture
+- [x] 9. Write the brief's properties and those of the picture
   - Create `tests/properties/result-page-arbitraries.ts` and `tests/properties/result-page-text.ts` as in "Correctness properties" in `design.md`, without earlier visits for now.
   - Create the files for CP1, CP2, CP3 and CP4 with the run counts of "Run counts and time", each with a timeout of 120 seconds.
   - Create `tests/properties/result-page-regressions.test.ts` with a comment on the naming rule and one `it.todo`, as the earlier specs do.
@@ -91,7 +91,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 12.5, 13.1 to 13.4, 14.1 to 14.4, 17.2, 18.4, 21.1 to 21.5, 22.1_
   - _Decisions: D16, D21, D28_
 
-- [ ] 10. Write the properties of storage and the archive, and save simulated visits
+- [x] 10. Write the properties of storage and the archive, and save simulated visits
   - Add to `tests/properties/result-page-arbitraries.ts` the stored values and storage behaviours of "Correctness properties".
   - Create the files for CP5, CP6, CP7 and CP8 with the run counts of "Run counts and time", each with a timeout of 120 seconds.
   - Create `tests/properties/result-page-simulated-visits.test.ts`: a quick and a full visit played to the result through `tests/properties/visit-flow-harness.ts` and `tests/listeners/simulated-visitor.ts`, with fixed seeds and the worst-case renderers through `vi.mock`, each saved through an archive on a fake storage area, listed back deep-equal to the JSON round trip of the result snapshot's log and summary, exported, and drawn with `resultPicture` for both kinds.
@@ -101,7 +101,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 4.1 to 4.4, 5.1 to 5.6, 6.1 to 6.6, 7.1 to 7.6, 8.3, 9.1 to 9.8, 10.1 to 10.4, 11.1, 11.2, 21.3 to 21.5_
   - _Decisions: D5, D6, D7, D9, D13, D28_
 
-- [ ] 11. Update the READMEs
+- [x] 11. Update the READMEs
   - `src/storage/README.md`: the store, the key and its version, the envelope and opaque payload, the checksum, unreadable entries and values, the failure names, the fake storage area, and that nothing leaves the browser.
   - `src/session/README.md`: a section on the result page: the contract and its rule of only adding, the archive and robot mode, the payload and how a saved visit relates to the visit log, the picture model and how far the light reaches, with its numbers described as proposed, not approved.
   - `src/copy/README.md`: a section on the result page's copy, the limits statement and its exemption, and that the headphone name never enters a sentence.
