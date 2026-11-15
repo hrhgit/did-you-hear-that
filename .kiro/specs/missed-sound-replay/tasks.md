@@ -57,7 +57,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
 
 **End of batch 1.** The contract is in place for the owner, and the plan, the counts and the render seed exist as pure functions with their properties.
 
-- [ ] 5. Add the replay's lines
+- [x] 5. Add the replay's lines
   - Create `src/copy/replay-lines.ts` with the types and functions of "`src/copy/replay-lines.ts`", word for word. It imports only from `src/config` and `src/copy/room-copy.ts`. Every function throws a `RangeError` for the values of the table's `RangeError` rows.
   - Add to `src/copy/replay-copy.test.ts` the cases of "The copy tests": every output of the table; the representative inputs (counts 0 to 25, 56, 99, 100, 101, 999 and 1000; every side, ending and pause reason; missed levels from −70 to 15 in 5 dB steps and −0.4, 0, 0.4; both values of `capChangedLevel`; every pitch of `hearingMethodConfig.roomFrequenciesHz`) free of banned terms, with every number of decibels followed by " quieter than your calibration", " louder than your calibration" or " louder than when it went by"; and the `RangeError` cases.
   - Create `src/session/replay-types-match.test.ts` with type-level checks only: `ReplaySideName` equals `Ear`; `ReplayEndingName` equals `ReplayEnding`; `ReplayPauseName` equals `ReplayPauseReason`; the keys of `replayCopy.pauseLines` are exactly `ReplayPauseName`.
@@ -65,21 +65,21 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 1.6, 4.5, 5.4, 6.1, 7.5, 8.3, 13.2, 16.1 to 16.5_
   - _Decisions: D12, D23, D24, D25_
 
-- [ ] 6. Add the replayed sound and the view
+- [x] 6. Add the replayed sound and the view
   - Create `src/session/replay-sound.ts` (`replaySoundOf`) and its test as in "The Replay_Controller": the planned fields, the position and its label, the room name and pitch label, the played level and clamp limit from the outcome; `capChangedLevel` true when `heldByCap`, true when the outcome names a clamp limit, false otherwise, with the ripple label to match; the sound frozen.
   - Create `src/session/missed-sound-replay-view.ts` (`missedSoundReplayView`) and its test as in "`missedSoundReplayView(input, settings)`": each phase's fields; the selection line only for a selection; counts through the current sound's trial order in `playing` and null before the first sound; the whole log's counts in `finished` and `nothingMissed`; the pause line of each reason and none without a pause; `canStart`, `canSkip` and `proceedLabel` of each phase as the table "What each phase accepts" gives them; `stopLabel` in every phase; the end line of each ending; the view deeply frozen and equal for equal inputs.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 4.5, 4.6, 5.4, 5.5, 6.1, 7.4, 7.5, 7.6, 8.1, 8.2, 8.3, 9.1, 10.1, 10.4, 11.7, 13.2, 14.5, 15.5_
   - _Decisions: D10, D11, D13, D21, D23, D25_
 
-- [ ] 7. Add the Replay_Controller
+- [x] 7. Add the Replay_Controller
   - Create `src/session/create-missed-sound-replay.ts` (`createMissedSoundReplay`) as in "The Replay_Controller". It reads time only through the timer it is given, plays only through `output.play` with the Purpose `replay`, takes `replayGapMs` from `missedSoundReplayConfig`, `scheduleLeadMs` from `audioOutputConfig` and `refusedPlaysInARowMaxCount` from `visitFlowConfig`, and adds no number of its own. The flow does not use it yet.
   - Create `src/session/create-missed-sound-replay.test.ts` on the fake audio backend, a calibrated `createAudioOutput` and the manual timer, as `room-runner.test.ts` builds them, and on a scripted output for refusals: the first phase from the plan; `start` only from `announcing`; the first play one gap after `start`, with the room's Sound_Id, the ear, the asked level, the Purpose `replay` and the given random source; the `replaySoundStarted` event at the sound's start on the page clock, with and without a timestamp pair; the next play one gap after the end of the one before; `finished` with `allPlayed` after the last; `skip` during a sound calls `stopAll` and in `announcing` does not; `cut` during a sound and in a gap, then `resume` asks for the cut sound or the next one gap later; `end("deviceChanged")`; `notRunning` hands the shell's reason, or `interrupted` for none or `control`, to the callback; `notCalibrated` ends with `deviceChanged`; any other refusal asks for the same sound one gap later, three in a row end with `soundRefused`, and a scheduled play resets the count; after `cancel` no timer is pending; the log deep-equals itself before and after.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 2.5, 2.6, 3.4, 4.3, 4.4, 6.2, 7.1, 7.2, 7.3, 7.6, 10.2, 10.3, 11.2, 11.3, 11.5, 12.1, 12.2, 12.3, 13.1, 13.5, 14.1, 14.3, 14.5, 15.1, 15.3_
   - _Decisions: D8, D9, D10, D14, D15, D16, D20, D22_
 
-- [ ] 8. Add the measurement again
+- [x] 8. Add the measurement again
   - Create `tests/listeners/replay-length-measurement.ts`, the measurement of "Measurements" as a function, and `tests/listeners/print-replay-length-measurement.ts`, which prints its tables as Markdown with the method and seeds stated there: `playPopulationRooms` with `specSearchUnderTest` and `hearingMethodConfig`, 1000 visits per row, the Attentive and the Plausible ranges, seed 20261117 for quick visits and 20261118 for full ones, and the first run's figure with seed 20261116. The selection uses `evenSelectionIndexes`; the most counts (20, 30, 45, 60, no limit) and gaps (300, 400, 600 ms) are parameters of the measurement, and it changes no config value. It writes no file and needs no `package.json` script.
   - Run `npx tsx tests/listeners/print-replay-length-measurement.ts` and compare its tables with those of "Measurements". If any figure differs, write the printed tables below the paragraph that says so, with the date, and say which figures changed. Change no question and no proposed value; if a change bears on Q1 or Q2, say so in the report.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
