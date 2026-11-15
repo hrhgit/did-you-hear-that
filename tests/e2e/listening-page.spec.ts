@@ -68,7 +68,7 @@ interface ProbeState {
 }
 
 /**
- * Runs in the page before any of its scripts (as `placeholder-page.spec.ts` does). Wraps the
+ * Runs in the page before any of its scripts (as `page-checks.ts` does for the house). Wraps the
  * `AudioContext` constructor, `AudioBuffer.prototype.copyToChannel`, the buffer source's `start`
  * and `stop`, and `AudioParam.prototype.setValueCurveAtTime`, and keeps what each received. The
  * wrappers still do what the originals do. This function is serialised into the page, so it uses
