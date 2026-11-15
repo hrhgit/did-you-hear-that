@@ -8,6 +8,7 @@ import { createSeededRandom } from "../../src/config/seeded-random";
 import { ghostSoundIds } from "../../src/config/sound-id";
 import type { GhostSoundId } from "../../src/config/sound-id";
 import { calibrationSettingTopDb } from "../../src/audio/output/calibration-setting-top";
+import type { PlayRefusal } from "../../src/audio/output/create-audio-output";
 import type { ClampLimit } from "../../src/audio/output/output-types";
 import { rangeReport } from "../../src/audio/output/range-report";
 import { decibelsToGain } from "../../src/audio/synth/decibels-to-gain";
@@ -23,8 +24,7 @@ import type {
 import { visitRooms } from "../../src/session/visit-rooms";
 
 // The arbitraries of the missed-sound replay's properties (missed-sound-replay design.md,
-// "Correctness properties"): drawn visit logs and most counts. Task 9 adds the replay scripts and
-// the refusal scripts.
+// "Correctness properties"): drawn visit logs, most counts, replay scripts and refusal scripts.
 //
 // A visit log is drawn as a plan, whose structure fast-check draws and shrinks: the visit type,
 // the calibrations and their tops, the runs of each room, how many trials each run has, and the
@@ -421,3 +421,252 @@ export function planSettingsOf(
         replaySoundsMaxCount: mostCount,
       };
 }
+
+/** A drawn visit log in which nothing was missed: its share of misses is set to 0 (CP4). */
+export const nothingMissedLogArbitrary: fc.Arbitrary<DrawnVisitLog> =
+  visitLogPlanArbitrary.map((drawn) => {
+    const plan: VisitLogPlan = { ...drawn, missShareFraction: 0 };
+    return { plan, log: visitLogOf(plan) };
+  });
+
+/** Whether a log has a missed trial in a finished room run, as R3.2 defines it. */
+function hasMissedTrial(log: VisitLog): boolean {
+  const finished = new Set(
+    log.roomAttempts
+      .filter((attempt) => attempt.ending === "finished")
+      .map(
+        (attempt) => `${String(attempt.roomIndex)}:${String(attempt.attempt)}`,
+      ),
+  );
+  return log.trials.some(
+    (trial) =>
+      trial.kind === "sound" &&
+      trial.status === "scored" &&
+      trial.outcome === "missed" &&
+      finished.has(`${String(trial.roomIndex)}:${String(trial.attempt)}`),
+  );
+}
+
+/** A drawn visit log with at least one missed sound (CP5, CP7, CP8). */
+export const missedLogArbitrary: fc.Arbitrary<DrawnVisitLog> =
+  visitLogArbitrary.filter(({ log }) => hasMissedTrial(log));
+
+// ─── Replay scripts ──────────────────────────────────────────────────────────────────────
+
+/** The latest time of a `startReplay` after the stage is entered. */
+export const startReplayMaxMs = 30_000;
+/** The most `startReplay` calls of a script. */
+export const startReplayMaxCount = 3;
+/** The most events of a script, apart from its `startReplay` calls and the resumes after pause reports. */
+export const replayEventMaxCount = 6;
+/** The latest time of an event after the stage is entered. */
+export const replayEventMaxMs = 120_000;
+/** The longest wait from a pause report to the resume that follows it. */
+export const replayResumeAfterMaxMs = 10_000;
+/** The largest output delay of the fake backend's timestamp pair. */
+export const outputDelayMaxMs = 40;
+/** The latest time of the ending of an ending script after its first `startReplay`. */
+export const endingAfterStartMaxMs = 40_000;
+
+/** What a replay script can do at a time, besides `startReplay`. */
+export type ReplayScriptAction =
+  | "proceed"
+  | "stop"
+  | "pause"
+  | "resume"
+  | "hidden"
+  | "interrupted"
+  | "deviceChanged"
+  | "pageLeft"
+  /** `resume` while the fake backend refuses activation. */
+  | "refusedResume"
+  /** `startReplay` while the fake backend refuses activation. */
+  | "refusedStartReplay";
+
+export const replayScriptActions: readonly ReplayScriptAction[] = [
+  "proceed",
+  "stop",
+  "pause",
+  "resume",
+  "hidden",
+  "interrupted",
+  "deviceChanged",
+  "pageLeft",
+  "refusedResume",
+  "refusedStartReplay",
+];
+
+/** One event of a replay script. Times are from the moment the stage is entered. */
+export interface ReplayScriptEvent {
+  readonly atMs: number;
+  readonly action: ReplayScriptAction;
+  /**
+   * For a pause report (`hidden`, `interrupted`): the wait to the `resume` that follows it, or
+   * null when none follows. Null for every other action.
+   */
+  readonly resumeAfterMs: number | null;
+}
+
+/** How the visitor and the browser move through one replay (design.md, "Correctness properties"). */
+export interface ReplayScript {
+  /** When `startReplay` is called, from the moment the stage is entered. Empty: never. */
+  readonly startTimesMs: readonly number[];
+  readonly events: readonly ReplayScriptEvent[];
+  /** How far the page clock of the fake backend's timestamp pair is ahead of its audio clock. */
+  readonly outputDelayMs: number;
+}
+
+/** A time from 0 to `maxMs`, drawn more often in the first third, where the sounds play. */
+const scriptTimeArbitrary = (maxMs: number): fc.Arbitrary<number> =>
+  fc.oneof(
+    { arbitrary: fc.integer({ min: 0, max: maxMs }), weight: 1 },
+    {
+      arbitrary: fc.integer({ min: 0, max: Math.floor(maxMs / 3) }),
+      weight: 2,
+    },
+  );
+
+const isPauseReport = (action: ReplayScriptAction): boolean =>
+  action === "hidden" || action === "interrupted";
+
+const replayScriptEventArbitrary: fc.Arbitrary<ReplayScriptEvent> = fc
+  .record({
+    atMs: scriptTimeArbitrary(replayEventMaxMs),
+    action: fc.constantFrom(...replayScriptActions),
+    resumeAfterMs: fc.option(
+      fc.integer({ min: 0, max: replayResumeAfterMaxMs }),
+      { freq: 4 },
+    ),
+  })
+  .map((event) => ({
+    ...event,
+    resumeAfterMs: isPauseReport(event.action) ? event.resumeAfterMs : null,
+  }));
+
+const startTimesArbitrary: fc.Arbitrary<readonly number[]> = fc.oneof(
+  { arbitrary: fc.constant([]), weight: 1 },
+  {
+    arbitrary: fc
+      .array(fc.integer({ min: 0, max: startReplayMaxMs }), {
+        minLength: 1,
+        maxLength: startReplayMaxCount,
+      })
+      .map((times) => [...times].sort((a, b) => a - b)),
+    weight: 5,
+  },
+);
+
+/** A replay script: whether and when `startReplay` comes, up to six events, and an output delay. */
+export const replayScriptArbitrary: fc.Arbitrary<ReplayScript> = fc.record({
+  startTimesMs: startTimesArbitrary,
+  events: fc.array(replayScriptEventArbitrary, {
+    maxLength: replayEventMaxCount,
+  }),
+  outputDelayMs: fc.integer({ min: 0, max: outputDelayMaxMs }),
+});
+
+/** The actions an ending script ends with (CP5). */
+export type ReplayEndingAction = Extract<
+  ReplayScriptAction,
+  "proceed" | "stop" | "pageLeft"
+>;
+
+/** A replay script whose `startReplay` comes at least once and which ends with an ending action (CP5). */
+export interface EndingReplayScript extends ReplayScript {
+  readonly ending: {
+    readonly atMs: number;
+    readonly action: ReplayEndingAction;
+  };
+}
+
+export const endingReplayScriptArbitrary: fc.Arbitrary<EndingReplayScript> = fc
+  .record({
+    startTimesMs: fc
+      .array(fc.integer({ min: 0, max: startReplayMaxMs }), {
+        minLength: 1,
+        maxLength: startReplayMaxCount,
+      })
+      .map((times) => [...times].sort((a, b) => a - b)),
+    events: fc.array(replayScriptEventArbitrary, {
+      maxLength: replayEventMaxCount,
+    }),
+    outputDelayMs: fc.integer({ min: 0, max: outputDelayMaxMs }),
+    endingAfterStartMs: fc.integer({ min: 0, max: endingAfterStartMaxMs }),
+    endingAction: fc.constantFrom<ReplayEndingAction>(
+      "proceed",
+      "stop",
+      "pageLeft",
+    ),
+  })
+  .map(({ endingAfterStartMs, endingAction, ...script }) => ({
+    ...script,
+    ending: {
+      atMs: script.startTimesMs[0]! + endingAfterStartMs,
+      action: endingAction,
+    },
+  }));
+
+// ─── Refusal scripts ─────────────────────────────────────────────────────────────────────
+
+/** Every refusal `play` can give. The record makes the list fail to compile when one is missing. */
+const playRefusalNames: Record<PlayRefusal, true> = {
+  unsupportedSampleRate: true,
+  emptyBuffer: true,
+  tooLong: true,
+  notFinite: true,
+  silentBuffer: true,
+  fadeTooShort: true,
+  invalidLevel: true,
+  invalidCalibrationGain: true,
+  bothEarsForGhostSound: true,
+  beyondCeiling: true,
+  peakBoundNotMet: true,
+  renderFailed: true,
+  notRunning: true,
+  notCalibrated: true,
+  notCalibrating: true,
+  busy: true,
+  unsupported: true,
+};
+export const playRefusals = Object.freeze(
+  Object.keys(playRefusalNames) as PlayRefusal[],
+);
+
+/** The longest refusal script. Plays after its end are passed to the shell. */
+export const refusalScriptMaxLength = 40;
+/**
+ * The largest weight of a refusal against a weight of 4 for a scheduled play. A script draws its
+ * weight from 0 to this, so that scripts with no refusal, with a few, and with refusals in a row
+ * that end the replay all occur.
+ */
+export const refusalWeightMax = 12;
+
+/** What the scripted output does with one `play`: pass it to the shell, or refuse it. */
+export type RefusalScriptEntry =
+  | { readonly kind: "scheduled" }
+  | { readonly kind: "refused"; readonly reason: PlayRefusal };
+
+/**
+ * A refusal script (CP8): for each `play` of the scripted output, in order, scheduled (passed to
+ * the calibrated shell) or refused with any `PlayRefusal`. Its share of refusals is drawn, so
+ * that both scripts with refusals in a row and scripts with none occur.
+ */
+export const refusalScriptArbitrary: fc.Arbitrary<
+  readonly RefusalScriptEntry[]
+> = fc.integer({ min: 0, max: refusalWeightMax }).chain((refusalWeight) =>
+  fc.array(
+    fc.oneof(
+      {
+        arbitrary: fc.constant<RefusalScriptEntry>({ kind: "scheduled" }),
+        weight: 4,
+      },
+      {
+        arbitrary: fc
+          .constantFrom(...playRefusals)
+          .map<RefusalScriptEntry>((reason) => ({ kind: "refused", reason })),
+        weight: refusalWeight,
+      },
+    ),
+    { maxLength: refusalScriptMaxLength },
+  ),
+);
