@@ -1331,7 +1331,7 @@ The properties and unit tests use `createFakeStorageArea` from `src/storage/fake
 
 The property files of this spec must take at most 30 seconds together on the project machine (proposed, Q7). The pictures and the archive are pure or work on an in-memory map, so the estimate is a few seconds. Tasks 9, 10 and 13 run `npm test` three times and write the time of each file here. If the files take more than 30 seconds together, the task stops and reports the times to the owner; it changes no run count.
 
-Times of task 13: to be written by that task. The times of tasks 9 and 10 follow.
+The times of tasks 9, 10 and 13 follow.
 
 Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 9 present, gave these times per property file, in ms, as Vitest's JSON reporter gives them (the sum of the file's test durations, without the file's import):
 
@@ -1362,6 +1362,18 @@ Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of task
 | Together, with the simulated visits | 14704 | 15190 | 17227 |
 
 Every run was under the 30 second budget (proposed, Q7), so no run count was questioned. The whole of `npm test` took 46.9, 48.3 and 55.2 seconds in these runs.
+
+Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 13 present, measured the same way, in ms. CP1 and CP2 now draw an earlier visit or none, and CP9's 300 runs are two properties of 300 runs each: the choice of the earlier visit from a drawn list, and the outlines and comparison line of a picture with a drawn earlier visit.
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 5815 | 6531 | 6812 |
+| CP2 | 4844 | 5749 | 5104 |
+| CP9 | 294 | 313 | 363 |
+| Together, CP1 to CP9 | 15240 | 17177 | 16732 |
+| Together, with the simulated visits | 15521 | 17456 | 17043 |
+
+The other files took about what they took in task 10 (CP3 283 to 308, CP4 219 to 228, CP5 1198 to 1286, CP6 884 to 1099, CP7 1306 to 1563, CP8 184 to 231, the simulated visits 279 to 311). Every run was under the 30 second budget (proposed, Q7), so no run count was questioned. The whole of `npm test` took 48.8, 51.0 and 52.8 seconds in these runs, by the shell's clock.
 
 ### Counterexamples
 

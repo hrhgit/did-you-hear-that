@@ -113,7 +113,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 23.4_
   - _Decisions: D29_
 
-- [ ] 12. Add comparison with an earlier visit
+- [x] 12. Add comparison with an earlier visit
   - Create `src/session/find-earlier-visit.ts` (`findEarlierVisit`) and its test as in "Comparison with an earlier visit": the newest earlier visit with the same name; the shown visit never; an unlisted or null shown id; empty and space-only names; letter case and spacing ignored; visits with no name never match.
   - Create `src/copy/comparison-lines.ts` with `comparisonCopy`, `earlierVisitLine` and `earlierVisitUnreliableLine` word for word, and add its strings and outputs to `src/copy/result-copy.test.ts`.
   - Change `src/session/result-picture.ts` by adding the outline step, and add to `src/session/result-picture.test.ts`: outlines on shared floors only; none for unreliable earlier ears; outline depths on the shown floor's scale; the comparison line for an earlier visit marked as a whole and for one that was not; with `earlierVisit: null` every existing case gives the same picture as before. Change nothing else in `result-picture.ts`.
@@ -122,7 +122,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 20.1 to 20.6_
   - _Decisions: D25_
 
-- [ ] 13. Write the comparison property
+- [x] 13. Write the comparison property
   - Add earlier visits to `tests/properties/result-page-arbitraries.ts`, and let CP1 and CP2 draw an earlier visit or none.
   - Create the file for CP9 with its run count and a timeout of 120 seconds.
   - Run `npm test` three times and write the times of CP1, CP2 and CP9 under "Run counts and time" in `design.md`. If this spec's property files take more than 30 seconds together, stop and report the times.
@@ -130,7 +130,7 @@ Tasks 12 and 13 are the comparison with an earlier visit, which the roadmap cuts
   - _Requirements: 20.1 to 20.5, 21.1 to 21.4_
   - _Decisions: D25, D28_
 
-- [ ] 14. Final checks
+- [x] 14. Final checks
   - Run `npm run typecheck`, `npm test` (three times), `npm run lint`, `npm run check:copy` and `npm run build`.
   - Search `src/session/`, `src/storage/` and `src/copy/` for numbers that set a depth, a limit or a count outside `src/config` (R2.5). Search `src/ui/` and confirm that no file this spec could have touched imports `src/storage`.
   - Run `git status` and `git log` for this spec's commits: no file under `src/ui/`, `tests/e2e/`, `tests/properties/screen-leak/` or `.kiro/steering/`, nor `index.html`, `listen.html`, `src/main.ts`, the root `README.md` or `src/session/visit-flow-types.ts` was changed by this spec.
