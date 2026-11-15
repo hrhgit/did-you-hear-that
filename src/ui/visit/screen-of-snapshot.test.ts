@@ -8,9 +8,11 @@ import type {
   HeadphoneCheckSnapshot,
   PauseReason,
   SnapshotBase,
+  VisitLog,
   VisitRoom,
   VisitSnapshot,
   VisitStage,
+  VisitSummary,
 } from "../../session/visit-flow-types";
 import { screenOfSnapshot } from "./screen-of-snapshot";
 
@@ -230,6 +232,53 @@ describe("screenOfSnapshot", () => {
       });
     },
   );
+
+  it("leads from the last room to the picture", () => {
+    const screen = screenOfSnapshot({
+      ...base("missedSoundReplay", 3),
+      visitLog: {} as VisitLog,
+    });
+    expect(screen.sheet).toBe("notice");
+    expect(screen.stopShown).toBe(false);
+    expect(screen.notice).toEqual({
+      heading: leavingCopy.lastRoom.heading,
+      line: leavingCopy.lastRoom.line,
+      button: { label: leavingCopy.lastRoom.button, action: "proceed" },
+    });
+  });
+
+  it("names the result and holds nothing of it", () => {
+    const screen = screenOfSnapshot({
+      ...base("result", 3),
+      visitLog: {} as VisitLog,
+      summary: {} as VisitSummary,
+    });
+    expect(screen.sheet).toBe("result");
+    expect(screen.notice).toBeNull();
+    expect(screen.stopShown).toBe(false);
+    expect(screen.answersShown).toBe(false);
+    expect(screen.litRoom).toBeNull();
+    expect(JSON.stringify(screen)).not.toContain("summary");
+  });
+
+  it("says that the swapped repeat is not built and leads back to the picture", () => {
+    const screen = screenOfSnapshot({
+      ...base("swappedRepeat", 3),
+      room: stairs,
+      visitLog: {} as VisitLog,
+      summary: {} as VisitSummary,
+    });
+    expect(screen.sheet).toBe("notice");
+    expect(screen.stopShown).toBe(false);
+    expect(screen.notice).toEqual({
+      heading: leavingCopy.swappedRoomNotBuilt.heading,
+      line: leavingCopy.swappedRoomNotBuilt.line,
+      button: {
+        label: leavingCopy.swappedRoomNotBuilt.button,
+        action: "proceed",
+      },
+    });
+  });
 
   it("offers nothing on a device that cannot play", () => {
     const screen = screenOfSnapshot({

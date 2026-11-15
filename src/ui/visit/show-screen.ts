@@ -39,17 +39,20 @@ export function createScreenView(options: {
   readonly doc: Document;
   readonly view: Window;
   readonly page: VisitPage;
+  /** The result, which lies over the visit like a sheet and is drawn by `src/ui/result`. */
+  readonly result: Sheet;
   readonly house: HouseSection;
   readonly motion: MotionLayer;
   readonly caption: Caption;
 }): ScreenView {
-  const { doc, view, page, house, motion, caption } = options;
+  const { doc, view, page, result, house, motion, caption } = options;
   const sheets: Readonly<Record<SheetName, Sheet>> = {
     frontDoor: page.frontDoor,
     calibration: page.calibration,
     headphoneCheck: page.headphoneCheck,
     rules: page.rules,
     notice: page.notice,
+    result,
   };
   let shown: Screen | null = null;
   let focusKey: string | null = null;

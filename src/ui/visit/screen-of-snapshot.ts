@@ -15,10 +15,15 @@ export type ScreenRoomState = "dark" | "lit" | "visited" | "closed";
 
 /** The sheets of text. At most one is over the drawing at a time. */
 export type SheetName =
-  "frontDoor" | "calibration" | "headphoneCheck" | "rules" | "notice";
+  | "frontDoor"
+  | "calibration"
+  | "headphoneCheck"
+  | "rules"
+  | "notice"
+  | "result";
 
-/** What the button of the notice sheet does. */
-export type NoticeAction = "resume" | "backToFrontDoor" | "leaveAfterLastRoom";
+/** What the button of the notice sheet does. `proceed` is the flow's own next step. */
+export type NoticeAction = "resume" | "backToFrontDoor" | "proceed";
 
 /** The calibration sheet. */
 export interface CalibrationScreen {
@@ -57,7 +62,9 @@ export interface NoticeScreen {
 
 /**
  * Everything the page shows for one snapshot of the visit, as plain data. It is made from the
- * snapshot alone, and a snapshot holds nothing about a trial, so a screen cannot either.
+ * snapshot alone, and a snapshot holds nothing about a trial, so a screen cannot either. The
+ * result is only named here (`sheet: "result"`). Its picture is drawn by `src/ui/result` from the
+ * snapshot itself.
  */
 export interface Screen {
   /** The sheet over the drawing, or null inside a room and between two rooms. */
@@ -216,19 +223,30 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         restLine: betweenRoomsLine(snapshot.nextRoom.roomId),
       };
     case "missedSoundReplay":
-    case "result":
-    case "swappedRepeat":
-      // The replay and the result have their own specs. Until they are built, the visit ends
-      // here with a line that says so.
+      // The replay of the sounds a visitor did not catch has its own spec. Until it is built,
+      // the last room leads straight to the picture.
       return {
         ...base,
         sheet: "notice",
         notice: {
-          heading: leavingCopy.ended.heading,
-          line: leavingCopy.ended.line,
+          heading: leavingCopy.lastRoom.heading,
+          line: leavingCopy.lastRoom.line,
+          button: { label: leavingCopy.lastRoom.button, action: "proceed" },
+        },
+      };
+    case "result":
+      return { ...base, sheet: "result" };
+    case "swappedRepeat":
+      // The swapped repeat has its own spec. Until it is built, a line says so and leads back.
+      return {
+        ...base,
+        sheet: "notice",
+        notice: {
+          heading: leavingCopy.swappedRoomNotBuilt.heading,
+          line: leavingCopy.swappedRoomNotBuilt.line,
           button: {
-            label: leavingCopy.backButton,
-            action: "leaveAfterLastRoom",
+            label: leavingCopy.swappedRoomNotBuilt.button,
+            action: "proceed",
           },
         },
       };

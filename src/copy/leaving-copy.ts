@@ -1,6 +1,6 @@
 /**
  * What the visitor reads when a visit pauses, stops or reaches its last room. Stopping leads to a
- * short exit screen and never to part of a result (brief for the visit flow). The keys of
+ * short exit screen and never to part of a picture (brief for the visit flow). The keys of
  * `pauseLines` and `exitLines` are the visit flow's pause and exit reasons.
  */
 export const leavingCopy = Object.freeze({
@@ -27,9 +27,16 @@ export const leavingCopy = Object.freeze({
       "The house could not play its sounds on this device, so the visit ended. Nothing from this visit was kept.",
   }),
   backButton: "Back to the front door",
-  /** A stand-in for the result, until the result has been built. */
-  ended: Object.freeze({
+  /** After the last room, on the way to the picture of the visit. */
+  lastRoom: Object.freeze({
     heading: "That was the last room",
-    line: "You have been through every room of this visit. The picture of what you caught is still being built.",
+    line: "You have been through every room of this visit. The picture of what you caught is ready.",
+    button: "See the picture",
+  }),
+  /** A stand-in for a room visited again with left and right swapped, until that has been built. */
+  swappedRoomNotBuilt: Object.freeze({
+    heading: "This is not built yet",
+    line: "The house cannot yet take you through a room again with the headphones swapped. Your picture has not changed.",
+    button: "Back to the picture",
   }),
 });

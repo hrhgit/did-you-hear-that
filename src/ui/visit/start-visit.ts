@@ -1,11 +1,17 @@
+import { resultPageConfig } from "../../config/result-page-config";
 import { createSeededRandom } from "../../config/seeded-random";
 import { createSystemTimer } from "../../config/system-timer";
+import { createSystemWallClock } from "../../config/system-wall-clock";
 import { siteTitle } from "../../copy/site-title";
+import { createVisitArchive } from "../../session/create-visit-archive";
 import { createVisitFlow } from "../../session/create-visit-flow";
+import { resultPicture } from "../../session/result-picture";
 import { drawHouseSection } from "../house/draw-house-section";
 import { startMotionLayer } from "../house/motion-layer";
+import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
 import { listenForAnswers } from "./listen-for-answers";
+import type { VisitSnapshot } from "../../session/visit-flow-types";
 import { reactionOfEvent } from "./reaction-of-event";
 import { screenOfSnapshot } from "./screen-of-snapshot";
 import { createCaption } from "./show-caption";
@@ -16,9 +22,10 @@ const houseDrawingSeed = 1887;
 
 /**
  * Opens the house on the page: draws it, starts the visit flow and joins the two. This is the
- * one place that chooses seeds. It draws two with `crypto.getRandomValues`: one for the visit,
- * which decides every sound, and one for the dust, the lamp and the shadow under the door. The
- * two never meet, so nothing that moves on the page can follow a sound.
+ * one place that chooses seeds. It draws three with `crypto.getRandomValues`: one for the visit,
+ * which decides every sound, one for the dust, the lamp and the shadow under the door, and one
+ * for the ids of saved visits. They never meet, so nothing that moves on the page can follow a
+ * sound.
  * Throws if the document has no `<main>` element.
  */
 export function startVisit(
@@ -31,10 +38,11 @@ export function startVisit(
   }
   doc.title = siteTitle;
 
-  const seeds = new Uint32Array(2);
+  const seeds = new Uint32Array(3);
   view.crypto.getRandomValues(seeds);
   const visitSeed = seeds[0] ?? 0;
   const ambientSeed = seeds[1] ?? 0;
+  const archiveSeed = seeds[2] ?? 0;
 
   const page = buildVisitPage(doc, main);
   const house = drawHouseSection(doc, createSeededRandom(houseDrawingSeed));
@@ -51,10 +59,36 @@ export function startVisit(
     timer: createSystemTimer(),
     seed: visitSeed,
   });
+  // Saved visits stay in this browser. The archive is the only way the page reaches them.
+  const archive = createVisitArchive({
+    localStorage: () => view.localStorage,
+    wallClock: createSystemWallClock(),
+    seed: archiveSeed,
+    mode: "keep",
+  });
+  const resultView = createResultView({
+    doc,
+    view,
+    archive,
+    pictureOf: resultPicture,
+    // Comparison with an earlier visit is not built yet.
+    findEarlier: null,
+    comparisonCopy: null,
+    headphoneNameMaxCharacterCount:
+      resultPageConfig.headphoneNameMaxCharacterCount,
+    onSwappedRepeat: (roomIndex) => {
+      flow.chooseSwappedRepeat(roomIndex);
+    },
+    onBack: () => {
+      flow.backToFrontDoor();
+    },
+  });
+  page.root.append(resultView.element);
   const screenView = createScreenView({
     doc,
     view,
     page,
+    result: resultView,
     house,
     motion,
     caption: createCaption(view, page.caption),
@@ -118,12 +152,8 @@ export function startVisit(
       flow.resume();
     } else if (action === "backToFrontDoor") {
       flow.backToFrontDoor();
-    } else if (action === "leaveAfterLastRoom") {
-      // The replay and the result are not built yet. Walk past them to the front door.
-      for (let step = 0; step < 3 && flow.snapshot().canProceed; step += 1) {
-        flow.proceed();
-      }
-      flow.backToFrontDoor();
+    } else if (action === "proceed") {
+      flow.proceed();
     }
   });
 
@@ -143,8 +173,16 @@ export function startVisit(
       screenView.react(reaction);
     }
   });
-  flow.subscribe((snapshot) => {
+  const show = (snapshot: VisitSnapshot): void => {
+    // The picture is drawn before its sheet appears, and forgotten once the visit has left it.
+    // During a swapped repeat it is only out of sight.
+    if (snapshot.stage === "result") {
+      resultView.show(snapshot);
+    } else if (snapshot.stage !== "swappedRepeat") {
+      resultView.clear();
+    }
     screenView.show(screenOfSnapshot(snapshot));
-  });
-  screenView.show(screenOfSnapshot(flow.snapshot()));
+  };
+  flow.subscribe(show);
+  show(flow.snapshot());
 }
