@@ -1,6 +1,10 @@
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import type { GhostSoundId } from "../config/sound-id";
 import { ghostSoundIds } from "../config/sound-id";
+import {
+  earlierVisitLine,
+  earlierVisitUnreliableLine,
+} from "../copy/comparison-lines";
 import { limitsStatement } from "../copy/limits-statement";
 import { resultPageCopy } from "../copy/result-page-copy";
 import type { WingWords } from "../copy/result-lines";
@@ -25,11 +29,14 @@ import type { FloorScale } from "./light-depth-fraction";
 import { lightDepthFraction } from "./light-depth-fraction";
 import type {
   Ear,
+  EarlierWing,
   LocalDate,
+  PictureComparison,
   PictureFloor,
   PictureWing,
   ResultPicture,
   ResultPictureInput,
+  SavedVisit,
   VisitEarResult,
   VisitSummary,
   VisitType,
@@ -84,10 +91,25 @@ function words(result: VisitEarResult): WingWords {
   };
 }
 
+/**
+ * The earlier visit's mark in one wing, on the shown floor's own scale, so that in one wing the
+ * light and the outline answer one question (D25). No outline for an unreliable earlier ear.
+ */
+function earlierWing(
+  earlierResult: VisitEarResult,
+  scale: FloorScale,
+): EarlierWing {
+  return {
+    state: earlierResult.state,
+    outlineDepthFraction: lightDepthFraction(earlierResult, scale),
+  };
+}
+
 function wing(
   ear: Ear,
   result: VisitEarResult,
   scale: FloorScale,
+  earlierResult: VisitEarResult | null,
 ): PictureWing {
   return {
     ear,
@@ -98,16 +120,20 @@ function wing(
       result.state === "unreliable" && result.reasons.length > 0
         ? unreliableReasonLine(result.reasons[0])
         : null,
-    // Outlines of an earlier visit belong to the comparison tasks (design.md, "Comparison").
-    earlier: null,
+    // The outline of an earlier visit (design.md, "Comparison with an earlier visit").
+    earlier: earlierResult === null ? null : earlierWing(earlierResult, scale),
   };
 }
 
-/** One floor, from its own room summary and the visit's quietest level alone (D16). */
+/**
+ * One floor, from its own room summary and the visit's quietest level alone (D16), and the
+ * earlier visit's summary of the same room, or null when there is none.
+ */
 function floor(
   roomSummary: RoomSummary,
   floorDb: number,
   live: boolean,
+  earlierRoom: RoomSummary | null,
 ): PictureFloor {
   const { room, rightMinusLeftDb } = roomSummary;
   const scale: FloorScale = { searchCapDb: roomSummary.searchCapDb, floorDb };
@@ -119,8 +145,8 @@ function floor(
     },
     roomName: roomNames[room.roomId],
     pitchLabel: pitchLabel(room.frequencyHz),
-    left: wing("left", roomSummary.left, scale),
-    right: wing("right", roomSummary.right, scale),
+    left: wing("left", roomSummary.left, scale, earlierRoom?.left ?? null),
+    right: wing("right", roomSummary.right, scale, earlierRoom?.right ?? null),
     rightMinusLeftDb,
     differenceLabel: differenceLabel(rightMinusLeftDb),
     differenceLine: differenceLine(rightMinusLeftDb),
@@ -142,6 +168,33 @@ function floor(
   };
 }
 
+/** The earlier visit's room summary of the same room, or null when it did not enter that room. */
+function earlierRoomOf(
+  earlierVisit: SavedVisit | null,
+  roomSummary: RoomSummary,
+): RoomSummary | null {
+  return (
+    earlierVisit?.summary.rooms.find(
+      (earlierRoom) => earlierRoom.room.roomId === roomSummary.room.roomId,
+    ) ?? null
+  );
+}
+
+/** The line naming the earlier visit (D25), or null without one. */
+function comparisonOf(
+  earlierVisit: SavedVisit | null,
+): PictureComparison | null {
+  if (earlierVisit === null) {
+    return null;
+  }
+  return {
+    earlierSavedVisitId: earlierVisit.savedVisitId,
+    line: earlierVisit.summary.visitFalseAlarmRateAboveLimit
+      ? earlierVisitUnreliableLine(earlierVisit.savedOnLocalDate)
+      : earlierVisitLine(earlierVisit.savedOnLocalDate),
+  };
+}
+
 /**
  * Everything the page draws and says about one visit (result-page design.md, "`resultPicture`").
  * One floor per room summary in the summary's order, which is the order of the house from the
@@ -149,8 +202,10 @@ function floor(
  * own scale from its `searchCapDb` to the visit's `floorDb` (D15, D16). The only fields made from
  * more than one floor are the pooled false alarm line and the visit notice (D17). Every string
  * comes from `src/copy`, and the limits statement is the constant itself. Only a live result
- * offers the swapped repeat (D20). `earlier` and `comparison` stay null until the comparison tasks
- * are built. A pure function: the same input gives an equal, deeply frozen picture, and the input
+ * offers the swapped repeat (D20). With an earlier visit, each wing of a floor whose room the
+ * earlier visit also entered has its earlier state and an outline on this floor's own scale, and
+ * `comparison` names the earlier visit's date; without one, every `earlier` and `comparison` is
+ * null (D25). A pure function: the same input gives an equal, deeply frozen picture, and the input
  * is neither changed nor frozen.
  */
 export function resultPicture(input: ResultPictureInput): ResultPicture {
@@ -158,7 +213,12 @@ export function resultPicture(input: ResultPictureInput): ResultPicture {
   const { summary, visitType, localDate } = source;
   const roomCount = summary.rooms.length;
   const floors = summary.rooms.map((roomSummary) =>
-    floor(roomSummary, source.floorDb, source.kind === "live"),
+    floor(
+      roomSummary,
+      source.floorDb,
+      source.kind === "live",
+      earlierRoomOf(input.earlierVisit, roomSummary),
+    ),
   );
   const visitedRoomIds = new Set<GhostSoundId>(
     floors.map((visitFloor) => visitFloor.room.roomId),
@@ -184,7 +244,7 @@ export function resultPicture(input: ResultPictureInput): ResultPicture {
         }
       : null,
     limitsStatement,
-    comparison: null,
+    comparison: comparisonOf(input.earlierVisit),
     imageCaption: imageCaption(localDate, visitType, roomCount),
     imageFileBaseName: imageFileBaseName(localDate),
   };

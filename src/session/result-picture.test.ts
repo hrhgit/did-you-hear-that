@@ -534,6 +534,252 @@ describe("resultPicture", () => {
     });
   });
 
+  describe("an earlier visit", () => {
+    const fivePlans: readonly RoomPlan[] = [
+      { left: found(-20), right: found(-30) },
+      { left: found(-25), right: worseThanCap },
+      { left: betterThanFloor, right: found(-35) },
+      { left: found(-40), right: found(-40), searchCapDb: 0 },
+      { left: found(-10), right: found(-15) },
+    ];
+    const shownFull = visitOf("full", fivePlans);
+
+    function withEarlier(
+      visit: VisitToSave,
+      earlierVisit: SavedVisit | null,
+    ): ResultPicture {
+      return resultPicture({
+        kind: "live",
+        visit,
+        localDate: "2026-11-20",
+        earlierVisit,
+      });
+    }
+
+    function withoutComparison(picture: ResultPicture) {
+      return {
+        ...picture,
+        comparison: null,
+        floors: picture.floors.map((floor) => ({
+          ...floor,
+          left: { ...floor.left, earlier: null },
+          right: { ...floor.right, earlier: null },
+        })),
+      };
+    }
+
+    it("gives outlines on the floors whose room the earlier visit also entered, and only there", () => {
+      const earlier = savedVisitOf(
+        visitOf("quick", [
+          { left: found(-30), right: found(-30) },
+          { left: found(-30), right: found(-30) },
+          { left: found(-30), right: found(-30) },
+        ]),
+      );
+      const picture = withEarlier(shownFull, earlier);
+      expect(
+        picture.floors.map((floor) => [
+          floor.room.roomId,
+          floor.left.earlier !== null,
+          floor.right.earlier !== null,
+        ]),
+      ).toEqual([
+        ["cellar", false, false],
+        ["corridor", true, true],
+        ["nursery", false, false],
+        ["stairs", true, true],
+        ["attic", true, true],
+      ]);
+      expect(picture.floors[0]?.left.earlier).toBeNull();
+      expect(picture.floors[1]?.left.earlier).toEqual({
+        state: "found",
+        outlineDepthFraction: lightDepthFraction(
+          { ...counts, state: "found", thresholdDb: -30 },
+          { searchCapDb: 15, floorDb: hearingMethodConfig.floorDb },
+        ),
+      });
+    });
+
+    it("matches floors by room, not by their place in the visit", () => {
+      const quickShown = visitOf("quick", [
+        { left: found(-20), right: found(-20) },
+        { left: found(-20), right: found(-20) },
+        { left: found(-20), right: found(-20) },
+      ]);
+      const picture = withEarlier(quickShown, savedVisitOf(shownFull));
+      // The quick visit's rooms are the corridor, the stairs and the attic: the long visit's
+      // second, fourth and fifth rooms.
+      expect(picture.floors.map((floor) => floor.left.earlier?.state)).toEqual([
+        "found",
+        "found",
+        "found",
+      ]);
+      expect(picture.floors.map((floor) => floor.right.earlier?.state)).toEqual(
+        ["worseThanCap", "found", "found"],
+      );
+      expect(picture.floors[1]?.right.earlier?.outlineDepthFraction).toBe(
+        lightDepthFraction(
+          { ...counts, state: "found", thresholdDb: -40 },
+          { searchCapDb: 15, floorDb: hearingMethodConfig.floorDb },
+        ),
+      );
+    });
+
+    it("gives each state of an earlier ear its outline, and none for an unreliable one", () => {
+      const earlier = savedVisitOf(
+        visitOf("full", [
+          { left: betterThanFloor, right: worseThanCap },
+          { left: unreliable("trialLimit"), right: found(-30) },
+          { left: found(-30), right: unreliable("inconsistentCatch") },
+          { left: found(-30), right: found(-30) },
+          { left: found(-30), right: found(-30) },
+        ]),
+      );
+      const picture = withEarlier(shownFull, earlier);
+      expect(picture.floors[0]?.left.earlier).toEqual({
+        state: "betterThanFloor",
+        outlineDepthFraction: 1,
+      });
+      expect(picture.floors[0]?.right.earlier).toEqual({
+        state: "worseThanCap",
+        outlineDepthFraction: 0,
+      });
+      expect(picture.floors[1]?.left.earlier).toEqual({
+        state: "unreliable",
+        outlineDepthFraction: null,
+      });
+      expect(picture.floors[2]?.right.earlier).toEqual({
+        state: "unreliable",
+        outlineDepthFraction: null,
+      });
+    });
+
+    it("places an outline on the shown floor's own scale, not the earlier floor's", () => {
+      // The shown stairs reach only 0 dB; the earlier stairs reached 15 dB.
+      const earlier = savedVisitOf(
+        visitOf("full", [
+          { left: found(-30), right: found(-30) },
+          { left: found(-30), right: found(-30) },
+          { left: found(-30), right: found(-30) },
+          { left: found(-25), right: found(5) },
+          { left: found(-30), right: found(-30) },
+        ]),
+        { floorDb: -60 },
+      );
+      const picture = withEarlier(shownFull, earlier);
+      const stairs = picture.floors[3];
+      expect(stairs?.room.roomId).toBe("stairs");
+      expect(stairs?.left.earlier?.outlineDepthFraction).toBeCloseTo(
+        0.1 + (0.8 * 25) / (0 - hearingMethodConfig.floorDb),
+        10,
+      );
+      // An earlier threshold louder than the shown floor's loudest is held at its shallow end.
+      expect(stairs?.right.earlier?.outlineDepthFraction).toBe(0.1);
+      // A saved shown visit uses its own floorDb for the outlines too.
+      const savedPicture = resultPicture({
+        kind: "saved",
+        savedVisit: savedVisitOf(shownFull, { floorDb: -80 }),
+        earlierVisit: earlier,
+      });
+      expect(
+        savedPicture.floors[3]?.left.earlier?.outlineDepthFraction,
+      ).toBeCloseTo(0.1 + (0.8 * 25) / 80, 10);
+    });
+
+    it("draws the outline and the light on one scale, so equal levels give equal depths", () => {
+      const picture = withEarlier(shownFull, savedVisitOf(shownFull));
+      for (const floor of picture.floors) {
+        for (const shownWing of [floor.left, floor.right]) {
+          expect(shownWing.earlier).toEqual({
+            state: shownWing.state,
+            outlineDepthFraction: shownWing.lightDepthFraction,
+          });
+        }
+      }
+    });
+
+    it("names the earlier visit's date when it was not marked as a whole", () => {
+      const earlier = savedVisitOf(shownFull, {
+        savedVisitId: "0a1b2c3d",
+        savedOnLocalDate: "2026-11-12",
+      });
+      expect(withEarlier(shownFull, earlier).comparison).toEqual({
+        earlierSavedVisitId: "0a1b2c3d",
+        line: "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+      });
+    });
+
+    it("says that an earlier visit marked as a whole has no outlines, and draws none", () => {
+      const guessed = visitOf(
+        "full",
+        fivePlans.map((plan) => ({
+          ...plan,
+          noSoundTrialCount: 7,
+          falseAlarmCount: 2,
+        })),
+      );
+      expect(guessed.summary.visitFalseAlarmRateAboveLimit).toBe(true);
+      const earlier = savedVisitOf(guessed, {
+        savedVisitId: "0a1b2c3e",
+        savedOnLocalDate: "2026-02-28",
+      });
+      const picture = withEarlier(shownFull, earlier);
+      expect(picture.comparison).toEqual({
+        earlierSavedVisitId: "0a1b2c3e",
+        line: "Your visit of 28 February 2026 with headphones of the same name was unreliable as a whole, so it has no outlines.",
+      });
+      for (const floor of picture.floors) {
+        expect(floor.left.earlier?.outlineDepthFraction).toBeNull();
+        expect(floor.right.earlier?.outlineDepthFraction).toBeNull();
+      }
+    });
+
+    it("changes nothing but the outlines and the comparison", () => {
+      const earlier = savedVisitOf(visitOf("quick", mixedQuick));
+      for (const shown of [shownFull, visitOf("quick", mixedQuick)]) {
+        expect(withoutComparison(withEarlier(shown, earlier))).toEqual(
+          withEarlier(shown, null),
+        );
+        expect(
+          withoutComparison(
+            resultPicture({
+              kind: "saved",
+              savedVisit: savedVisitOf(shown),
+              earlierVisit: earlier,
+            }),
+          ),
+        ).toEqual(saved(savedVisitOf(shown)));
+      }
+    });
+
+    it("gives, without an earlier visit, every outline and the comparison null", () => {
+      for (const picture of [
+        withEarlier(shownFull, null),
+        live(visitOf("quick", mixedQuick)),
+        saved(savedVisitOf(visitOf("quick", mixedQuick))),
+      ]) {
+        expect(picture.comparison).toBeNull();
+        for (const floor of picture.floors) {
+          expect(floor.left.earlier).toBeNull();
+          expect(floor.right.earlier).toBeNull();
+        }
+        expect(withoutComparison(picture)).toEqual(picture);
+      }
+    });
+
+    it("gives a deeply frozen picture and neither changes nor freezes the earlier visit", () => {
+      const earlier: SavedVisit = JSON.parse(
+        JSON.stringify(savedVisitOf(visitOf("quick", mixedQuick))),
+      );
+      const before = JSON.stringify(earlier);
+      const picture = withEarlier(shownFull, earlier);
+      expect(isDeepFrozen(picture)).toBe(true);
+      expect(JSON.stringify(earlier)).toBe(before);
+      expect(Object.isFrozen(earlier.summary.rooms[0])).toBe(false);
+      expect(withEarlier(shownFull, earlier)).toEqual(picture);
+    });
+  });
+
   describe("a pure function", () => {
     it("gives a deeply frozen picture", () => {
       expect(isDeepFrozen(live(visitOf("quick", mixedQuick)))).toBe(true);

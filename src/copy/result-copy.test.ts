@@ -4,6 +4,12 @@ import { bannedTerms } from "../config/banned-terms";
 import type { VisitType } from "../config/hearing-method-config";
 import type { GhostSoundId } from "../config/sound-id";
 import { ghostSoundIds } from "../config/sound-id";
+import * as comparisonLinesModule from "./comparison-lines";
+import {
+  comparisonCopy,
+  earlierVisitLine,
+  earlierVisitUnreliableLine,
+} from "./comparison-lines";
 import { findBannedTerms } from "./find-banned-terms";
 import * as resultPage from "./result-page-copy";
 import { resultPageCopy } from "./result-page-copy";
@@ -63,6 +69,7 @@ const constantStrings = [
   ...stringsOf("resultPage", resultPage),
   ...stringsOf("resultLines", resultLinesModule),
   ...stringsOf("savedVisitLines", savedVisitLinesModule),
+  ...stringsOf("comparisonLines", comparisonLinesModule),
 ];
 
 const wingStates: readonly WingStateName[] = [
@@ -176,6 +183,7 @@ function representativeOutputs(): string[] {
   }
   for (const date of dates) {
     outputs.push(visitDateLabel(date), imageFileBaseName(date));
+    outputs.push(earlierVisitLine(date), earlierVisitUnreliableLine(date));
     for (const visitType of visitTypes) {
       for (const roomCount of roomCounts) {
         outputs.push(
@@ -689,6 +697,47 @@ describe("unreadableEntriesLine", () => {
   it("refuses a count below 1 or not whole", () => {
     for (const bad of [0, -1, 1.5, Number.NaN]) {
       expect(() => unreadableEntriesLine(bad), String(bad)).toThrow(RangeError);
+    }
+  });
+});
+
+describe("the comparison's copy", () => {
+  it("holds the fixed strings of the design, word for word", () => {
+    expect(comparisonCopy).toEqual({
+      headphoneNameHint:
+        "Give the same name on a later visit, and this visit is drawn there as faint outlines.",
+      noEarlierVisitLine:
+        "No earlier visit with headphones of this name is saved in this browser.",
+    });
+    expect(Object.isFrozen(comparisonCopy)).toBe(true);
+  });
+
+  it("names the earlier visit's date and says each visit is relative to its own calibration", () => {
+    expect(earlierVisitLine("2026-11-12")).toBe(
+      "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+    );
+    expect(earlierVisitLine("2027-01-01")).toBe(
+      "The faint outlines are your visit of 1 January 2027 with headphones of the same name. Each visit is relative to its own calibration.",
+    );
+  });
+
+  it("says that an earlier visit unreliable as a whole has no outlines", () => {
+    expect(earlierVisitUnreliableLine("2026-11-12")).toBe(
+      "Your visit of 12 November 2026 with headphones of the same name was unreliable as a whole, so it has no outlines.",
+    );
+  });
+
+  it("refuses a date that is not a calendar date", () => {
+    for (const bad of [
+      "",
+      "2026-11-31",
+      "2026-02-29",
+      "2026-13-01",
+      "12 November 2026",
+      "2026-1-5",
+    ]) {
+      expect(() => earlierVisitLine(bad), bad).toThrow(RangeError);
+      expect(() => earlierVisitUnreliableLine(bad), bad).toThrow(RangeError);
     }
   });
 });
