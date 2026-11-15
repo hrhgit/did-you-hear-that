@@ -1255,7 +1255,7 @@ No number or rule from a steering file is changed or loosened by this spec.
 
 None of these is decided here. The first is a new acceptance number that this spec proposes and does not treat as approved.
 
-**Q1. The limit of the visit-level false alarm rule.** The config holds `visitFalseAlarmRateUnreliableAboveFraction` at the proposed value 0.2. A visit whose false alarms over the no-sound trials of all its rooms are above it is marked unreliable as a whole: every ear of every floor is shown as unreliable and the visitor is invited to repeat the visit. The per-room limit of 30 percent stays as it is. The measurement to choose from is in "Measurements", and `npx tsx tests/listeners/print-visit-rule-measurement.ts` prints it again. In short:
+**Q1. The limit of the visit-level false alarm rule.** The config holds `visitFalseAlarmRateUnreliableAboveFraction` at the proposed value 0.2. A visit whose false alarms over the no-sound trials of all its rooms are above it is marked unreliable as a whole: every ear of every floor is shown as unreliable and the visitor is invited to repeat the visit. The per-room limit of 30 percent stays as it is. The measurement to choose from is in "Measurements", and `npx tsx tests/listeners/print-visit-rule-measurement.ts` prints it again. The numbers of that script's run in task 5, and the four printed figures in which they differ from "Measurements", are in D36. In short:
 
 | Visit limit | Wrong ears of the regression 4 listener removed (quick / full) | Attentive visits marked | Plausible visits marked, listeners with false alarm rate 0.05 to 0.10 (quick / full) |
 |---|---|---|---|
@@ -1345,3 +1345,100 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 **D34. A no-sound trial needs no audio clock reading.** The output shell exposes only the timestamp pair, not its current audio time. The no-sound window is therefore computed on the page clock from the presentation time, the lead and the last measured offset (D4), which gives the same result as converting a would-be start.
 
 **D35. Every visit has a token, and late callbacks check it.** An activation that resolves after the visitor stopped, or a timer of a dropped visit, must not act on the next visit. Each visit and each stage entry gets a new token; callbacks compare it and do nothing if it changed.
+
+**D36. The measurement of task 5 gives the counts of "Measurements".** `npx tsx tests/listeners/print-visit-rule-measurement.ts` was run on the working tree of task 5, on top of commit 9e7d506, with the task's files not yet committed. It took 6.3 s and wrote no file. It plays the cases, seeds and visit counts of "Measurements" through `measureVisitFalseAlarmRule`, which applies `judgeVisitFalseAlarms` at each limit. A fixed listener's visits are drawn from `listenerSetSeed(parameters)` XOR the number of rooms (regression 4: 4040559323 quick, 4040559325 full; D43 set: 1113057959 quick, 1113057953 full); each room draws its engine seed and then its listener seed. A range listener draws its six parameters with `drawListenerParameters` per visit, from seed 20261201 (quick) or 20261202 (full), before the seeds of its rooms. Nothing here changes the proposed limit (Q1).
+
+Every figure in "Measurements" came out the same except four. In each of the four the exact value lies half way between two printed digits and was rounded the other way, so the underlying count is the same:
+
+| Cell | Count | Exact | Design | This run |
+|---|---|---|---|---|
+| D43 set, quick, 0.30, visits marked | 949 of 2000 | 47.45 % | 47.5 % | 47.4 % |
+| D43 set, full, 0.20, Wrong | 123 of 12 000 ears | 1.025 % | 1.02 % | 1.03 % |
+| D43 set, full, 0.15, Wrong | 33 of 12 000 ears | 0.275 % | 0.28 % | 0.27 % |
+| Regression 4, quick, 0.15, Wrong removed | 77 of 668 left | 88.47 % | 89 % | 88 % |
+
+The last one differs because the design computed the share removed from the rounded percentages (1 − 0.64 / 5.57). It also stands in Q1's table as 89 %; the measured value is 88 %.
+
+The run, in full (A / F / W is Accurate / Flagged / Wrong; with a limit, every ear of a marked visit counts as Flagged):
+
+| Listener, visit | Visit limit | Visits marked (count) | Accurate | Flagged | Wrong (count) | Wrong removed |
+|---|---|---|---|---|---|---|
+| Regression 4, quick | none | 0.0 % (0) | 15.3 % | 79.1 % | 5.57 % (668) | |
+| | 0.30 | 46.9 % (937) | 11.0 % | 85.1 % | 3.94 % (473) | 29 % |
+| | 0.25 | 64.2 % (1284) | 8.0 % | 89.1 % | 2.92 % (350) | 48 % |
+| | 0.20, proposed | 82.2 % (1643) | 4.5 % | 93.9 % | 1.60 % (192) | 71 % |
+| | 0.15 | 93.3 % (1865) | 2.0 % | 97.4 % | 0.64 % (77) | 88 % |
+| Regression 4, full | none | 0.0 % (0) | 16.1 % | 78.7 % | 5.23 % (628) | |
+| | 0.30 | 48.5 % (582) | 10.5 % | 86.1 % | 3.40 % (408) | 35 % |
+| | 0.25 | 72.0 % (864) | 6.5 % | 91.3 % | 2.21 % (265) | 58 % |
+| | 0.20, proposed | 88.5 % (1062) | 2.9 % | 96.0 % | 1.09 % (131) | 79 % |
+| | 0.15 | 96.9 % (1163) | 0.9 % | 98.8 % | 0.32 % (38) | 94 % |
+| D43 set, quick | none | 0.0 % (0) | 13.2 % | 80.8 % | 5.95 % (714) | |
+| | 0.30 | 47.4 % (949) | 9.4 % | 86.3 % | 4.29 % (515) | 28 % |
+| | 0.25 | 67.2 % (1343) | 6.7 % | 90.2 % | 3.14 % (377) | 47 % |
+| | 0.20, proposed | 83.7 % (1674) | 3.6 % | 94.6 % | 1.78 % (214) | 70 % |
+| | 0.15 | 93.2 % (1863) | 1.7 % | 97.5 % | 0.81 % (97) | 86 % |
+| D43 set, full | none | 0.0 % (0) | 13.5 % | 80.7 % | 5.79 % (695) | |
+| | 0.30 | 49.4 % (593) | 8.7 % | 87.6 % | 3.69 % (443) | 36 % |
+| | 0.25 | 72.0 % (864) | 5.3 % | 92.4 % | 2.28 % (274) | 61 % |
+| | 0.20, proposed | 89.1 % (1069) | 2.2 % | 96.7 % | 1.03 % (123) | 82 % |
+| | 0.15 | 97.4 % (1169) | 0.6 % | 99.1 % | 0.27 % (33) | 95 % |
+
+Pooled no-sound trials per visit (median, fewest, most): regression 4 quick 21, 11, 34; full 35, 25, 51; D43 set quick 22, 13, 35; full 36, 25, 50.
+
+Attentive_Range, 2000 visits per type: no visit marked at 0.30, 0.25 or 0.20; at 0.15, 0.4 % of quick and 0.1 % of full visits. A / F / W: 97.6 / 2.4 / 0.01 % (quick) and 97.4 / 2.6 / 0.00 % (full) with no rule and at every limit from 0.20 up; 97.3 / 2.7 / 0.01 % and 97.3 / 2.7 / 0.00 % at 0.15. A room marked by the per-room rule: 2.5 % of quick and 4.0 % of full visits.
+
+Plausible_Range, 6000 visits per type. Two kinds of figure are new here: the share of all visits marked, and the bins above 0.30 in steps of 0.05, which R23.2 asks for and the design's table merged.
+
+| Visit limit | Visits marked (quick / full) | A / F / W (quick) | A / F / W (full) |
+|---|---|---|---|
+| none | 0.0 % / 0.0 % | 44.9 / 53.1 / 2.00 % | 44.2 / 53.7 / 2.15 % |
+| 0.30 | 37.9 % / 39.1 % | 39.4 / 59.3 / 1.27 % | 38.2 / 60.7 / 1.16 % |
+| 0.25 | 46.1 % / 48.1 % | 36.7 / 62.3 / 1.04 % | 35.2 / 64.0 / 0.83 % |
+| 0.20, proposed | 55.8 % / 57.3 % | 32.4 / 66.9 / 0.72 % | 31.1 / 68.3 / 0.59 % |
+| 0.15 | 66.2 % / 68.1 % | 26.4 / 73.1 / 0.49 % | 25.2 / 74.5 / 0.34 % |
+
+A room marked by the per-room rule: 63.0 % of quick and 72.6 % of full visits.
+
+| Listener's false alarm rate | Visits (quick) | A room marked | 0.30 | 0.25 | 0.20, proposed | 0.15 |
+|---|---|---|---|---|---|---|
+| 0.00 to 0.05 | 581 | 4.5 % | 0.0 % | 0.2 % | 0.2 % | 1.9 % |
+| 0.05 to 0.10 | 613 | 18.3 % | 1.1 % | 1.6 % | 5.5 % | 14.2 % |
+| 0.10 to 0.15 | 600 | 32.8 % | 2.8 % | 6.7 % | 15.8 % | 36.0 % |
+| 0.15 to 0.20 | 647 | 53.8 % | 11.0 % | 19.8 % | 37.1 % | 60.0 % |
+| 0.20 to 0.25 | 616 | 64.8 % | 19.2 % | 33.4 % | 53.4 % | 74.0 % |
+| 0.25 to 0.30 | 567 | 77.6 % | 36.9 % | 54.3 % | 71.6 % | 86.9 % |
+| 0.30 to 0.35 | 598 | 88.5 % | 59.4 % | 75.3 % | 88.3 % | 95.0 % |
+| 0.35 to 0.40 | 578 | 95.3 % | 72.0 % | 84.3 % | 92.6 % | 97.1 % |
+| 0.40 to 0.45 | 595 | 97.6 % | 85.5 % | 91.3 % | 97.3 % | 99.2 % |
+| 0.45 to 0.50 | 605 | 99.0 % | 94.4 % | 97.5 % | 99.2 % | 99.8 % |
+| 0.30 to 0.50 together | 2376 | 95.1 % | 77.9 % | 87.1 % | 94.4 % | 97.8 % |
+
+| Listener's false alarm rate | Visits (full) | A room marked | 0.30 | 0.25 | 0.20, proposed | 0.15 |
+|---|---|---|---|---|---|---|
+| 0.00 to 0.05 | 583 | 5.8 % | 0.0 % | 0.0 % | 0.0 % | 0.5 % |
+| 0.05 to 0.10 | 620 | 27.6 % | 0.3 % | 0.3 % | 1.5 % | 9.7 % |
+| 0.10 to 0.15 | 595 | 48.4 % | 1.0 % | 3.5 % | 11.1 % | 35.5 % |
+| 0.15 to 0.20 | 601 | 69.9 % | 6.8 % | 15.5 % | 32.8 % | 62.4 % |
+| 0.20 to 0.25 | 623 | 83.3 % | 16.2 % | 34.8 % | 57.8 % | 81.1 % |
+| 0.25 to 0.30 | 608 | 93.6 % | 38.0 % | 57.7 % | 80.3 % | 94.1 % |
+| 0.30 to 0.35 | 610 | 97.7 % | 62.3 % | 82.0 % | 93.9 % | 99.0 % |
+| 0.35 to 0.40 | 572 | 99.7 % | 80.4 % | 92.3 % | 98.1 % | 99.7 % |
+| 0.40 to 0.45 | 595 | 100.0 % | 91.8 % | 97.8 % | 99.2 % | 100.0 % |
+| 0.45 to 0.50 | 593 | 100.0 % | 97.5 % | 99.5 % | 99.8 % | 100.0 % |
+| 0.30 to 0.50 together | 2370 | 99.3 % | 82.9 % | 92.8 % | 97.7 % | 99.7 % |
+
+A bin holds the rates from its lower edge up to, not including, its upper edge; the last holds 0.50 as well.
+
+The CP2 and CP3 listener sets of the threshold search, played as whole visits (134 quick or 80 full visits per set, from each set's own seed XOR the number of rooms). The full-visit rows are new here.
+
+| Sets | Visit | none | 0.30 | 0.25 | 0.20, proposed | 0.15 |
+|---|---|---|---|---|---|---|
+| CP2, 100 Plausible sets (seed 20261116): lowest Accurate or Flagged; limit 93 % | quick | 94.3 % | 95.9 % | 96.5 % | 97.3 % | 97.3 % |
+| | full | 93.3 % | 95.1 % | 95.5 % | 97.0 % | 97.0 % |
+| CP3, 50 Attentive sets (seed 20261117): lowest Accurate; limit 88 %, Flagged at most 10 % | quick | 92.0 % | 92.0 % | 92.0 % | 92.0 % | 91.7 % |
+| | full | 93.0 % | 93.0 % | 93.0 % | 93.0 % | 92.9 % |
+
+No set is below its limit in any column.
+
+CP11 holds at the value in config with the margin the design states: 71 and 79 percent of the regression 4 listener's Wrong ears removed and 70 and 82 percent of the D43 set's, against at least 50 percent; no Attentive visit marked, against at most 0.5 percent. These numbers describe the proposed value 0.2 and decide nothing about it (Q1).
