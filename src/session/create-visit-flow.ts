@@ -8,6 +8,7 @@ import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
+import { replayCopy } from "../copy/replay-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
@@ -38,6 +39,7 @@ import type {
   ExitReason,
   LoggedCalibration,
   PauseReason,
+  ReplayAnnouncing,
   ScoredVisitTrial,
   SnapshotBase,
   TrialReaction,
@@ -75,6 +77,26 @@ const drawSeed = (source: RandomSource): number =>
   Math.floor(source.next() * seedRangeCount);
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
+
+/**
+ * The stand-in view of the missed-sound replay (missed-sound-replay tasks.md, task 1). It promises
+ * nothing: no announcement, no counts, and no start, so the stage plays nothing. Task 12 replaces
+ * it with the Replay_Controller's view.
+ */
+const standInReplayView: ReplayAnnouncing = Object.freeze({
+  phase: "announcing",
+  heading: replayCopy.heading,
+  missedSoundCount: 0,
+  replaySoundCount: 0,
+  selectionLine: null,
+  stopLabel: replayCopy.stopButton,
+  canStart: false,
+  canSkip: true,
+  // `proceed` leads to the result, so its control skips the replay.
+  proceedLabel: replayCopy.skipButton,
+  announcementLines: Object.freeze([]),
+  startLabel: replayCopy.startButton,
+});
 
 const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
 
@@ -365,6 +387,7 @@ export function createVisitFlow(
         return Object.freeze({
           ...base("missedSoundReplay"),
           visitLog: logOf(current),
+          replay: standInReplayView,
         });
       case "result":
         return Object.freeze({
@@ -1065,6 +1088,11 @@ export function createVisitFlow(
         current.swappedRoom = roomSummary.room;
         enterStage("swappedRepeat");
       });
+    },
+
+    startReplay() {
+      // Does nothing in every stage until task 12 of missed-sound-replay tasks.md builds the
+      // replay, so the stage plays nothing before its checks exist (missed-sound-replay R1.5).
     },
 
     backToFrontDoor() {

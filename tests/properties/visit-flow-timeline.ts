@@ -99,6 +99,7 @@ const flowActionNames = [
   "resume",
   "stop",
   "chooseSwappedRepeat",
+  "startReplay",
   "backToFrontDoor",
 ] as const satisfies readonly (keyof VisitFlow)[];
 

@@ -347,6 +347,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     resume: recorded("resume"),
     stop: recorded("stop"),
     chooseSwappedRepeat: recorded("chooseSwappedRepeat"),
+    startReplay: recorded("startReplay"),
     backToFrontDoor: recorded("backToFrontDoor"),
   });
 

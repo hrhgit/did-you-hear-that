@@ -13,13 +13,25 @@ import type {
   HeadphoneCheckSnapshot,
   LoggedEarResult,
   LoggedRoomResult,
+  MissedSoundReplay,
   MissedSoundReplaySnapshot,
+  PauseReason,
+  ReplayAnnouncing,
+  ReplayEnding,
+  ReplayFinished,
+  ReplayNothingMissed,
+  ReplayPauseReason,
+  ReplayPhase,
+  ReplayPlaying,
+  ReplaySoundStartedEvent,
   ResultSnapshot,
   RoomSnapshot,
   RulesSnapshot,
   ScoredVisitTrial,
   SwappedRepeatSnapshot,
   UnsupportedSnapshot,
+  VisitEvent,
+  VisitFlow,
   VisitSnapshot,
   VisitStage,
 } from "./visit-flow-types";
@@ -45,6 +57,11 @@ interface SnapshotOfStage {
 type SnapshotFor<Stage extends VisitStage> = Extract<
   VisitSnapshot,
   { readonly stage: Stage }
+>;
+
+type ReplayViewFor<Phase extends ReplayPhase> = Extract<
+  MissedSoundReplay,
+  { readonly phase: Phase }
 >;
 
 describe("visit-flow-types", () => {
@@ -98,5 +115,48 @@ describe("visit-flow-types", () => {
     expectTypeOf<
       SnapshotFor<"unsupported">
     >().toEqualTypeOf<UnsupportedSnapshot>();
+  });
+  // The additions of the missed-sound replay (missed-sound-replay design.md, "Interface contract").
+
+  it("gives VisitFlow a startReplay that takes nothing and returns nothing", () => {
+    expectTypeOf<VisitFlow["startReplay"]>().toEqualTypeOf<() => void>();
+  });
+
+  it("gives the replay snapshot its replay view", () => {
+    expectTypeOf<
+      MissedSoundReplaySnapshot["replay"]
+    >().toEqualTypeOf<MissedSoundReplay>();
+  });
+
+  it("has every replay phase in exactly one MissedSoundReplay member", () => {
+    expectTypeOf<MissedSoundReplay["phase"]>().toEqualTypeOf<ReplayPhase>();
+    expectTypeOf<
+      ReplayViewFor<"nothingMissed">
+    >().toEqualTypeOf<ReplayNothingMissed>();
+    expectTypeOf<
+      ReplayViewFor<"announcing">
+    >().toEqualTypeOf<ReplayAnnouncing>();
+    expectTypeOf<ReplayViewFor<"playing">>().toEqualTypeOf<ReplayPlaying>();
+    expectTypeOf<ReplayViewFor<"finished">>().toEqualTypeOf<ReplayFinished>();
+  });
+
+  it("adds replaySoundStarted to VisitEvent as ReplaySoundStartedEvent", () => {
+    expectTypeOf<
+      Extract<VisitEvent, { readonly kind: "replaySoundStarted" }>
+    >().toEqualTypeOf<ReplaySoundStartedEvent>();
+  });
+
+  it("gives the replay's pause reasons as hidden and interrupted, both pause reasons", () => {
+    expectTypeOf<ReplayPauseReason>().toEqualTypeOf<"hidden" | "interrupted">();
+    expectTypeOf<ReplayPauseReason>().toExtend<PauseReason>();
+  });
+
+  it("lists the replay's phases and endings", () => {
+    expectTypeOf<ReplayPhase>().toEqualTypeOf<
+      "nothingMissed" | "announcing" | "playing" | "finished"
+    >();
+    expectTypeOf<ReplayEnding>().toEqualTypeOf<
+      "allPlayed" | "deviceChanged" | "soundRefused"
+    >();
   });
 });

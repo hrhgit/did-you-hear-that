@@ -341,6 +341,7 @@ type ActionName =
   | "resume"
   | "stop"
   | "chooseSwappedRepeat"
+  | "startReplay"
   | "backToFrontDoor";
 
 const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
@@ -357,6 +358,7 @@ const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
   resume: (flow) => flow.resume(),
   stop: (flow) => flow.stop(),
   chooseSwappedRepeat: (flow) => flow.chooseSwappedRepeat(0),
+  startReplay: (flow) => flow.startReplay(),
   backToFrontDoor: (flow) => flow.backToFrontDoor(),
 };
 
@@ -1635,4 +1637,27 @@ describe("createVisitFlow: the response window", () => {
       expect(event.trial.responseTimeMs!).toBeLessThan(responseWindowMs);
     }
   });
+});
+
+describe("createVisitFlow: the missed-sound replay before it plays (missed-sound-replay R1.5)", () => {
+  it("gives a replay view that cannot start, and startReplay plays nothing", async () => {
+    const harness = createHarness();
+    await toMissedSoundReplay(harness);
+    const before = harness.flow.snapshot();
+    if (before.stage !== "missedSoundReplay") {
+      throw new Error(`Expected the replay, but the stage is ${before.stage}.`);
+    }
+    expect(before.replay).toMatchObject({
+      phase: "announcing",
+      canStart: false,
+    });
+    const callCount = harness.calls.length;
+    const scheduleCount = harness.backend.scheduled().length;
+    harness.flow.startReplay();
+    await harness.settle();
+    harness.advance(10_000);
+    expect(harness.calls.length).toBe(callCount);
+    expect(harness.backend.scheduled().length).toBe(scheduleCount);
+    expect(harness.flow.snapshot()).toEqual(before);
+  }, 60_000);
 });

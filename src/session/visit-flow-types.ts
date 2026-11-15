@@ -102,6 +102,13 @@ export interface VisitFlow {
   stop(): void;
   /** Result: opens the swapped repeat for a room whose summary offers it. */
   chooseSwappedRepeat(roomIndex: number): void;
+  /**
+   * Missed-sound replay, phase `announcing`: starts the sounds. Call it from the visitor's press,
+   * because it may start sound (it calls `activate` within the call). Does nothing in any other
+   * phase or stage, or while a pause holds. In this stage `proceed` skips the replay, or goes on to
+   * the result once it has finished, and `stop` silences at once and shows the result.
+   */
+  startReplay(): void;
   /** Exit or result: drops the visit and shows the front door again. */
   backToFrontDoor(): void;
 }
@@ -223,10 +230,12 @@ export interface BetweenRoomsSnapshot extends SnapshotBase<"betweenRooms"> {
   readonly nextRoom: VisitRoom;
 }
 
-/** The replay of missed sounds. The missed-sound replay spec adds its sounds and its fields. */
+/** The replay of missed sounds (missed-sound-replay design.md). */
 export interface MissedSoundReplaySnapshot extends SnapshotBase<"missedSoundReplay"> {
   /** The record of the whole visit. */
   readonly visitLog: VisitLog;
+  /** What the replay shows and says now. Every string comes from `src/copy`. */
+  readonly replay: MissedSoundReplay;
 }
 
 /** The result. The result page spec draws it. */
@@ -316,7 +325,10 @@ export interface RoomFinishedEvent {
 
 /** Every event. The interface ignores a kind it does not know, so later specs can add kinds. */
 export type VisitEvent =
-  RoomStartedEvent | TrialScoredEvent | RoomFinishedEvent;
+  | RoomStartedEvent
+  | TrialScoredEvent
+  | RoomFinishedEvent
+  | ReplaySoundStartedEvent;
 
 // ─── The visit log ───────────────────────────────────────────────────────────────────────
 // Every time is in milliseconds on the timer's clock since the visit began (chooseVisit).
@@ -603,3 +615,159 @@ export interface VisitSummary {
   /** Answers in rooms that scored nothing. */
   readonly ignoredAnswerCount: number;
 }
+
+// ─── The missed-sound replay ─────────────────────────────────────────────────────────────
+// missed-sound-replay design.md. Every level is in decibels relative to the visitor's calibration.
+
+/**
+ * `nothingMissed`: the visit has no missed sound. Nothing plays; one line says so.
+ * `announcing`: the house says what is about to happen. Nothing plays until `startReplay`.
+ * `playing`: the sounds play one after another, or the replay is paused.
+ * `finished`: no more sound plays. A line says how the replay ended.
+ */
+export type ReplayPhase =
+  "nothingMissed" | "announcing" | "playing" | "finished";
+
+/**
+ * `allPlayed`: every sound of the replay was played. `deviceChanged`: the audio device changed,
+ * so the calibration is gone and the replay stopped. `soundRefused`: the house could not play a
+ * sound three times in a row.
+ */
+export type ReplayEnding = "allPlayed" | "deviceChanged" | "soundRefused";
+
+/** The pause reasons that pause the replay. A device change ends it instead, and nothing else pauses it. */
+export type ReplayPauseReason = Extract<PauseReason, "hidden" | "interrupted">;
+
+/** Released when a replayed sound starts. Draw its ripple now, on its side. */
+export interface ReplaySoundStartedEvent {
+  readonly kind: "replaySoundStarted";
+  readonly sound: ReplaySound;
+}
+
+/** One sound of the replay, as it was played. Plain data, frozen. */
+export interface ReplaySound {
+  /** Its place in the replay, from 1 to `replaySoundCount`. */
+  readonly position: number;
+  /** Such as "Sound 3 of 20". */
+  readonly positionLabel: string;
+  /** The `order` of the missed trial it plays again. */
+  readonly trialOrder: number;
+  /** The room it came from. Light this room. */
+  readonly room: VisitRoom;
+  /** Such as "Stairs". */
+  readonly roomName: string;
+  /** Such as "4 kHz". */
+  readonly pitchLabel: string;
+  /** The side it came from. Draw the ripple on this side. */
+  readonly ear: Ear;
+  /** The level it was missed at: the level its trial was played at. */
+  readonly missedLevelDb: number;
+  /** The missed level plus the replay's raise (20 dB). */
+  readonly raisedLevelDb: number;
+  /** The loudest level the house may play this sound at now: its room's top with the calibration in use. */
+  readonly replayCapDb: number;
+  /** The level asked of the output stage: the raised level, or the cap when that is lower. */
+  readonly askedLevelDb: number;
+  /** The level the output stage played. Equal to the asked level unless a limit of the output stage acted. */
+  readonly playedLevelDb: number;
+  /** The limit of the output stage that lowered it, or null. */
+  readonly clampLimit: ClampLimit | null;
+  /** True when the cap held it below its raised level, or the output stage lowered it. */
+  readonly capChangedLevel: boolean;
+  /** The ripple's label: the side, the pitch, the level it was missed at, and whether the cap changed it. */
+  readonly rippleLabel: string;
+}
+
+/** The counts of one side. */
+export interface ReplaySideCounts {
+  /** Sound trials the house played on this side. */
+  readonly madeCount: number;
+  /** Of them, caught on this side. */
+  readonly caughtCount: number;
+  /** Of them, answered with the other side. */
+  readonly wrongSideCount: number;
+  /** Of them, not answered. These are the sounds the replay plays again. */
+  readonly missedCount: number;
+}
+
+/** The running count of both sides. */
+export interface ReplayCounts {
+  /**
+   * The scored sound trials of finished room runs are counted up to and including this order, or
+   * all of them when null.
+   */
+  readonly throughTrialOrder: number | null;
+  readonly left: ReplaySideCounts;
+  readonly right: ReplaySideCounts;
+  /** Such as "On your left I made nine sounds. You caught four." */
+  readonly leftLine: string;
+  /** Such as "On your right I made seven sounds. You caught three." */
+  readonly rightLine: string;
+}
+
+/** What every phase of the replay gives. */
+export interface ReplayViewBase<Phase extends ReplayPhase> {
+  readonly phase: Phase;
+  /** The heading of the stage. */
+  readonly heading: string;
+  /** The sounds of the visit that were not caught, in all. */
+  readonly missedSoundCount: number;
+  /** The sounds the replay plays: all of them, or an evenly spread selection. */
+  readonly replaySoundCount: number;
+  /**
+   * When the replay plays a selection, such as "You did not catch fifty-six sounds. I will play
+   * twenty of them, spread over the whole visit."; otherwise null.
+   */
+  readonly selectionLine: string | null;
+  /** The label of the visible stop control. Show the control in every phase of this stage. */
+  readonly stopLabel: string;
+  /** Whether `startReplay` would start the sounds now. */
+  readonly canStart: boolean;
+  /** Whether `proceed` would skip the replay now. */
+  readonly canSkip: boolean;
+  /** The label of the control that calls `proceed` in this phase: skip, skip the rest, or see the picture. */
+  readonly proceedLabel: string;
+}
+
+/** Nothing was missed. */
+export interface ReplayNothingMissed extends ReplayViewBase<"nothingMissed"> {
+  /** The one line: there is nothing to play again. */
+  readonly line: string;
+  /** The counts of the whole visit. */
+  readonly counts: ReplayCounts;
+}
+
+/** Before the first sound. */
+export interface ReplayAnnouncing extends ReplayViewBase<"announcing"> {
+  /** What is about to happen, in order. Show all of them before the start control. */
+  readonly announcementLines: readonly string[];
+  /** The label of the control that calls `startReplay`. */
+  readonly startLabel: string;
+}
+
+/** The sounds are playing, or the replay is paused. */
+export interface ReplayPlaying extends ReplayViewBase<"playing"> {
+  /** The sound playing now, or the last one that started; null before the first starts. */
+  readonly current: ReplaySound | null;
+  /** The running count through the current sound, or null before the first starts. */
+  readonly counts: ReplayCounts | null;
+  /** While the snapshot's pause holds, why the sounds paused and what happens next; otherwise null. */
+  readonly pauseLine: string | null;
+  /** The label of the control that calls `resume`. */
+  readonly resumeLabel: string;
+}
+
+/** No more sound plays. */
+export interface ReplayFinished extends ReplayViewBase<"finished"> {
+  readonly ending: ReplayEnding;
+  /** How the replay ended. */
+  readonly endLine: string;
+  /** The counts of the whole visit. */
+  readonly counts: ReplayCounts;
+  /** The last sound that started, or null when none did. */
+  readonly last: ReplaySound | null;
+}
+
+/** The replay as the stage shows it now. */
+export type MissedSoundReplay =
+  ReplayNothingMissed | ReplayAnnouncing | ReplayPlaying | ReplayFinished;
