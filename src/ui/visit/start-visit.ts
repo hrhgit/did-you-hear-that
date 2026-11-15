@@ -2,9 +2,11 @@ import { resultPageConfig } from "../../config/result-page-config";
 import { createSeededRandom } from "../../config/seeded-random";
 import { createSystemTimer } from "../../config/system-timer";
 import { createSystemWallClock } from "../../config/system-wall-clock";
+import { comparisonCopy } from "../../copy/comparison-lines";
 import { siteTitle } from "../../copy/site-title";
 import { createVisitArchive } from "../../session/create-visit-archive";
 import { createVisitFlow } from "../../session/create-visit-flow";
+import { findEarlierVisit } from "../../session/find-earlier-visit";
 import { resultPicture } from "../../session/result-picture";
 import { drawHouseSection } from "../house/draw-house-section";
 import { startMotionLayer } from "../house/motion-layer";
@@ -72,8 +74,8 @@ export function startVisit(
     archive,
     pictureOf: resultPicture,
     // Comparison with an earlier visit is not built yet.
-    findEarlier: null,
-    comparisonCopy: null,
+    findEarlier: findEarlierVisit,
+    comparisonCopy,
     headphoneNameMaxCharacterCount:
       resultPageConfig.headphoneNameMaxCharacterCount,
     onSwappedRepeat: (roomIndex) => {

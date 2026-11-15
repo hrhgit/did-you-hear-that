@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { resultPageConfig } from "../../src/config/result-page-config";
 import { ghostSoundIds, type GhostSoundId } from "../../src/config/sound-id";
+import { comparisonCopy } from "../../src/copy/comparison-lines";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { limitsStatement } from "../../src/copy/limits-statement";
 import { resultPageCopy } from "../../src/copy/result-page-copy";
@@ -33,6 +34,7 @@ const address = `http://localhost:${String(devServer.port)}${devServer.resultShe
 const wingWidth = 168;
 
 let quickVisit: VisitToSave;
+let laterQuickVisit: VisitToSave;
 let fullVisit: VisitToSave;
 let silentVisit: VisitToSave;
 
@@ -47,6 +49,11 @@ test.beforeAll(async () => {
     leftDb: -28,
     rightDb: -30,
   });
+  laterQuickVisit = await simulatedResult(
+    "quick",
+    { kind: "thresholds", leftDb: -25, rightDb: -30 },
+    20261127,
+  );
   silentVisit = await simulatedResult("full", {
     kind: "extreme",
     name: "neverAnswers",
@@ -457,6 +464,58 @@ test.describe("the result of a visit", () => {
     await expect(savedVisits(page)).toHaveCount(0);
     await expect(savedStatus).toHaveText(resultPageCopy.deletedLine);
     expect(await page.evaluate(() => window.localStorage.length)).toBe(0);
+  });
+
+  test("draws an earlier visit with the same headphones as dashed outlines, by the name alone", async ({
+    page,
+  }) => {
+    await openSheet(page, quickVisit);
+    const name = page.getByLabel(resultPageCopy.headphoneNameLabel);
+    const outlines = page.locator(".result-section .result-earlier");
+    const comparison = page.locator(".result-comparison");
+    await expect(page.locator(".result-name-hint")).toHaveText(
+      comparisonCopy.headphoneNameHint,
+    );
+    await name.fill("The old grey pair");
+    await button(page, resultPageCopy.saveButton).click();
+    await expect(savedVisits(page)).toHaveCount(1);
+    // The only saved visit is the one on the page, and a visit is never compared with itself.
+    await expect(outlines).toHaveCount(0);
+
+    await page.reload();
+    await showVisit(page, laterQuickVisit);
+    await settle(page);
+    await expect(outlines).toHaveCount(0);
+    await expect(comparison).toBeHidden();
+
+    // The same name, whatever its letter case and spacing, brings the earlier visit's outlines.
+    await name.fill("  the OLD  grey pair ");
+    await expect(outlines).toHaveCount(6);
+    await expect(comparison).toBeVisible();
+    await expect(comparison).not.toHaveText(comparisonCopy.noEarlierVisitLine);
+    for (const roomId of ["corridor", "stairs", "attic"] as const) {
+      await expect(
+        drawnFloor(page, roomId).locator(".result-earlier"),
+      ).toHaveCount(2);
+    }
+    // Typing a name redraws the outlines and leaves the light where it is: it does not spread
+    // again.
+    await expect(page.locator(".result-section")).toHaveAttribute(
+      "data-entering",
+      "false",
+    );
+    await expectNoHorizontalScroll(page);
+    await expectNoSeriousAccessibilityProblem(page);
+
+    // Another name has no earlier visit, and the page says so.
+    await name.fill("Another pair");
+    await expect(outlines).toHaveCount(0);
+    await expect(comparison).toHaveText(comparisonCopy.noEarlierVisitLine);
+
+    // With no name there is nothing to say.
+    await name.fill("");
+    await expect(outlines).toHaveCount(0);
+    await expect(comparison).toBeHidden();
   });
 
   test("asks before it deletes every saved visit, and keeps them when told to", async ({

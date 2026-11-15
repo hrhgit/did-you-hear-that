@@ -1,7 +1,9 @@
 import { resultPageConfig } from "../../config/result-page-config";
 import { createSystemWallClock } from "../../config/system-wall-clock";
+import { comparisonCopy } from "../../copy/comparison-lines";
 import { siteTitle } from "../../copy/site-title";
 import { createVisitArchive } from "../../session/create-visit-archive";
+import { findEarlierVisit } from "../../session/find-earlier-visit";
 import { resultPicture } from "../../session/result-picture";
 import type { VisitToSave } from "../../session/result-page-types";
 import { createResultView } from "./create-result-view";
@@ -49,8 +51,8 @@ function startResultSheet(
     view,
     archive,
     pictureOf: resultPicture,
-    findEarlier: null,
-    comparisonCopy: null,
+    findEarlier: findEarlierVisit,
+    comparisonCopy,
     headphoneNameMaxCharacterCount:
       resultPageConfig.headphoneNameMaxCharacterCount,
     onSwappedRepeat: (roomIndex) => {
