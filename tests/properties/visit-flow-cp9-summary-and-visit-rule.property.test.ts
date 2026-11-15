@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import type { UnreliableReason } from "../../src/engine/search-types";
 import { atMostFraction } from "../../src/engine/fraction-comparisons";
@@ -11,9 +11,20 @@ import type {
   VisitLog,
 } from "../../src/session/visit-flow-types";
 import { visitRooms } from "../../src/session/visit-rooms";
+import { playVisit } from "../listeners/simulated-visitor";
+import { visitRunArbitrary } from "./visit-flow-arbitraries";
+import { createVisitHarness } from "./visit-flow-harness";
 
-/** Runs of the pure part (visit-flow design.md, CP9). The visit part is added with the harness. */
+// The visits of the visit part render with the worst-case renderers (D26, audio-output D43).
+vi.mock("../../src/audio/synth/sound-renderers", async () => {
+  const { worstCaseRenderers } = await import("./worst-case-renderers");
+  return { soundRenderers: worstCaseRenderers };
+});
+
+/** Runs of the pure part (visit-flow design.md, CP9). */
 const pureRuns = 300;
+/** Runs of the visit part (visit-flow design.md, CP9). */
+const visitRuns = 50;
 
 const { swappedRepeatDifferenceDb, startingLevelDb, upwardStepDb, floorDb } =
   hearingMethodConfig;
@@ -216,6 +227,29 @@ describe("visit flow CP9. The summary follows the log, and the visit rule only a
         },
       ),
       { numRuns: pureRuns },
+    );
+  }, 120_000);
+
+  it("gives every visit that reaches the result the summary of its log", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        visitRunArbitrary({ withEnding: false }),
+        async (visitRun) => {
+          const harness = createVisitHarness({
+            seed: visitRun.seed,
+            performanceOffsetMs: visitRun.performanceOffsetMs,
+          });
+          const run = await playVisit(harness, visitRun.script);
+          const snapshot = harness.flow.snapshot();
+          expect(run.ending).toBe("done");
+          expect(snapshot.stage).toBe("result");
+          if (snapshot.stage !== "result") {
+            return;
+          }
+          expect(snapshot.summary).toEqual(summarizeVisit(snapshot.visitLog));
+        },
+      ),
+      { numRuns: visitRuns },
     );
   }, 120_000);
 });
