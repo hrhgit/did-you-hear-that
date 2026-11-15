@@ -1,0 +1,480 @@
+/*
+ * The visit: one page, the drawing of the house behind everything, and one sheet of text over it
+ * at a time. Nothing here cuts: every change of brightness is a fade of at least a fifth of a
+ * second (audio-safety rule 9), and reduced motion shortens the long fades instead of removing
+ * them.
+ */
+.visit {
+  --visit-fade: 1.6s;
+  --visit-bar: 3.5rem;
+  --visit-caption: 5.25rem;
+
+  position: relative;
+  display: block;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  outline: none;
+}
+
+/* The drawing and the canvas that moves over it. */
+.visit-house {
+  position: absolute;
+  inset: var(--visit-bar) 0 var(--visit-caption);
+  transition: opacity var(--visit-fade) ease;
+}
+
+.visit[data-house="faint"] .visit-house {
+  opacity: 0.2;
+}
+
+.visit-house > .house-section,
+.visit-house > .house-motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.visit-house > .house-motion {
+  pointer-events: none;
+}
+
+/* Buttons are drawn like the house: thin lines that run a little past their corners. */
+.visit-button {
+  position: relative;
+  display: inline-block;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.6rem 1.1rem;
+  border: 0;
+  background: none;
+  color: var(--color-moonlight);
+  font: inherit;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.visit-button::before,
+.visit-button::after {
+  content: "";
+  position: absolute;
+  border: 0 solid var(--color-graphite);
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+.visit-button::before {
+  inset: 0 -0.4rem;
+  border-width: 1px 0;
+}
+
+.visit-button::after {
+  inset: -0.4rem 0;
+  border-width: 0 1px;
+}
+
+.visit-button:hover::before,
+.visit-button:hover::after,
+.visit-button:focus-visible::before,
+.visit-button:focus-visible::after,
+.visit-button-lit::before,
+.visit-button-lit::after {
+  border-color: var(--color-lamp);
+}
+
+.visit-button:focus-visible,
+.visit-answer:focus-visible .visit-answer-hint {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 0.55rem;
+}
+
+.visit-button:disabled,
+.visit-button[aria-disabled="true"] {
+  color: var(--color-graphite);
+  cursor: default;
+}
+
+.visit-button:disabled::before,
+.visit-button:disabled::after,
+.visit-button[aria-disabled="true"]::before,
+.visit-button[aria-disabled="true"]::after {
+  border-color: var(--color-graphite-faint);
+  border-style: dashed;
+}
+
+.visit-button-note {
+  display: block;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+  font-style: italic;
+}
+
+/* The bar across the top: the stop control at the left, the room at the right. */
+.visit-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: var(--visit-bar);
+  padding: 0 1.25rem;
+  pointer-events: none;
+}
+
+.visit-bar > * {
+  pointer-events: auto;
+}
+
+.visit-bar > .visit-stop + .visit-stop {
+  margin-left: 0.75rem;
+}
+
+.visit-stop {
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.visit-room {
+  margin: 0 0 0 auto;
+  font-size: 1rem;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.visit-room-name {
+  display: block;
+  font-style: italic;
+}
+
+.visit-room-progress {
+  display: block;
+  color: var(--color-graphite);
+  font-size: 0.875rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* The two answers: the left and right halves of the screen. */
+.visit-answer {
+  position: absolute;
+  top: var(--visit-bar);
+  bottom: 0;
+  z-index: 2;
+  width: 50%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-graphite);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.visit-answer-left {
+  left: 0;
+}
+
+.visit-answer-right {
+  right: 0;
+}
+
+.visit-answer-hint {
+  position: absolute;
+  bottom: 1.1rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.25;
+  transition: color 0.3s ease;
+}
+
+.visit-answer-left .visit-answer-hint {
+  left: 1.25rem;
+  text-align: left;
+}
+
+.visit-answer-right .visit-answer-hint {
+  right: 1.25rem;
+  text-align: right;
+}
+
+.visit-answer-keys {
+  display: none;
+  font-size: 0.875rem;
+  font-style: normal;
+  font-variant-numeric: lining-nums;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .visit-answer-keys {
+    display: block;
+  }
+}
+
+.visit-answer[data-pressed="true"] .visit-answer-hint,
+.visit-answer:active .visit-answer-hint {
+  color: var(--color-moonlight);
+}
+
+/* What the house says about a sound, under the drawing. */
+.visit-caption {
+  position: absolute;
+  inset: auto 4.5rem 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--visit-caption);
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: clamp(1rem, 0.92rem + 0.4vw, 1.1875rem);
+  font-style: italic;
+  line-height: 1.3;
+  text-align: center;
+  text-wrap: balance;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s ease;
+}
+
+.visit-caption[data-shown="true"] {
+  opacity: 1;
+  transition-duration: 0.35s;
+}
+
+/* The rest between two rooms sits where the caption does. */
+.visit-rest {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1.75rem;
+  min-height: var(--visit-caption);
+  padding: 0.75rem 1.5rem 1rem;
+  background: linear-gradient(to top, var(--color-night) 55%, transparent);
+}
+
+.visit-rest-line {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-style: italic;
+}
+
+/* A sheet of text over the faint drawing. */
+.visit-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--visit-bar) + 0.5rem) 1.5rem 2rem;
+  overflow-y: auto;
+}
+
+.visit-sheet-body {
+  width: 100%;
+  max-width: 33rem;
+  padding: 2rem 0;
+  background: radial-gradient(
+    closest-side,
+    rgb(8 11 18 / 0.94) 0%,
+    rgb(8 11 18 / 0.86) 62%,
+    transparent 100%
+  );
+}
+
+.visit-sheet h1 {
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.75rem, 1.2rem + 2.6vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  outline: none;
+}
+
+.visit-sheet-front h1 {
+  margin-bottom: 1.75rem;
+  font-size: clamp(2.5rem, 1.4rem + 5.6vw, 4.75rem);
+  line-height: 1;
+}
+
+.visit-sheet p {
+  max-width: 31rem;
+  margin: 0 0 0.9rem;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+/* Italic is the house speaking. Upright is how to use the page. */
+.visit-voice {
+  font-style: italic;
+}
+
+p.visit-lead {
+  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
+  line-height: 1.4;
+}
+
+.visit-quiet {
+  color: var(--color-graphite);
+}
+
+p.visit-status {
+  min-height: 3.3em;
+}
+
+/* The calibration control as a drawn line: quiet at the left end, loud at the right. */
+.visit-meter {
+  position: relative;
+  height: 1.5rem;
+  max-width: 22rem;
+  margin: 1.5rem 0.4rem 0;
+  border-bottom: 1px solid var(--color-graphite);
+}
+
+.visit-meter::before,
+.visit-meter::after {
+  content: "";
+  position: absolute;
+  bottom: -0.3rem;
+  height: 0.9rem;
+  border-left: 1px solid var(--color-graphite);
+}
+
+.visit-meter::before {
+  left: 0;
+}
+
+.visit-meter::after {
+  right: 0;
+}
+
+.visit-meter-mark {
+  position: absolute;
+  bottom: -0.35rem;
+  left: calc(var(--visit-setting, 0) * 100%);
+  width: 2px;
+  height: 1.6rem;
+  margin-left: -1px;
+  background: var(--color-lamp);
+  transition: left 0.4s ease;
+}
+
+.visit-rules {
+  margin: 0 0 1.5rem;
+  padding: 0 0 0 1.4em;
+  font-size: clamp(1.125rem, 1.02rem + 0.5vw, 1.3125rem);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.visit-rules li {
+  margin: 0 0 0.6rem;
+  padding-left: 0.3em;
+}
+
+.visit-rules li::marker {
+  color: var(--color-graphite);
+  font-style: normal;
+  font-variant-numeric: lining-nums;
+}
+
+.visit-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 1.75rem;
+  margin: 1.75rem 0.4rem 0.9rem;
+  padding: 0;
+  list-style: none;
+}
+
+.visit-controls-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.5rem;
+  max-width: 22rem;
+}
+
+.visit-controls-stacked .visit-button {
+  width: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* A sheet that appears fades in. Browsers without @starting-style show it at once, in the dark. */
+.visit-sheet,
+.visit-rest,
+.visit-bar > * {
+  transition:
+    opacity 0.6s ease,
+    display 0.6s allow-discrete;
+}
+
+@starting-style {
+  .visit-sheet,
+  .visit-rest,
+  .visit-bar > * {
+    opacity: 0;
+  }
+}
+
+/* A short, wide screen: a phone on its side. The drawing takes the whole height. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .visit {
+    --visit-bar: 2.75rem;
+    --visit-caption: 0rem;
+  }
+
+  .visit-house {
+    inset: 0.5rem 0;
+  }
+
+  .visit-caption {
+    inset: auto auto 3.25rem 1rem;
+    width: calc(50% - 22vh - 1.5rem);
+    height: auto;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .visit-rest {
+    inset: auto auto 0.5rem 0;
+    flex-direction: column;
+    align-items: flex-start;
+    width: calc(50% - 22vh);
+    background: none;
+  }
+
+  .visit-sheet-body {
+    padding: 0.5rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visit {
+    --visit-fade: 0.4s;
+  }
+
+  .visit-caption,
+  .visit-caption[data-shown="true"] {
+    transition-duration: 0.25s;
+  }
+}
