@@ -1,0 +1,158 @@
+/*
+ * The cross-section of the house. Cold pencil lines on the night, and one warm colour, used only
+ * for lamp light. A room's state changes with a slow fade, never a cut (audio-safety rule 9).
+ */
+.house-section {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.house-ink {
+  fill: none;
+  stroke: var(--color-graphite);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 1.6s ease;
+}
+
+circle.house-ink {
+  fill: none;
+}
+
+.house-shell {
+  stroke-width: 1.8;
+}
+
+.house-earth {
+  stroke: var(--color-graphite-faint);
+}
+
+.house-cut-fill {
+  fill: var(--color-wall);
+}
+
+.house-cut-hatch {
+  stroke: var(--color-graphite-faint);
+  stroke-width: 1.2;
+}
+
+/* Lamp light: a wash that falls off from the bulb. Its strength is the room's state. */
+.house-light {
+  opacity: 0;
+  transition: opacity 1.6s ease;
+}
+
+.house-light-near {
+  stop-color: var(--color-lamp);
+  stop-opacity: 0.5;
+}
+
+.house-light-mid {
+  stop-color: var(--color-lamp);
+  stop-opacity: 0.16;
+}
+
+.house-light-far {
+  stop-color: var(--color-lamp);
+  stop-opacity: 0.03;
+}
+
+.house-bulb {
+  fill: var(--color-graphite-faint);
+  transition: fill 1.6s ease;
+}
+
+.house-door-gap {
+  fill: var(--color-night);
+  opacity: 0;
+}
+
+.house-room[data-state="lit"] .house-light {
+  opacity: 1;
+}
+
+.house-room[data-state="lit"] .house-ink {
+  stroke: var(--color-moonlight);
+}
+
+.house-room[data-state="lit"] .house-bulb {
+  fill: var(--color-lamp);
+}
+
+.house-room[data-state="visited"] .house-light {
+  opacity: 0.3;
+}
+
+.house-room[data-state="visited"] .house-bulb {
+  fill: var(--color-lamp-low);
+}
+
+.house-room[data-state="closed"] .house-ink {
+  stroke: var(--color-graphite-faint);
+}
+
+/* Room names beside the house. Italic, like a draughtsman's lettering. */
+.house-note-name,
+.house-note-pitch {
+  fill: var(--color-graphite);
+  font-style: italic;
+  transition: fill 1.6s ease;
+}
+
+.house-note-name {
+  font-size: 23px;
+}
+
+.house-note-pitch {
+  font-size: 17px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.house-note[data-state="lit"] .house-note-name,
+.house-note[data-state="lit"] .house-note-pitch {
+  fill: var(--color-moonlight);
+}
+
+.house-note[data-state="lit"] .house-ink {
+  stroke: var(--color-lamp);
+}
+
+.house-note[data-state="closed"] .house-note-name,
+.house-note[data-state="closed"] .house-note-pitch {
+  fill: var(--color-graphite-faint);
+}
+
+/* The measuring line at the left: the part already climbed is drawn in lamp light. */
+.house-climb {
+  fill: none;
+  stroke: var(--color-graphite-faint);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  transition: stroke 1.6s ease;
+}
+
+.house-climb[data-state="visited"] {
+  stroke: var(--color-lamp-low);
+}
+
+.house-climb[data-state="lit"] {
+  stroke: var(--color-lamp);
+}
+
+.house-climb[data-state="closed"] {
+  stroke-dasharray: 2 7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .house-ink,
+  .house-light,
+  .house-bulb,
+  .house-note-name,
+  .house-note-pitch,
+  .house-climb {
+    transition-duration: 0.4s;
+  }
+}

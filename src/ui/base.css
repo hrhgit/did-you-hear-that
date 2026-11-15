@@ -3,8 +3,14 @@
  * changes brightness after the page appears (audio-safety rule 9).
  */
 :root {
-  --color-night: #0b0c10;
+  /* Cold darks for everything, and one warm colour: the light of a lamp. */
+  --color-night: #080b12;
+  --color-wall: #151a25;
+  --color-graphite: #8a93a6;
+  --color-graphite-faint: #3d4555;
   --color-moonlight: #e6e1d6;
+  --color-lamp: #f3b562;
+  --color-lamp-low: #b9803f;
 
   color-scheme: dark;
   background-color: var(--color-night);
