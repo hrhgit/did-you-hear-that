@@ -5,3 +5,10 @@ Every tunable number in one place: levels, step sizes, timings and rooms. Field 
 May import from: nothing outside `config`. It is the base layer that every other module may import.
 
 The seeded random generator and the injectable timer live here too. `engine` and `audio/synth` may import only from `config`, and the layout has no shared utilities module, so `config` is the only place every layer can reach them. The system timer in this directory is the one place that reads the clock and calls the global timer functions. If more shared code builds up, a steering change that adds a shared module is the cleaner fix.
+
+## Motion of the picture
+
+- `ambient-motion-config.ts`: how often the lamp is nudged and how far it swings, how often a shadow crosses under the door, how many dust motes there are and how slowly they sink, and how much of this is left when the visitor has asked for reduced motion.
+- `ripple-config.ts`: how many rings a ripple has, how long they take, and the shortest time a ripple may take to reach its brightest.
+
+These values shape what is drawn. They change no sound and no decision about an answer, and the ambient schedule is drawn from a random source of its own.
