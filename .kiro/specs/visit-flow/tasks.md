@@ -41,7 +41,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 17.1 to 17.6, 18.1 to 18.5_
   - _Decisions: D17, D23, D24_
 
-- [ ] 5. Measure the visit-level rule
+- [x] 5. Measure the visit-level rule
   - Write `tests/listeners/visit-rule-measurement.ts` (`measureVisitFalseAlarmRule`) and `tests/listeners/print-visit-rule-measurement.ts` as in "The measurement" in `design.md`, with the cases, seeds and visit counts of "Measurements". The rule is applied with `judgeVisitFalseAlarms`. The script prints the tables and writes no file.
   - Run `npx tsx tests/listeners/print-visit-rule-measurement.ts` and compare its tables with "Measurements". Write the run's numbers and its commit as a new decision in `design.md` (the next free D number), saying where they differ from the design's figures and why if they do. Point Q1 to that decision. Do not change the proposed value.
   - Write `tests/properties/visit-flow-cp11-visit-rule-effect.property.test.ts` with the limits of CP11 and a timeout of 120 seconds.
@@ -81,7 +81,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 1.4, 2.1 to 2.7, 3.1 to 3.6, 4.1 to 4.5, 5.1 to 5.5, 6.1 to 6.5, 8.3, 8.5, 9.1 to 9.5, 10.3, 11.1 to 11.7, 12.1, 12.2, 12.5 to 12.8, 13.1 to 13.5, 14.1 to 14.7, 15.1 to 15.3, 16.1 to 16.5, 19.1 to 19.4, 20.4_
   - _Decisions: D2, D5, D6, D8, D11 to D16, D19 to D22, D29, D35_
 
-- [ ] 9. Add the harness, the simulated visitor and the simulated visits
+- [x] 9. Add the harness, the simulated visitor and the simulated visits
   - Write `tests/properties/visit-flow-harness.ts` and `tests/properties/visit-flow-arbitraries.ts` as in "The Visit_Harness" and the visitor script of "Correctness properties" in `design.md`, and `tests/listeners/simulated-visitor.ts` with its test (one quick visit with a Step_Listener; every caught trial is a sound at or above its threshold).
   - Write `tests/properties/visit-flow-simulated-visits.test.ts`: a quick and a full visit to `result` with an Attentive_Range listener, a Plausible_Range listener, and each of the five Extreme_Listeners, all with fixed seeds and the worst-case renderers through `vi.mock`. For each: the stage reaches `result`, every room has one finished attempt, and the summary equals `summarizeVisit` of the log. For "never answers": every ear worse than cap. For "answers at random" and "always answers": the visit is marked by the visit rule.
   - Check: `npm test`, `npm run lint`.
