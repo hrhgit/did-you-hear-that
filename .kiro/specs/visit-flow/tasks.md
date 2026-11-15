@@ -49,21 +49,21 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Requirements: 22.6, 23.1 to 23.5_
   - _Decisions: D17_
 
-- [ ] 6. Add the visit log recorder
+- [x] 6. Add the visit log recorder
   - Write `src/session/visit-log-recorder.ts` (`createVisitLogRecorder`) as in "The visit log" in `design.md`, producing the `VisitLog` of the contract.
   - `visit-log-recorder.test.ts`: times are relative to the visit's start; `order` counts scored and discarded trials together from 1; every entry and the log are frozen; `log()` returns copies, so later entries do not change a log already returned; `JSON.parse(JSON.stringify(log))` deep-equals the log; the recorder refuses a scored trial with an outcome that does not fit its kind (a `TypeError`).
   - Check: `npm test`, `npm run lint`.
   - _Requirements: 10.1, 10.2, 10.4 to 10.7_
   - _Decisions: D10, D28_
 
-- [ ] 7. Add the room runner
+- [x] 7. Add the room runner
   - Write `src/session/room-runner.ts` (`createRoomRunner`) following "The room runner" in `design.md`, with every wait on the injected timer and every random number from the sources it is given.
   - `room-runner.test.ts`, with the fake backend, the manual timer, a calibrated output shell (as `tests/properties/output-shell-harness.ts` calibrates one) and a scripted search or a real one: the gap is waited from the previous answer; a sound is played with the Purpose `trial`, the room's sound, the trial's ear and level; the window opens at the converted start; an answer at the window start counts and one at its end does not; a second answer in the window is ignored; no answer gives `none` at the window's end; a no-sound trial schedules nothing and its window uses the latest offset; answers outside windows are recorded as ignored; a pause during a gap logs nothing, a pause after presentation logs a discarded trial, and resuming presents the same trial after its gap; abandoning ends the runner; a refused sound is logged and tried again after its gap, and the third refusal in a row calls `soundRefused`; `notRunning` calls `pauseFromOutput`; the `scored` callback runs inside the answer call or the window-end callback.
   - Check: `npm test`, `npm run lint` (no clock read, no timer global, no `Math.random` in `src/session`).
   - _Requirements: 7.1 to 7.11, 8.1, 8.2, 8.4, 9.1, 9.2, 12.3, 12.4, 12.7, 21.1 to 21.3_
   - _Decisions: D3, D4, D9, D10, D25, D34_
 
-- [ ] 8. Add the visit flow
+- [x] 8. Add the visit flow
   - Write `src/session/create-visit-flow.ts` (`createVisitFlow`, `VisitFlowTestOptions`, `PresentedTrial`) following "The stage machine" in `design.md`: creation, `withSound`, the visit's lifetime, the pause table, the stop table, notifications and visit tokens. It returns a frozen object that implements the contract's `VisitFlow`.
   - `create-visit-flow.test.ts`, with the fake backend and the manual timer:
     - creation makes no context and shows `entry`; a bad seed throws a `RangeError`; `chooseVisit` calls `createOrResume` before it returns; `noGesture` sets `activationRefused`;
