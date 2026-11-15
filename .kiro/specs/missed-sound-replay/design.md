@@ -998,6 +998,53 @@ Times of task 4. Three runs of `npm test` on 2026-11-15, with the files of tasks
 
 `missed-sound-replay-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 45 second budget. CP3's 1000 runs are two properties of 1000 runs each: the positions, and the inputs that throw a `RangeError`. The whole of `npm test` took 47.9, 50.8 and 53.7 seconds in these runs.
 
+Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 9 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 1447 | 1785 | 1836 |
+| CP3 | 966 | 1117 | 1194 |
+| CP4 | 2584 | 2686 | 2741 |
+| CP5 | 4552 | 4789 | 4884 |
+| CP6 | 6532 | 6990 | 7512 |
+| Together | 16081 | 17368 | 18166 |
+
+Every run was under the 45 second budget. In these three runs the regression file still held its `it.todo`; a fourth run with the two cases task 9 added to it took 49 ms for that file and 16604 ms for the property files together. CP6 runs two harnesses per run. The whole of `npm test` took 53.1, 58.7 and 59.0 seconds. Three earlier runs are not counted: CP5 failed in each of them, before its check of regression 1 was corrected, and in one of them CP5 spent 114 seconds shrinking the counterexample.
+
+Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 10 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 1670 | 1740 | 2103 |
+| CP3 | 1088 | 1013 | 1410 |
+| CP4 | 2628 | 2671 | 2982 |
+| CP5 | 4527 | 5094 | 5443 |
+| CP6 | 6498 | 6884 | 7171 |
+| CP7 | 5554 | 6467 | 6456 |
+| CP8 | 5155 | 5394 | 6163 |
+| Together | 27120 | 29263 | 31728 |
+
+Every run was under the 45 second budget. The regression file took 38, 42 and 46 ms. The whole of `npm test` took 52.9, 58.7 and 62.3 seconds.
+
+Times of task 11. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 11 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 1604 | 1631 | 2297 |
+| CP2 | 15034 | 15161 | 16879 |
+| CP3 | 1049 | 1046 | 1515 |
+| CP4 | 2585 | 2686 | 3396 |
+| CP5 | 4709 | 4759 | 6555 |
+| CP6 | 6510 | 7128 | 8684 |
+| CP7 | 5667 | 6319 | 7960 |
+| CP8 | 4998 | 5349 | 7295 |
+| CP9 | 11374 | 12588 | 14802 |
+| Together | 53530 | 56667 | 69383 |
+
+**Every run was over the 45 second budget**, so task 11 stopped here and reports the times to the owner (Q7). No run count was changed. The regression file took 50, 72 and 61 ms. The whole of `npm test` took 58.4, 63.0 and 80.3 seconds; the third run was slower throughout, not only in these files.
+
+Where the time goes. CP2 runs 1000 times and CP9 500 times, and each run of both plays its drawn script on the replay harness, because CP2 checks the counts of every view of a replay and CP9 every string of one. Run alone, CP2 took 8.2 seconds and CP9 6.5 seconds; in `npm test` the other files run in parallel workers, and both took about twice as long. Over 300 drawn runs, one harness took about 3.8 ms to build (most of it the calibration) and 3.3 ms to play its script and the minute after it. The two files together add about 26 to 31 seconds to the 27 to 32 seconds of task 10.
+
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/missed-sound-replay-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a proposed value of Q1 or Q2, or a steering value, stays an expected break, with a decision giving the case.

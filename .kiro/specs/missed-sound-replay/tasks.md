@@ -88,7 +88,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
 
 **End of batch 2.** Every pure part, the copy and the controller exist and are tested; the stage still plays nothing.
 
-- [ ] 9. Write the harness and the properties of skipping and reproducing
+- [x] 9. Write the harness and the properties of skipping and reproducing
   - Add to `tests/properties/missed-sound-replay-arbitraries.ts` the replay scripts and refusal scripts of "Correctness properties".
   - Create `tests/properties/missed-sound-replay-harness.ts` as "The replay harness" describes: a controller on a shell from `createShellUnderTest` at `harnessSampleRateHz`, calibrated with `calibrate` to the setting of the log's last calibration, with the log's tops taken from that shell's range report; the flow's small part as "What the flow does" gives it; a record of every view, event, backend call and `stopAll`; and a scripted output in place of the shell for refusals. Files that use it replace the render functions with the worst-case renderers through `vi.mock`.
   - Create the files for CP4, CP5 and CP6 with the run counts of "Run counts and time", each with a timeout of 120 seconds. CP6 here checks two harnesses; its check against the flow's own draw is part of CP10 (task 13).
@@ -97,7 +97,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 9.1, 9.2, 10.2, 10.3, 11.1, 11.6, 13.5, 14.3, 14.4, 17.3, 17.4, 17.5_
   - _Decisions: D2, D13, D14, D26_
 
-- [ ] 10. Write the properties of safety, pauses and refusals
+- [x] 10. Write the properties of safety, pauses and refusals
   - Create the files for CP7 and CP8 with the run counts of "Run counts and time", each with a timeout of 120 seconds. CP7 measures fades with `measureFadeLengths` and checks the other channel for `+0`; CP8 uses the refusal scripts for one run in three.
   - Run `npm test` three times and write the time of each new property file under "Run counts and time". If this spec's property files take more than 45 seconds together, stop and report the times.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
