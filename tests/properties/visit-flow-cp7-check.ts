@@ -21,7 +21,10 @@ interface Run {
 const runKey = (run: Run): string =>
   `${String(run.roomIndex)}:${String(run.attempt)}`;
 
-/** A pause that began in a room, until the next trial is presented. */
+/**
+ * A pause that began in a room, until the next trial is presented, or until a pause begins in a
+ * new run of the room that the pause's device change started.
+ */
 interface RoomPause {
   readonly run: Run;
   /** The trial presented and not decided when the pause began, or null in a gap. */
@@ -83,6 +86,24 @@ export function checkPausesDiscardAndRepeat(
           snapshot.stage === "room" &&
           currentRun !== null
         ) {
+          if (
+            roomPause !== null &&
+            runKey(roomPause.run) !== runKey(currentRun)
+          ) {
+            // A new run of the room started after the pause roomPause holds and has presented no
+            // trial yet, and now a pause begins in it. Only a device change may start a new run,
+            // and that run is the next attempt of the same room. This pause belongs to the new
+            // run, so a device change now stops that run too (regression 1).
+            expect(
+              roomPause.deviceChanged,
+              "a new run of a room started after a pause without a device change",
+            ).toBe(true);
+            expect(currentRun).toEqual({
+              roomIndex: roomPause.run.roomIndex,
+              attempt: roomPause.run.attempt + 1,
+            });
+            roomPause = null;
+          }
           if (roomPause === null) {
             roomPause = {
               run: currentRun,

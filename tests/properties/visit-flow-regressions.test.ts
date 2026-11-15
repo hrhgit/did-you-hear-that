@@ -73,48 +73,45 @@ describe("visit flow regressions", () => {
   // room from 286 989 ms to its first trial at 290 149 ms, so the second device change is set at
   // 288 000 ms, between the two. The case asserts that order first, so that it cannot quietly
   // stop covering two device changes in a row.
-  it.fails(
-    "regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)",
-    async () => {
-      const script: VisitorScript = {
-        visitType: "quick",
-        calibrationTargetDb: -40,
-        firstHeadphoneCheckAnswer: "left",
-        listener: {
-          kind: "function",
-          respond: (trial: ListenerTrial) =>
-            trial.kind === "sound" && trial.levelDb >= -30 ? trial.ear : "none",
-        },
-        visitorSeed: 4294950317,
-        answerDelayMaxMs,
-        timeStampModes: ["nan"],
-        restMaxMs,
-        extraPresses: [],
-        disturbances: [
-          { atMs: 266_399, kind: "deviceChanged", resumeAfterMs: 0 },
-          { atMs: 288_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        ],
-        ending: null,
-      };
-      const harness = createVisitHarness({ seed: 0, performanceOffsetMs: 0 });
-      const timeline = observeVisit(harness);
-      const run = await playVisit(timeline.driver, script);
+  it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
+    const script: VisitorScript = {
+      visitType: "quick",
+      calibrationTargetDb: -40,
+      firstHeadphoneCheckAnswer: "left",
+      listener: {
+        kind: "function",
+        respond: (trial: ListenerTrial) =>
+          trial.kind === "sound" && trial.levelDb >= -30 ? trial.ear : "none",
+      },
+      visitorSeed: 4294950317,
+      answerDelayMaxMs,
+      timeStampModes: ["nan"],
+      restMaxMs,
+      extraPresses: [],
+      disturbances: [
+        { atMs: 266_399, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 288_000, kind: "deviceChanged", resumeAfterMs: 0 },
+      ],
+      ending: null,
+    };
+    const harness = createVisitHarness({ seed: 0, performanceOffsetMs: 0 });
+    const timeline = observeVisit(harness);
+    const run = await playVisit(timeline.driver, script);
 
-      expect(visitStartMs(timeline.entries)).toBe(0);
-      expect(roomRunMoments(timeline.entries)).toEqual([
-        "roomStarted 0:1",
-        "first trial 0:1",
-        "roomStarted 1:1",
-        "first trial 1:1",
-        "roomStarted 2:1",
-        "first trial 2:1",
-        "deviceChanged in room",
-        "roomStarted 2:2",
-        "deviceChanged in room",
-        "roomStarted 2:3",
-        "first trial 2:3",
-      ]);
-      checkPausesDiscardAndRepeat(harness, timeline.entries, run);
-    },
-  );
+    expect(visitStartMs(timeline.entries)).toBe(0);
+    expect(roomRunMoments(timeline.entries)).toEqual([
+      "roomStarted 0:1",
+      "first trial 0:1",
+      "roomStarted 1:1",
+      "first trial 1:1",
+      "roomStarted 2:1",
+      "first trial 2:1",
+      "deviceChanged in room",
+      "roomStarted 2:2",
+      "deviceChanged in room",
+      "roomStarted 2:3",
+      "first trial 2:3",
+    ]);
+    checkPausesDiscardAndRepeat(harness, timeline.entries, run);
+  });
 });
