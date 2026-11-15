@@ -887,7 +887,7 @@ export type VisitFlowTestOptions = {
 } & ({ readonly backend: AudioBackend } | { readonly output: AudioOutput });
 ```
 
-`VisitFlowTestOptions` and `PresentedTrial` live in `create-visit-flow.ts`, not in the contract. `PresentedTrial` is `{ kind, ear | null, levelDb | null, windowStartMs, windowEndMs, roomIndex, attempt, trialNumber }` (D26).
+`VisitFlowTestOptions` lives in `create-visit-flow.ts`, and `PresentedTrial` is defined in `room-runner.ts` and re-exported from `create-visit-flow.ts`; neither is in the contract. `PresentedTrial` is `{ kind, ear | null, levelDb | null, windowStartMs, windowEndMs, roomIndex, attempt, trialNumber }` (D26).
 
 Creation validates the seed with `createSeededRandom`, which throws the `RangeError` of R2.2. It builds the backend from the window (or takes the test's backend or output), the output shell, and one calibration controller for the life of the flow. The controller's random source is a forwarding source whose `next` draws from the current visit's sound source (D19). It registers one stop listener and one unsupported listener on the shell and one change listener on the controller. Nothing plays and no `AudioContext` exists until the first `chooseVisit`.
 
@@ -1231,6 +1231,8 @@ The property files of tasks 10 and 11 read the design in these particular ways.
 
 A counterexample becomes a named case in `tests/properties/visit-flow-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the visitor script written out, first with `it.fails`, then turned into `it` by the commit that changes the code, as the earlier specs do. A case that could only be removed by changing a steering value or a value awaiting the owner (Q1) stays an expected break with a decision giving the numbers.
 
+Regression 1 was found by CP7 in task 13, with fast-check seed -1594251289. In the third room of a quick visit a device change abandoned attempt 1. A second device change came 0.4 ms after attempt 2 started and before it presented a trial, so the flow abandoned attempt 2 as well and ran attempt 3, as R13.3 asks for every device change during a Room_Attempt. CP7's check kept the first device change's pause open until the next presented trial, so it did not count attempt 2 as stopped and expected the first trial of attempt 2. The fault was in the property file, not in the flow, and nothing under `src/` changed. The case `regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)` plays the visit without fast-check, with a fixed listener and the second device change at 288 000 ms, and checks that the two device changes fell in that order before it checks CP7's condition. Commit bc369e2 kept it as `it.fails` and moved CP7's check for one visit into `tests/properties/visit-flow-cp7-check.ts`, unchanged. Commit 0427136 corrected the check: when a pause begins in a new run of the room after a device change and before that run's first trial, the check makes sure that the run is the next attempt of the same room, and then treats the pause as one in that run, so a device change there counts that run as abandoned too.
+
 ### Requirement coverage
 
 | Requirement | Checked by |
@@ -1256,7 +1258,7 @@ A counterexample becomes a named case in `tests/properties/visit-flow-regression
 | R20 | `visit-flow-config.test.ts`; review in the final task |
 | R21 | `room-runner.test.ts` with an output that refuses |
 | R22 | The property files; `visit-flow-simulated-visits.test.ts`; the regression file |
-| R23 | `print-visit-rule-measurement.ts`; CP11; the decision written in task 13 |
+| R23 | `print-visit-rule-measurement.ts`; CP11; D36 |
 | R24 | The final task's `git status` and search |
 
 ## How the design serves the steering
@@ -1366,7 +1368,7 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D29. The front door's third choice is not the flow's.** The 60 second replay needs no headphones and no output shell, and has its own spec. The entry snapshot lists only the two visits; the interface handles the third door.
 
-**D30. What the tasks may touch.** The project owner is building the interface in the same working tree: `src/ui/`, several files in `src/copy/` and `src/config/`, `tests/properties/screen-leak/`, a temporary page `house-sketch.html` (since removed), and edits to `package.json`, `package-lock.json` and the READMEs of `src/config`, `src/copy` and `src/ui`, none of them committed. The tasks never change or stage those files. They add no `package.json` script; the measurement is run with `npx tsx`. Commit messages and READMEs avoid the banned words of `wording.md`; code names such as `trialScored` are not matched by the check, but plain words such as "scored" are, so the prose says "answered" or "decided" instead.
+**D30. What the tasks may touch.** The project owner is building the interface in the same working tree: `src/ui/`, several files in `src/copy/` and `src/config/`, `tests/properties/screen-leak/`, a temporary page `house-sketch.html` (since removed), and edits to `package.json`, `package-lock.json` and the READMEs of `src/config`, `src/copy` and `src/ui`, all uncommitted when this spec began. The owner's interface files were committed while this spec was implemented. The tasks never change or stage those files. They add no `package.json` script; the measurement is run with `npx tsx`. Commit messages and READMEs avoid the banned words of `wording.md`; code names such as `trialScored` are not matched by the check, but plain words such as "scored" are, so the prose says "answered" or "decided" instead.
 
 **D31. The contract imports from the output stage and the engine, and the interface imports only the contract.** `src/ui` may import `src/session`, and `src/session` may import the engine and the output stage. Re-exporting their types through the contract gives the interface every type it needs without importing either module, which the structure steering forbids. `BrowserWindow` is `Window & typeof globalThis`, not a Web Audio type.
 
