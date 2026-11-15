@@ -988,6 +988,16 @@ PROPOSED, NOT APPROVED (Q7):
 
 The property files of this spec must take at most 45 seconds together on the project machine (PROPOSED, NOT APPROVED, Q7). Estimate, not measured: CP1 to CP3 and the view part of CP9 are pure and take a second or two each. A controller run renders up to 20 worst-case sounds at 22050 Hz and measures their fades, a few milliseconds a sound, so CP4 to CP9 take roughly 3 to 8 seconds each. A whole visit of the visit flow's harness took about 130 to 150 ms in the result page's simulated visits, so CP10 takes about 5 to 10 seconds with its replays. The tasks that write the properties run `npm test` three times and write the time of each file here. If the files take more than the budget together, the task stops and reports the times to the owner; it changes no run count.
 
+Times of task 4. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 4 present, gave these times per property file, in ms, as Vitest's JSON reporter gives them (the sum of the file's test durations, without the file's import). The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 1931 | 1663 | 1803 |
+| CP3 | 1066 | 1046 | 1038 |
+| Together | 2997 | 2709 | 2841 |
+
+`missed-sound-replay-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 45 second budget. CP3's 1000 runs are two properties of 1000 runs each: the positions, and the inputs that throw a `RangeError`. The whole of `npm test` took 47.9, 50.8 and 53.7 seconds in these runs.
+
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/missed-sound-replay-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a proposed value of Q1 or Q2, or a steering value, stays an expected break, with a decision giving the case.
@@ -1114,6 +1124,8 @@ Any value above 0 keeps the output stage from refusing a sound as `busy`, becaus
 - (a) **Proposed.** The owner changes that literal before the first task runs, for example to `{ ...base("missedSoundReplay", 3), visitLog: {} as VisitLog } as MissedSoundReplaySnapshot`, which compiles before and after the addition. Cost: one line of the owner's, at a set time.
 - (b) The owner allows the first task to add `replay` to that literal, as the one change under `src/ui/`. Cost: an exception to R19.1.
 - (c) Make `replay` optional. Cost: every reader must handle a missing view that never occurs, and a flow that forgot the view would still compile.
+
+The owner took option (a) and changed the literal, which is now cast with `as MissedSoundReplaySnapshot`, before task 1 ran.
 
 **Q7. Run counts and time budget of the property files. PROPOSED, NOT APPROVED.** The counts of "Run counts and time" and a budget of 45 seconds for this spec's property files together. Options: these; fewer runs of CP4 to CP8 (for example 100 each), which shortens the suite by about two thirds of their time and lowers the chance of finding a rare case in one run; or a larger budget. The visit flow's files take about 44 seconds and the result page's about 17 seconds today, so the whole of `npm test` would grow by about the budget.
 

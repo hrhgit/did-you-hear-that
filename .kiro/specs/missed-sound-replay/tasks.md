@@ -18,7 +18,7 @@ If a property finds a counterexample, add it to `tests/properties/missed-sound-r
 
 Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does nothing, and the field `replay` holds the stand-in view of task 1 (R1.5). The controller's properties (tasks 9 to 11) exist before the flow can play a replayed sound.
 
-- [ ] 1. Land the interface contract with a silent stage
+- [x] 1. Land the interface contract with a silent stage
   - Check first that the owner's literal in `src/ui/visit/screen-of-snapshot.test.ts` is cast with `as MissedSoundReplaySnapshot` (Q6, option (a)). If it is not, stop and report; do not change the file.
   - Change `src/session/visit-flow-types.ts` by the additions of "Interface contract" in `design.md`, word for word: `startReplay` after `chooseSwappedRepeat` with its comment; the required field `replay` and the new comment of `MissedSoundReplaySnapshot`; `ReplaySoundStartedEvent` in the union `VisitEvent`; the new block at the end of the file. No new import and no statement that runs. Prettier may rewrap lines; that is the only difference allowed.
   - Add to `src/session/visit-flow-types.test.ts`, as type-level checks only: `VisitFlow["startReplay"]` is `() => void`; `MissedSoundReplaySnapshot["replay"]` equals `MissedSoundReplay`; `Extract<MissedSoundReplay, { phase: P }>` gives each phase's interface; `Extract<VisitEvent, { kind: "replaySoundStarted" }>` equals `ReplaySoundStartedEvent`; `ReplayPauseReason` equals `"hidden" | "interrupted"` and is assignable to `PauseReason`; `ReplayPhase` and `ReplayEnding` are the listed unions. The existing checks stay as they are.
@@ -31,7 +31,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 15.5, 16.1, 16.2, 19.1, 19.2_
   - _Decisions: D1, D23, D27_
 
-- [ ] 2. Add the config, the selection and the plan
+- [x] 2. Add the config, the selection and the plan
   - Create `src/config/missed-sound-replay-config.ts` and its test as in "Config", with the file's own `deepFreeze`. The comment of `replayRaiseDb` names brief 07; the comments of `replaySoundsMaxCount` and `replayGapMs` say PROPOSED, NOT APPROVED and name D7 and Q1, D9 and Q2. The test checks the three values, the unit endings `Db`, `Count` and `Ms`, deep freezing, `replayRaiseDb` above 0, `replaySoundsMaxCount` a whole number of at least 2, `replayGapMs` a whole number above 0, and has a test named for Q1 and Q2 whose message says that the two values are PROPOSED, NOT APPROVED and await the owner's choice.
   - Create `src/session/even-selection-indexes.ts` (`evenSelectionIndexes`) and its test as in "The selection": every position when the count is at most the most count, including 0; the 20 positions of the example of 56; the first and the last kept; gaps of `floor` or `ceil` of the step; a frozen result; a `RangeError` for a negative, fractional or non-finite count and for a most count below 2 or fractional.
   - Create `src/session/missed-sound-replay-plan.ts` (`planMissedSoundReplay` and its types) and its test as in "The replay plan", on hand-built frozen logs: one case each for a caught, a wrong-side, a discarded and a no-sound trial and a trial of an abandoned run, none of them in the plan; the order kept; the room from `log.rooms` and the ear of the trial; the missed level is `playedLevelDb` also when `clampLimit` is not null; the raise, the cap from the last calibration, a top above `capRelativeToAnchorDb` held at it, the asked level and `heldByCap`; a selection with a most count passed through the settings; `selected`; a log with no miss and no calibration gives an empty plan; the two `RangeError` cases; the plan deeply frozen and equal for a JSON copy of the log.
@@ -39,14 +39,14 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 3.1 to 3.6, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3, 14.5_
   - _Decisions: D2 to D7_
 
-- [ ] 3. Add the counts and the render seed
+- [x] 3. Add the counts and the render seed
   - Create `src/session/replay-counts.ts` (`replayCounts`) and its test as in "The counts": a through-order of null, 0, a middle order and one past the last; no-sound, discarded and abandoned trials not counted; made equals caught plus wrong side plus missed on each side; at null the two missed counts add up to the plan's `missedSounds.length`; the result frozen.
   - Create `src/session/replay-render-seed.ts` (`replayRenderSeed`) and its test as in "The render seed": on hand-built logs whose engine seeds the test draws by the rule of visit-flow D19, the result is the draw after the render seed and one engine seed per room run; it depends only on `visitSeed` and the number of room runs; it is a whole number from 0 to 2³² − 1; equal for a JSON copy. Use the same draw as the flow's `drawSeed`. The check against a seed the flow actually drew is task 12's.
   - Check: `npm run typecheck`, `npm test`, `npm run lint` (no clock and no `Math.random` in `src/session`), `npm run check:copy`.
   - _Requirements: 8.4, 8.5, 14.1, 14.2, 14.5_
   - _Decisions: D2, D11_
 
-- [ ] 4. Write the plan's properties
+- [x] 4. Write the plan's properties
   - Create `tests/properties/missed-sound-replay-arbitraries.ts` with the drawn visit logs and most counts of "Correctness properties": calibrations with tops from `rangeReport`, and one log in five with tops drawn freely; abandoned runs and rooms with no finished run; no-sound shares, clamped plays, discarded trials and shares of misses from 0 to 1; frozen like the recorder's logs.
   - Create the files for CP1 and CP3 with the run counts of "Run counts and time", each with a timeout of 120 seconds. CP1's oracle is written from R3 and R4, not from the plan's code, and computes the selection in integers.
   - Create `tests/properties/missed-sound-replay-regressions.test.ts` with a comment on the naming rule and one `it.todo`, as the earlier specs do.
