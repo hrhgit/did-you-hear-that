@@ -1,4 +1,5 @@
 import { calibrationCopy } from "../../src/copy/calibration-copy";
+import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import type {
   SwappedRepeat,
   SwappedRepeatComparison,
@@ -14,10 +15,14 @@ import type {
 // `line` of a `swappedTrialScored` event, and a result snapshot's `turnBackLine`. Code values
 // (phase, reason, ending, ear, earpiece, outcome, numbers) are not generated text.
 //
-// Two exceptions to CP9, chosen by the owner's coordinator on 2026-11-15 (the owner has not
-// decided it and may reverse it), and no other: a string that is exactly `calibrationCopy.keptLine`
-// is not checked for the word "only", and a string that is exactly "0 dB" is allowed by the rule
-// on decibels, as `result-page-text.ts` allows it.
+// Three exceptions to CP9, chosen by the owner's coordinator (the owner has not decided them and
+// may reverse them), and no other: a string that is exactly `calibrationCopy.keptLine` is not
+// checked for the word "only" (2026-11-15); a string that is exactly
+// `headphoneCheckCopy.judgementLines.bothSides`, the visit's headphone check line that the swap
+// check reuses word for word for an answer of both sides, is not checked for the word "only"
+// either, for the same reason: it is another spec's line, reused word for word and checked by its
+// own spec (regression 1); and a string that is exactly "0 dB" is allowed by the rule on decibels,
+// as `result-page-text.ts` allows it (2026-11-15).
 
 /** One string to check, with where it came from. */
 export interface PlacedRepeatText {
@@ -209,12 +214,22 @@ export function wordsIn(text: string, words: readonly string[]): string[] {
 }
 
 /**
- * The words of blame in `text`. The calibration spec's safety line, reused word for word, is not
- * checked for "only" (the coordinator's exception of 2026-11-15); every other word is.
+ * The strings that are not checked for the word "only", each another spec's line reused word for
+ * word and checked by its own spec (the coordinator's exceptions): the calibration spec's safety
+ * line, and the visit's headphone check line for an answer of both sides (regression 1).
+ */
+const onlyAllowedIn: readonly string[] = Object.freeze([
+  calibrationCopy.keptLine,
+  headphoneCheckCopy.judgementLines.bothSides,
+]);
+
+/**
+ * The words of blame in `text`. A string that is exactly one of `onlyAllowedIn` is not checked for
+ * "only"; every other word is checked in every string.
  */
 export function blameWordsIn(text: string): string[] {
   const found = wordsIn(text, blameWords);
-  return text === calibrationCopy.keptLine
+  return onlyAllowedIn.includes(text)
     ? found.filter((word) => word !== "only")
     : found;
 }

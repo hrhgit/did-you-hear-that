@@ -55,11 +55,11 @@ const attributionOf = (d1: number, d2: number): SwappedRepeatOutcome =>
  *            | |D2| − h | < s            → unclear and the attribution of D2's sign are accepted too
  * ```
  *
- * The design's pseudo-code tests the repeat's ears before the offer. Read literally, that would
- * accept only `unclear` for a floor whose first run is found on both ears but too close to offer
- * the repeat, when the repeat run happens to have an ear without a level; the floor then offers
- * nothing, and `unclear` (R10.3) is the outcome of an offered floor only. So the offer is tested
- * first; every other line is the design's.
+ * The offer is tested before the repeat's ears, as the design's pseudo-code now gives it: a floor
+ * whose first run is found on both ears but too close to offer the repeat offers nothing, whatever
+ * a repeat run of it would give, and `unclear` (R10.3) is the outcome of an offered floor only.
+ * (Task 6 found that the order first written in the design, the repeat's ears before the offer,
+ * would accept only `unclear` for such a floor, and the design was corrected to this order.)
  */
 export function acceptedAnswers(
   input: OracleInput,

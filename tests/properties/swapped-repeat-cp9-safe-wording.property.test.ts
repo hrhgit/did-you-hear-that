@@ -56,9 +56,12 @@ import {
 // 2026-11-15); the lines of `followsEar` hold the limits statement's fourth sentence exactly and
 // those of every other outcome do not.
 //
-// Two exceptions, chosen by the owner's coordinator on 2026-11-15 (the owner has not decided it and
-// may reverse it), and no other: `calibrationCopy.keptLine` is not checked for "only", and a
-// string that is exactly "0 dB" is allowed by the rule on decibels (`swapped-repeat-text.ts`).
+// Three exceptions, chosen by the owner's coordinator (the owner has not decided them and may
+// reverse them), and no other: `calibrationCopy.keptLine` is not checked for "only"; the visit's
+// headphone check line for an answer of both sides, which the swap check reuses word for word
+// (`headphoneCheckCopy.judgementLines.bothSides`), is not checked for "only" either (regression
+// 1); and a string that is exactly "0 dB" is allowed by the rule on decibels
+// (`swapped-repeat-text.ts`).
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -459,16 +462,8 @@ describe("swapped repeat CP9: safe wording", () => {
     timeoutMs,
   );
 
-  // Skipped: an expected break (design.md, "Counterexamples", regression 1 in
-  // swapped-repeat-regressions.test.ts). The swap check's line for an answer of both sides is the
-  // visit's headphone check line, reused word for word as the design's copy asks, and it holds
-  // "only" ("The hiss came from one side only."). CP9 checks every string for "only" but
-  // `calibrationCopy.keptLine`, the owner's coordinator's exception of 2026-11-15, which allows no
-  // other. Only a choice of the owner or the coordinator can remove it: another exception, or
-  // other words for that line. Remove this skip together with that change, and turn regression 1
-  // into an ordinary `it`.
-  it.skip(
-    "blames no one: no word of blame in any string, apart from the word only in calibrationCopy.keptLine",
+  it(
+    "blames no one: no word of blame in any string, apart from the word only in calibrationCopy.keptLine and in the reused headphone check line for both sides",
     () => checkWording("blame"),
     timeoutMs,
   );
