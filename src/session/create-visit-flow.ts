@@ -8,6 +8,7 @@ import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
+import { notHeardLines, practiceCopy } from "../copy/practice-copy";
 import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import type {
@@ -37,7 +38,9 @@ import type {
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
 import { judgeHeadphoneCheck } from "./judge-headphone-check";
-import type { LatestOffset, PresentedTrial, RoomRunner } from "./room-runner";
+import type { PractisedRoomRunner } from "./practised-room-runner";
+import { createPractisedRoomRunner } from "./practised-room-runner";
+import type { LatestOffset, PresentedTrial } from "./room-runner";
 import { createRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
 import { roomSearchFloorDb } from "./room-search-floor";
@@ -49,6 +52,7 @@ import type {
   LoggedCalibration,
   MissedSoundReplay,
   PauseReason,
+  RoomPractice,
   ScoredVisitTrial,
   SnapshotBase,
   SwappedRepeatPauseReason,
@@ -189,7 +193,8 @@ interface Visit {
   awaitingAnswer: boolean;
   playRefusal: PlayRefusal | null;
   judgement: HeadphoneCheckJudgement | null;
-  runner: RoomRunner | null;
+  /** The run of the room under way: its practice, then its search. */
+  runner: PractisedRoomRunner | null;
   /** The room of the last run started: the room of the `room` stage. */
   activeRoomIndex: number;
   attempt: number;
@@ -412,6 +417,7 @@ export function createVisitFlow(
         return Object.freeze({
           ...base("room"),
           room: roomAt(current, current.activeRoomIndex),
+          practice: roomPracticeOf(current),
         });
       case "betweenRooms":
         return Object.freeze({
@@ -452,6 +458,29 @@ export function createVisitFlow(
       }
     }
   };
+
+  /** What the room's screen says about its practice (audible-start, light plan). */
+  function roomPracticeOf(current: Visit): RoomPractice {
+    const state = current.runner?.practice() ?? null;
+    const phase = state?.phase ?? "practice";
+    const practising = phase !== "counting";
+    const soundPlaying = state?.soundPlaying === true && pause === null;
+    const notHeardEars = state?.notHeardEars ?? [];
+    return Object.freeze({
+      phase,
+      soundPlaying,
+      heading: practising ? practiceCopy.heading : null,
+      lines: practising ? practiceCopy.lines : practiceCopy.countingLines,
+      soundPlayingLine: soundPlaying ? practiceCopy.soundPlayingLine : null,
+      notHeardEars: Object.freeze([...notHeardEars]),
+      notHeardLines:
+        phase === "notHeard" && notHeardEars.length > 0
+          ? notHeardLines(notHeardEars)
+          : Object.freeze([]),
+      tryAgainLabel: practiceCopy.tryAgainLabel,
+      goOnLabel: practiceCopy.goOnLabel,
+    });
+  }
 
   function repeatOf(current: Visit): SwappedRepeatController {
     if (current.repeat === null) {
@@ -996,7 +1025,33 @@ export function createVisitFlow(
       });
       current.activeRoomIndex = roomIndex;
       current.attempt = attempt;
-      const runner = createRoomRunner({
+      const presented =
+        onTrialPresented === undefined
+          ? {}
+          : {
+              // In the rooms of the visit each ear wears its own earpiece (swapped-repeat R8.7).
+              onTrialPresented: (trial: PresentedTrial) =>
+                onTrialPresented(
+                  Object.freeze({
+                    ...trial,
+                    earpiece: trial.ear,
+                    swappedRepeatRunNumber: null,
+                  }),
+                ),
+            };
+      const pauseFromOutput = (): void => {
+        const state = output.state();
+        const reason: StopReason =
+          state.kind === "stopped" && state.reason !== "control"
+            ? state.reason
+            : "interrupted";
+        onOutputStopped(reason);
+      };
+      const soundRefused = (): void => {
+        output.stopAll();
+        leave("soundRefused");
+      };
+      const counting = createRoomRunner({
         output,
         timer: current.timer,
         search,
@@ -1013,31 +1068,41 @@ export function createVisitFlow(
             reaction: reactionTo(entry),
           }),
         finished: finishRoom(current, roomIndex),
-        pauseFromOutput: () => {
-          const state = output.state();
-          const reason: StopReason =
-            state.kind === "stopped" && state.reason !== "control"
-              ? state.reason
-              : "interrupted";
-          onOutputStopped(reason);
+        pauseFromOutput,
+        soundRefused,
+        ...presented,
+      });
+      // Practice first: each ear hears the room's sound until it catches it, and nothing of it
+      // counts. Then the search above runs as before (audible-start, light plan of 2026-11-16).
+      const runner = createPractisedRoomRunner({
+        output,
+        timer: current.timer,
+        room,
+        attempt,
+        soundRandom: current.soundRandom,
+        recorder: current.recorder,
+        latestOffset: current.latestOffset,
+        searchCapDb,
+        counting,
+        practiceScored: (entry) => {
+          const caught = entry.outcome === "caught";
+          emit({
+            kind: "practiceSoundScored",
+            room,
+            trial: entry,
+            reaction: caught ? "ripple" : "none",
+            line: caught ? practiceCopy.caughtLine : null,
+          });
         },
-        soundRefused: () => {
-          output.stopAll();
-          leave("soundRefused");
+        countingStarted: () => {
+          emit({ kind: "countingStarted", room });
         },
-        ...(onTrialPresented === undefined
-          ? {}
-          : {
-              // In the rooms of the visit each ear wears its own earpiece (swapped-repeat R8.7).
-              onTrialPresented: (trial: PresentedTrial) =>
-                onTrialPresented(
-                  Object.freeze({
-                    ...trial,
-                    earpiece: trial.ear,
-                    swappedRepeatRunNumber: null,
-                  }),
-                ),
-            }),
+        notHeard: () => {
+          beginPause("practiceNotHeard");
+        },
+        pauseFromOutput,
+        soundRefused,
+        ...presented,
       });
       current.runner = runner;
       enterStage("room");
@@ -1344,6 +1409,31 @@ export function createVisitFlow(
           return;
         }
         withSound(endPause);
+      });
+    },
+
+    goOnWithoutPractice() {
+      step(() => {
+        const current = visit;
+        if (
+          current === null ||
+          stage !== "room" ||
+          pause?.reason !== "practiceNotHeard"
+        ) {
+          return;
+        }
+        withSound(() => {
+          if (visit !== current || pause?.reason !== "practiceNotHeard") {
+            return;
+          }
+          current.recorder.pauseEnded(timer.now());
+          pause = null;
+          if (output.rangeReport() === null || current.runner === null) {
+            calibrateAgain(current);
+            return;
+          }
+          current.runner.goOn();
+        });
       });
     },
 

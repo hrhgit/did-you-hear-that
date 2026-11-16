@@ -76,7 +76,8 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
           });
 
           // Trial sounds only after a kept calibration and a correct headphone check after it,
-          // and again after a device change; every play is a trial of the room under way.
+          // and again after a device change; every play is a trial or a practice sound of the room
+          // under way (a practice sound is held to every limit of a trial; audible-start, light plan).
           let kept = false;
           let checked = false;
           let room: VisitRoom | null = null;
@@ -96,7 +97,7 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
               }
               if (call.name === "play") {
                 expect(call.stage).toBe("room");
-                expect(call.request.purpose).toBe("trial");
+                expect(["trial", "practice"]).toContain(call.request.purpose);
                 expect(
                   kept && checked,
                   `a trial sound at ${String(call.atMs)}`,
@@ -171,6 +172,21 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
                   expect(play.outcome.clampLimit).toBeNull();
                   expect(play.outcome.playedLevelDb).toBe(entry.trial.levelDb);
                 }
+                return;
+              }
+              case "practicePresented": {
+                const play = calls[entry.outputCallCount - 1];
+                expect(play?.name).toBe("play");
+                if (play?.name !== "play" || entry.trial.kind !== "sound") {
+                  return;
+                }
+                expect(play.request).toEqual({
+                  soundId: room?.roomId,
+                  ear: entry.trial.ear,
+                  levelDb: entry.trial.levelDb,
+                  purpose: "practice",
+                });
+                expect(play.outcome.kind).toBe("scheduled");
                 return;
               }
               case "stopReport":

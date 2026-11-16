@@ -10,9 +10,17 @@ export type Ear = "left" | "right";
 /** An ear, or both ears. Only the calibration noise may be played in both ears (D21). */
 export type EarChoice = Ear | "both";
 
-/** Why a sound is played. Only calibration repeats have the Purpose `calibration`. */
+/**
+ * Why a sound is played. Only calibration repeats have the Purpose `calibration`. A `practice`
+ * sound is held to every limit of a `trial` sound, the rise limit included (audible-start).
+ */
 export type Purpose =
-  "trial" | "replay" | "listening" | "headphoneCheck" | "calibration";
+  | "trial"
+  | "practice"
+  | "replay"
+  | "listening"
+  | "headphoneCheck"
+  | "calibration";
 
 /** The limit that set the played level of a clamped sound. */
 export type ClampLimit = "anchorCap" | "rise" | "ceiling";

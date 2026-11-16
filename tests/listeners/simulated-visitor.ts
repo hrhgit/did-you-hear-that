@@ -756,6 +756,12 @@ export async function playVisit(
     ) {
       planReplay(replayBehaviour);
     }
+    // A practice sound not caught on a side: the visitor goes on without the practice at once,
+    // as trying again would hear nothing new (audible-start, light plan).
+    if (snapshot.pause?.reason === "practiceNotHeard") {
+      atOnce(() => flow.goOnWithoutPractice());
+      return;
+    }
     if (snapshot.pause !== null) {
       const atMs = Math.max(driver.now() + delayMs, resumeAtMs ?? driver.now());
       stageAction = plan(atMs, () => {

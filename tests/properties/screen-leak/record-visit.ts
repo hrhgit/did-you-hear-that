@@ -47,6 +47,12 @@ export async function recordVisit(
   recorder.snapshot(harness.flow.snapshot());
   // What the page never gets: which trial was presented, and when.
   harness.onTrialPresented((trial) => {
+    // A practice sound is not a trial: the page may show that it is playing, since nothing of it
+    // counts (audible-start, light plan). Its side is still never shown, which `screenOfSnapshot`
+    // keeps to.
+    if (trial.practice === true) {
+      return;
+    }
     recorder.presented({
       kind: trial.kind,
       ear: trial.ear,

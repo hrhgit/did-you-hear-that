@@ -24,6 +24,10 @@ import type {
   LoggedRoomAttempt,
   LoggedRoomResult,
   PauseReason,
+  DiscardedPracticeTrial,
+  LoggedPracticeRefusedPlay,
+  PracticeTrial,
+  ScoredPracticeTrial,
   ScoredVisitTrial,
   DiscardedVisitTrial,
   VisitLog,
@@ -53,6 +57,21 @@ export type PlayedTrial = {
     }
   | { readonly kind: "noSound" }
 );
+
+/** A practice sound that was played, as the practice knows it. Times on the timer's clock. */
+export interface PlayedPractice {
+  readonly roomIndex: number;
+  readonly attempt: number;
+  readonly round: number;
+  readonly practiceNumber: number;
+  readonly ear: Ear;
+  readonly requestedLevelDb: number;
+  readonly playedLevelDb: number;
+  readonly clampLimit: ClampLimit | null;
+  readonly gapBeforeMs: number;
+  readonly presentedAtMs: number;
+  readonly windowStartMs: number;
+}
 
 /** How a played trial was decided. Times are on the timer's clock. */
 export interface TrialDecision {
@@ -152,6 +171,37 @@ export interface VisitLogRecorder {
     readonly trialNumber: number;
     readonly reason: PlayRefusal;
   }): LoggedRefusedPlay;
+  /** Records a practice sound that was decided, with the next practice `order`. */
+  practiceScored(
+    sound: PlayedPractice,
+    decision: {
+      readonly response: VisitorResponse;
+      readonly outcome: SoundOutcome;
+      readonly answeredAtMs: number | null;
+      readonly scoredAtMs: number;
+    },
+  ): ScoredPracticeTrial;
+  /** Records a practice sound that was not decided, with the next practice `order`. */
+  practiceDiscarded(
+    sound: PlayedPractice,
+    discardedAtMs: number,
+  ): DiscardedPracticeTrial;
+  /** Records an answer during practice that decided no practice sound. */
+  practiceAnswerIgnored(input: {
+    readonly atMs: number;
+    readonly side: Ear;
+    readonly roomIndex: number;
+    readonly attempt: number;
+  }): LoggedIgnoredAnswer;
+  /** Records a practice sound the output stage would not play. */
+  practiceRefused(input: {
+    readonly atMs: number;
+    readonly roomIndex: number;
+    readonly attempt: number;
+    readonly round: number;
+    readonly practiceNumber: number;
+    readonly reason: PlayRefusal;
+  }): LoggedPracticeRefusedPlay;
   /**
    * The visit log so far: frozen, with copies of the lists, so later entries do not change a log
    * already returned. Throws while a room run or a pause is still open (D28).
@@ -277,6 +327,9 @@ export function createVisitLogRecorder(options: {
   const pauses: LoggedPause[] = [];
   let openPause: OpenPause | null = null;
   const refusedPlays: LoggedRefusedPlay[] = [];
+  const practiceTrials: PracticeTrial[] = [];
+  const practiceIgnoredAnswers: LoggedIgnoredAnswer[] = [];
+  const practiceRefusedPlays: LoggedPracticeRefusedPlay[] = [];
 
   const sinceStart = (name: string, atMs: number): number =>
     plainNumber(name, atMs) - visitStartMs + 0;
@@ -290,6 +343,34 @@ export function createVisitLogRecorder(options: {
     presentedAtMs: sinceStart("presentedAtMs", trial.presentedAtMs),
     windowStartMs: sinceStart("windowStartMs", trial.windowStartMs),
   });
+
+  const practiceCommon = (sound: PlayedPractice) => ({
+    order: practiceTrials.length + 1,
+    roomIndex: plainNumber("roomIndex", sound.roomIndex),
+    attempt: plainNumber("attempt", sound.attempt),
+    round: plainNumber("round", sound.round),
+    practiceNumber: plainNumber("practiceNumber", sound.practiceNumber),
+    ear: sound.ear,
+    requestedLevelDb: plainNumber("requestedLevelDb", sound.requestedLevelDb),
+    playedLevelDb: plainNumber("playedLevelDb", sound.playedLevelDb),
+    clampLimit: sound.clampLimit,
+    gapBeforeMs: plainNumber("gapBeforeMs", sound.gapBeforeMs),
+    presentedAtMs: sinceStart("presentedAtMs", sound.presentedAtMs),
+    windowStartMs: sinceStart("windowStartMs", sound.windowStartMs),
+  });
+
+  const ignoredAnswerOf = (input: {
+    readonly atMs: number;
+    readonly side: Ear;
+    readonly roomIndex: number;
+    readonly attempt: number;
+  }): LoggedIgnoredAnswer =>
+    Object.freeze({
+      atMs: sinceStart("atMs", input.atMs),
+      side: input.side,
+      roomIndex: plainNumber("roomIndex", input.roomIndex),
+      attempt: plainNumber("attempt", input.attempt),
+    });
 
   const soundPart = (trial: PlayedTrial) =>
     trial.kind === "sound"
@@ -464,13 +545,64 @@ export function createVisitLogRecorder(options: {
     },
 
     answerIgnored(input) {
-      const entry: LoggedIgnoredAnswer = Object.freeze({
+      const entry = ignoredAnswerOf(input);
+      ignoredAnswers.push(entry);
+      return entry;
+    },
+
+    practiceScored(sound, decision) {
+      if (!soundOutcomes.includes(decision.outcome)) {
+        throw new TypeError(
+          `A practice sound cannot have the outcome ${String(decision.outcome)}.`,
+        );
+      }
+      const common = practiceCommon(sound);
+      const answeredAtMs =
+        decision.answeredAtMs === null
+          ? null
+          : sinceStart("answeredAtMs", decision.answeredAtMs);
+      const entry: ScoredPracticeTrial = Object.freeze({
+        ...common,
+        status: "scored",
+        response: decision.response,
+        outcome: decision.outcome,
+        answeredAtMs,
+        responseTimeMs: plainOrNull(
+          "responseTimeMs",
+          answeredAtMs === null ? null : answeredAtMs - common.windowStartMs,
+        ),
+        scoredAtMs: sinceStart("scoredAtMs", decision.scoredAtMs),
+      });
+      practiceTrials.push(entry);
+      return entry;
+    },
+
+    practiceDiscarded(sound, discardedAtMs) {
+      const entry: DiscardedPracticeTrial = Object.freeze({
+        ...practiceCommon(sound),
+        status: "discarded",
+        discardedAtMs: sinceStart("discardedAtMs", discardedAtMs),
+      });
+      practiceTrials.push(entry);
+      return entry;
+    },
+
+    practiceAnswerIgnored(input) {
+      const entry = ignoredAnswerOf(input);
+      practiceIgnoredAnswers.push(entry);
+      return entry;
+    },
+
+    practiceRefused(input) {
+      const entry: LoggedPracticeRefusedPlay = Object.freeze({
         atMs: sinceStart("atMs", input.atMs),
-        side: input.side,
         roomIndex: plainNumber("roomIndex", input.roomIndex),
         attempt: plainNumber("attempt", input.attempt),
+        round: plainNumber("round", input.round),
+        practiceNumber: plainNumber("practiceNumber", input.practiceNumber),
+        reason: input.reason,
       });
-      ignoredAnswers.push(entry);
+      practiceRefusedPlays.push(entry);
       return entry;
     },
 
@@ -539,6 +671,18 @@ export function createVisitLogRecorder(options: {
         ignoredAnswers: Object.freeze([...ignoredAnswers]),
         pauses: Object.freeze([...pauses]),
         refusedPlays: Object.freeze([...refusedPlays]),
+        // Absent when nothing of practice happened, so a log without practice reads as before.
+        ...(practiceTrials.length === 0 &&
+        practiceIgnoredAnswers.length === 0 &&
+        practiceRefusedPlays.length === 0
+          ? {}
+          : {
+              practice: Object.freeze({
+                trials: Object.freeze([...practiceTrials]),
+                ignoredAnswers: Object.freeze([...practiceIgnoredAnswers]),
+                refusedPlays: Object.freeze([...practiceRefusedPlays]),
+              }),
+            }),
       });
     },
   };

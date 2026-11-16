@@ -14,6 +14,7 @@ import {
   sameTrialPlace,
   visitStartMs,
   type ActionEntry,
+  type PracticePresentedEntry,
   type PresentedEntry,
 } from "./visit-flow-timeline";
 
@@ -25,6 +26,10 @@ import {
 // inside the window, comes too late to decide it, and the flow logs it as ignored. So the answers
 // that are matched against a trial's window are the ones given while it waited (R7.6, "the trial
 // waiting to be Scored").
+//
+// The practice before a room's counting (audible-start, light plan of 2026-11-16) is held to the
+// same windows. Its answers are logged apart, in the practice of the log, so the answers ignored
+// while a room practises are checked there and the ones ignored while it counts as before.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -66,9 +71,64 @@ describe("visit flow CP4. Answers count against their windows (Universal; R7.6 t
 
           const decidingAnswers = new Set<number>();
           const lastPresented: PresentedEntry[] = [];
+          const lastPractice: PracticePresentedEntry[] = [];
           for (const entry of entries) {
             if (entry.kind === "presented") {
               lastPresented.push(entry);
+            }
+            if (entry.kind === "practicePresented") {
+              lastPractice.push(entry);
+            }
+            if (
+              entry.kind === "event" &&
+              entry.event.kind === "practiceSoundScored"
+            ) {
+              const practice = entry.event.trial;
+              const place = {
+                roomIndex: practice.roomIndex,
+                attempt: practice.attempt,
+                trialNumber: practice.practiceNumber,
+              };
+              const shown = [...lastPractice]
+                .reverse()
+                .find((presented) => sameTrialPlace(presented.trial, place));
+              expect(shown).toBeDefined();
+              if (shown === undefined) {
+                continue;
+              }
+              const windowStartMs = shown.trial.windowStartMs;
+              expect(practice.windowStartMs).toBe(windowStartMs - startMs);
+              const windowEndMs = windowStartMs + responseWindowMs;
+              const first = entries.find(
+                (candidate): candidate is ActionEntry =>
+                  candidate.kind === "action" &&
+                  candidate.name === "answer" &&
+                  candidate.seq > shown.seq &&
+                  candidate.seq < entry.seq &&
+                  candidate.snapshotBefore.stage === "room" &&
+                  candidate.snapshotBefore.pause === null &&
+                  windowStartMs <= answerTimeOf(candidate) &&
+                  answerTimeOf(candidate) < windowEndMs,
+              );
+              if (first !== undefined) {
+                decidingAnswers.add(first.seq);
+                const side = sideOf(first);
+                expect(practice.response).toBe(side);
+                expect(practice.answeredAtMs).toBe(
+                  answerTimeOf(first) - startMs,
+                );
+                expect(practice.scoredAtMs).toBe(first.atMs - startMs);
+                expect(practice.outcome).toBe(
+                  side === practice.ear ? "caught" : "wrongSide",
+                );
+              } else {
+                expect(practice.response).toBe("none");
+                expect(practice.answeredAtMs).toBeNull();
+                expect(practice.scoredAtMs).toBe(windowEndMs - startMs);
+                expect(entry.cause).toBe("timer");
+                expect(practice.outcome).toBe("missed");
+              }
+              continue;
             }
             if (entry.kind !== "event" || entry.event.kind !== "trialScored") {
               continue;
@@ -128,6 +188,7 @@ describe("visit flow CP4. Answers count against their windows (Universal; R7.6 t
 
           // Every other answer in a room while no pause held is ignored, and nothing else is.
           const expectedIgnored: LoggedIgnoredAnswer[] = [];
+          const expectedPracticeIgnored: LoggedIgnoredAnswer[] = [];
           let attempt = 0;
           for (const entry of entries) {
             if (entry.kind === "event" && entry.event.kind === "roomStarted") {
@@ -142,16 +203,24 @@ describe("visit flow CP4. Answers count against their windows (Universal; R7.6 t
             ) {
               continue;
             }
-            expectedIgnored.push({
+            const ignored = {
               atMs: answerTimeOf(entry) - startMs,
               side: sideOf(entry),
               roomIndex: entry.snapshotBefore.room.roomIndex,
               attempt,
-            });
+            };
+            if (entry.snapshotBefore.practice?.phase === "practice") {
+              expectedPracticeIgnored.push(ignored);
+            } else {
+              expectedIgnored.push(ignored);
+            }
           }
           const final = harness.flow.snapshot();
           if (final.stage === "result") {
             expect(final.visitLog.ignoredAnswers).toEqual(expectedIgnored);
+            expect(final.visitLog.practice?.ignoredAnswers ?? []).toEqual(
+              expectedPracticeIgnored,
+            );
           }
         }),
         { numRuns: runs },

@@ -71,8 +71,22 @@ export interface PresentedEntry extends EntryBase {
   readonly trial: PresentedTrial;
 }
 
+/**
+ * A practice sound presented (audible-start, light plan). Kept apart from `presented`, which holds
+ * only the trials of the search, so that every check of the trials reads as before.
+ */
+export interface PracticePresentedEntry extends EntryBase {
+  readonly kind: "practicePresented";
+  readonly trial: PresentedTrial;
+}
+
 export type TimelineEntry =
-  ActionEntry | StopReportEntry | EventEntry | SnapshotEntry | PresentedEntry;
+  | ActionEntry
+  | StopReportEntry
+  | EventEntry
+  | SnapshotEntry
+  | PresentedEntry
+  | PracticePresentedEntry;
 
 export interface VisitTimeline {
   /** The driver to give `playVisit`. Its flow and stop reports are recorded in `entries`. */
@@ -98,6 +112,7 @@ const flowActionNames = [
   "answer",
   "pause",
   "resume",
+  "goOnWithoutPractice",
   "stop",
   "chooseSwappedRepeat",
   "startReplay",
@@ -129,7 +144,13 @@ export function observeVisit(harness: VisitHarness): VisitTimeline {
     entries.push(Object.freeze({ ...base(), kind: "snapshot", snapshot }));
   });
   harness.onTrialPresented((trial) => {
-    entries.push(Object.freeze({ ...base(), kind: "presented", trial }));
+    entries.push(
+      Object.freeze({
+        ...base(),
+        kind: trial.practice === true ? "practicePresented" : "presented",
+        trial,
+      }),
+    );
   });
 
   const recordedAction =

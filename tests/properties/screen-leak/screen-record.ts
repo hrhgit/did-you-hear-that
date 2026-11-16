@@ -38,8 +38,8 @@ export interface PresentedTrialFacts {
 /** One trial that was answered or ran out, with the times that matter for the picture. */
 export interface RecordedTrial extends PresentedTrialFacts {
   /**
-   * The decision before this trial in the same room, or the moment the room started: a
-   * `roomStarted` event, or the snapshot in which the swapped repeat's room begins.
+   * The decision before this trial in the same room, or the moment the room's counting started:
+   * a `countingStarted` event, or the snapshot in which the swapped repeat's room begins.
    */
   readonly anchorMs: number;
   readonly presentedAtMs: number;
@@ -87,8 +87,13 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
       }
     },
     event(event) {
-      if (event.kind === "roomStarted") {
+      // A room's counting starts after its practice (audible-start, light plan of 2026-11-16).
+      // What the practice draws, the line that a practice sound is playing among it, comes before
+      // the first trial is waited for, so the first trial is anchored at the counting's start.
+      if (event.kind === "roomStarted" || event.kind === "countingStarted") {
         anchorMs = now();
+        waiting = null;
+      } else if (event.kind === "practiceSoundScored") {
         waiting = null;
       } else if (
         event.kind === "trialScored" ||

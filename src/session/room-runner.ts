@@ -38,6 +38,11 @@ export interface PresentedTrial {
   readonly roomIndex: number;
   readonly attempt: number;
   readonly trialNumber: number;
+  /**
+   * True for a practice sound, whose `trialNumber` is its number within its practice round. Absent
+   * for a trial of the search.
+   */
+  readonly practice?: true;
 }
 
 /** The latest offset of the visit (D4), shared by every room run of one visit. */

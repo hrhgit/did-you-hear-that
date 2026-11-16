@@ -139,7 +139,10 @@ export interface PlayRequest {
   readonly soundId: SoundId;
   readonly ear: Ear;
   readonly levelDb: number;
-  readonly purpose: Extract<Purpose, "trial" | "replay" | "listening">;
+  readonly purpose: Extract<
+    Purpose,
+    "trial" | "practice" | "replay" | "listening"
+  >;
   readonly random: RandomSource;
 }
 

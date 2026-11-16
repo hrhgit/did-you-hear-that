@@ -8,6 +8,7 @@ import {
   observeVisit,
   sameTrialPlace,
   visitStartMs,
+  type PracticePresentedEntry,
   type PresentedEntry,
 } from "./visit-flow-timeline";
 
@@ -98,7 +99,7 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
 
             // The sound trials are the backend's schedule calls in rooms, one ear each.
             const roomSchedules = harness.schedules.filter(
-              (schedule) => schedule.stage === "room",
+              (schedule) => schedule.stage === "room" && !schedule.practice,
             );
             const soundTrials = trials.filter(
               (trial) => trial.kind === "sound",
@@ -131,6 +132,44 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               );
               expect(during).toEqual([]);
             }
+
+            // Practice sounds are logged apart, one for one with the practice presented, and each
+            // was a practice schedule on one ear (audible-start, light plan).
+            const practicePresented = entries.filter(
+              (entry): entry is PracticePresentedEntry =>
+                entry.kind === "practicePresented",
+            );
+            const practiceTrials = snapshot.visitLog.practice?.trials ?? [];
+            expect(practiceTrials).toHaveLength(practicePresented.length);
+            practiceTrials.forEach((trial, index) => {
+              const shown = practicePresented[index];
+              expect(trial.order).toBe(index + 1);
+              expect({
+                roomIndex: trial.roomIndex,
+                attempt: trial.attempt,
+                practiceNumber: trial.practiceNumber,
+                ear: trial.ear,
+                levelDb: trial.requestedLevelDb,
+                windowStartMs: trial.windowStartMs,
+              }).toEqual({
+                roomIndex: shown?.trial.roomIndex,
+                attempt: shown?.trial.attempt,
+                practiceNumber: shown?.trial.trialNumber,
+                ear: shown?.trial.ear,
+                levelDb: shown?.trial.levelDb,
+                windowStartMs: (shown?.trial.windowStartMs ?? 0) - startMs,
+              });
+            });
+            const practiceSchedules = harness.schedules.filter(
+              (schedule) => schedule.practice,
+            );
+            expect(practiceSchedules).toHaveLength(practiceTrials.length);
+            practiceSchedules.forEach((schedule, index) => {
+              const ear = practiceTrials[index]?.ear ?? "left";
+              const other = ear === "left" ? "right" : "left";
+              expect(hasSound(schedule[ear])).toBe(true);
+              expect(isExactZero(schedule[other])).toBe(true);
+            });
 
             // Discarded exactly when a pause (a device change included) came before its decision.
             presented.forEach((shown, index) => {

@@ -32,17 +32,26 @@ vi.mock("../../src/audio/synth/sound-renderers", async () => {
 });
 
 /**
- * The moments of a visit that say where its device changes fell: each room run's start and first
- * presented trial (`roomIndex:attempt`), and each device change with the stage it came in.
+ * The moments of a visit that say where its device changes fell: each room run's start, its first
+ * sound (the first practice sound, audible-start light plan) and its first presented trial
+ * (`roomIndex:attempt`), and each device change with the stage it came in.
  */
 function roomRunMoments(entries: readonly TimelineEntry[]): string[] {
   const moments: string[] = [];
+  const soundedRuns = new Set<string>();
   const presentedRuns = new Set<string>();
   for (const entry of entries) {
     if (entry.kind === "event" && entry.event.kind === "roomStarted") {
       moments.push(
         `roomStarted ${String(entry.event.room.roomIndex)}:${String(entry.event.attempt)}`,
       );
+    }
+    if (entry.kind === "practicePresented" || entry.kind === "presented") {
+      const key = `${String(entry.trial.roomIndex)}:${String(entry.trial.attempt)}`;
+      if (!soundedRuns.has(key)) {
+        soundedRuns.add(key);
+        moments.push(`first sound ${key}`);
+      }
     }
     if (entry.kind === "presented") {
       const key = `${String(entry.trial.roomIndex)}:${String(entry.trial.attempt)}`;
@@ -75,7 +84,14 @@ describe("visit flow regressions", () => {
   // above −20 dB and nothing otherwise. With it, the third room's first attempt presents its first
   // trial at 240 393 ms; the first device change at 248 000 ms abandons it; attempt 2 runs from
   // 253 870 ms to its first trial at 257 030 ms, so the second device change is set at 255 500 ms,
-  // between the two. The case
+  // between the two.
+  //
+  // The practice before each room's counting (audible-start, light plan of 2026-11-16) moved the
+  // times again, and a run's first sound is now its first practice sound. With it, the third
+  // room's first attempt starts at 284 543 ms and presents its first counted trial at 295 886 ms;
+  // the first device change at 304 000 ms (in its counting, as before) abandons it; attempt 2
+  // starts at 317 570 ms and would play its first practice sound at 319 570 ms, so the second
+  // device change is set at 318 500 ms, after the start and before any sound of attempt 2. The case
   // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
@@ -93,8 +109,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 248_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 255_500, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 304_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 318_500, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };
@@ -110,15 +126,19 @@ describe("visit flow regressions", () => {
     expect(visitStartMs(timeline.entries)).toBe(0);
     expect(roomRunMoments(timeline.entries)).toEqual([
       "roomStarted 0:1",
+      "first sound 0:1",
       "first trial 0:1",
       "roomStarted 1:1",
+      "first sound 1:1",
       "first trial 1:1",
       "roomStarted 2:1",
+      "first sound 2:1",
       "first trial 2:1",
       "deviceChanged in room",
       "roomStarted 2:2",
       "deviceChanged in room",
       "roomStarted 2:3",
+      "first sound 2:3",
       "first trial 2:3",
     ]);
     checkPausesDiscardAndRepeat(harness, timeline.entries, run);

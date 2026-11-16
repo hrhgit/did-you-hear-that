@@ -79,7 +79,14 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               }
             };
             harness.flow.onEvent((event) => {
-              if (event.kind === "roomFinished") {
+              // The practice before the counting is not a stretch: what it shows (that a sound is
+              // playing, never its side) is counted nowhere (audible-start, light plan). The first
+              // stretch of a room run begins when its counting does.
+              if (
+                event.kind === "roomFinished" ||
+                event.kind === "roomStarted" ||
+                event.kind === "practiceSoundScored"
+              ) {
                 stretchId += 1;
                 baseline = null;
                 return;
@@ -106,17 +113,20 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
             // The snapshot read in a stretch is the one it began with.
             expect(differences).toEqual([]);
 
-            // Within a room run, the timer hands out only decisions, and a room's end with its
-            // last decision.
+            // Within the counting of a room run, the timer hands out only decisions, and a
+            // room's end with its last decision. The counting begins after the practice.
             let inRun = false;
-            let previous: "scored" | "finished" | null = null;
+            let previous: "scored" | "finished" | "counting" | null = null;
             let previousAtMs = Number.NaN;
             for (const entry of entries) {
               if (
                 entry.kind === "event" &&
-                entry.event.kind === "roomStarted"
+                entry.event.kind === "countingStarted"
               ) {
                 inRun = true;
+                previous = "counting";
+                previousAtMs = entry.atMs;
+                continue;
               }
               if (
                 inRun &&
@@ -129,7 +139,8 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                       (entry.event.kind === "roomFinished" &&
                         previous === "scored" &&
                         previousAtMs === entry.atMs)
-                    : previous === "finished" && previousAtMs === entry.atMs;
+                    : (previous === "finished" || previous === "counting") &&
+                      previousAtMs === entry.atMs;
                 expect(
                   allowed,
                   `${entry.kind} ${JSON.stringify(entry.kind === "event" ? entry.event.kind : entry.snapshot.stage)} handed out by the timer at ${String(entry.atMs)}`,
@@ -181,9 +192,20 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                   expect(event.room).toEqual(visitRooms[event.room.roomIndex]);
                   break;
                 case "roomFinished":
+                case "countingStarted":
                   expect(Object.keys(event).sort()).toEqual(["kind", "room"]);
                   expect(event.room).toEqual(visitRooms[event.room.roomIndex]);
                   break;
+                case "practiceSoundScored": {
+                  // Named only once decided, as a trial is; a ripple only for a catch.
+                  const { trial } = event;
+                  expect(entry.atMs - startMs).toBe(trial.scoredAtMs);
+                  expect(event.reaction).toBe(
+                    trial.outcome === "caught" ? "ripple" : "none",
+                  );
+                  expect(event.line === null).toBe(trial.outcome !== "caught");
+                  break;
+                }
                 case "trialScored": {
                   const { trial } = event;
                   expect(trial.status).toBe("scored");
@@ -215,7 +237,8 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               const decided = made.some(
                 (inside) =>
                   inside.kind === "event" &&
-                  inside.event.kind === "trialScored",
+                  (inside.event.kind === "trialScored" ||
+                    inside.event.kind === "practiceSoundScored"),
               );
               if (!decided) {
                 expect(made).toEqual([]);

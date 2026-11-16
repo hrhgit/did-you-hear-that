@@ -13,6 +13,18 @@ export interface VisitFlowConfig {
   readonly visitFalseAlarmRateUnreliableAboveFraction: number;
   /** After this many refusals in a row of one trial's sound, the visit ends (D25). */
   readonly refusedPlaysInARowMaxCount: number;
+  /**
+   * The level of each ear's first practice sound, relative to the anchor (audible-start, light
+   * plan of 2026-11-16). Never above the room's search cap: the practice plays the lower of the two.
+   */
+  readonly practiceStartLevelDb: number;
+  /** The wait before each practice sound. */
+  readonly practiceGapMs: number;
+  /**
+   * How many sounds an ear hears in one practice round before the round gives up on it: the start,
+   * then one upward step louder each time, never above the room's search cap.
+   */
+  readonly practiceSoundsPerEarMaxCount: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -32,4 +44,9 @@ export const visitFlowConfig: VisitFlowConfig = deepFreeze({
   visitFalseAlarmRateUnreliableAboveFraction: 0.2,
   // D25
   refusedPlaysInARowMaxCount: 3,
+  // Light plan of 2026-11-16: the anchor, the comfortable level the visitor set.
+  practiceStartLevelDb: 0,
+  practiceGapMs: 2000,
+  // The anchor, then one step louder (+5 dB, the rise limit), then the not-heard notice.
+  practiceSoundsPerEarMaxCount: 2,
 });

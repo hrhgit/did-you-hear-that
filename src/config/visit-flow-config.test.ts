@@ -7,7 +7,20 @@ describe("visitFlowConfig", () => {
     expect(visitFlowConfig).toEqual({
       visitFalseAlarmRateUnreliableAboveFraction: 0.2,
       refusedPlaysInARowMaxCount: 3,
+      practiceStartLevelDb: 0,
+      practiceGapMs: 2000,
+      practiceSoundsPerEarMaxCount: 2,
     });
+  });
+
+  it("starts practice no louder than the anchor and keeps its last sound within the cap", () => {
+    expect(visitFlowConfig.practiceStartLevelDb).toBeLessThanOrEqual(0);
+    expect(visitFlowConfig.practiceSoundsPerEarMaxCount).toBeGreaterThan(0);
+    expect(
+      visitFlowConfig.practiceStartLevelDb +
+        (visitFlowConfig.practiceSoundsPerEarMaxCount - 1) *
+          hearingMethodConfig.upwardStepDb,
+    ).toBeLessThanOrEqual(hearingMethodConfig.capRelativeToAnchorDb);
   });
 
   it("ends every field name with its unit (R20.1)", () => {

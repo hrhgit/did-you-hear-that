@@ -95,6 +95,8 @@ export interface RecordedSchedule {
   readonly startMs: number;
   readonly left: Float32Array;
   readonly right: Float32Array;
+  /** True for a practice sound: scheduled in a room while its practice is under way. */
+  readonly practice: boolean;
 }
 
 /** One call the flow made to the output shell (only with `spyOnOutput`). */
@@ -228,13 +230,17 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
   const recordingBackend: AudioBackend = {
     ...backend,
     schedule(channels, startMs) {
+      const snapshot = flowRef?.snapshot() ?? null;
       schedules.push(
         Object.freeze({
           atMs: manual.now(),
-          stage: flowRef === null ? "entry" : flowRef.snapshot().stage,
+          stage: snapshot === null ? "entry" : snapshot.stage,
           startMs,
           left: channels.left,
           right: channels.right,
+          practice:
+            snapshot?.stage === "room" &&
+            snapshot.practice?.phase === "practice",
         }),
       );
       backend.schedule(channels, startMs);
@@ -370,6 +376,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     answer: recorded("answer"),
     pause: recorded("pause"),
     resume: recorded("resume"),
+    goOnWithoutPractice: recorded("goOnWithoutPractice"),
     stop: recorded("stop"),
     chooseSwappedRepeat: recorded("chooseSwappedRepeat"),
     startReplay: recorded("startReplay"),

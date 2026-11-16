@@ -108,8 +108,17 @@ export interface VisitFlow {
    * phase `room` of the swapped repeat.
    */
   pause(): void;
-  /** While paused: starts sound again and goes on. */
+  /**
+   * While paused: starts sound again and goes on. In the pause `practiceNotHeard`, plays the
+   * practice again for each side that did not catch it. Call it from the visitor's press, because
+   * it starts sound.
+   */
   resume(): void;
+  /**
+   * While the pause `practiceNotHeard` holds in a room: goes on without the practice, and the
+   * counting begins. Call it from the visitor's press, because it starts sound. Ignored otherwise.
+   */
+  goOnWithoutPractice(): void;
   /** The visible stop control. Stops all sound at once. Before the result it leaves the house with nothing kept. */
   stop(): void;
   /** Result: opens the swapped repeat for a room whose summary offers it. */
@@ -169,11 +178,11 @@ export type VisitStage =
 
 /** Why the visit is waiting for `resume`. */
 export type PauseReason =
-  "visitor" | "hidden" | "interrupted" | "deviceChanged";
+  "visitor" | "hidden" | "interrupted" | "deviceChanged" | "practiceNotHeard";
 
 /** A pause. The interface shows the line for its reason from `src/copy`. */
 export interface VisitPause {
-  /** `visitor`: the visitor paused. `hidden`: the page was hidden. `interrupted`: something else on the device took the sound. `deviceChanged`: the audio device changed, and the hiss will be matched again. */
+  /** `visitor`: the visitor paused. `hidden`: the page was hidden. `interrupted`: something else on the device took the sound. `deviceChanged`: the audio device changed, and the hiss will be matched again. `practiceNotHeard`: a practice sound was not caught on a side at the loudest the practice plays; nothing plays until the visitor tries again or goes on. */
   readonly reason: PauseReason;
 }
 
@@ -259,6 +268,8 @@ export type RulesSnapshot = SnapshotBase<"rules">;
 export interface RoomSnapshot extends SnapshotBase<"room"> {
   /** The room the visitor is in. */
   readonly room: VisitRoom;
+  /** What the room says about its practice and its counting. Always present in the snapshots the flow gives; optional only so that literals written before it still compile. */
+  readonly practice?: RoomPractice;
 }
 
 /** The rest between two rooms. The visit waits here until `proceed`. */
@@ -374,7 +385,9 @@ export type VisitEvent =
   | TrialScoredEvent
   | RoomFinishedEvent
   | ReplaySoundStartedEvent
-  | SwappedTrialScoredEvent;
+  | SwappedTrialScoredEvent
+  | PracticeSoundScoredEvent
+  | CountingStartedEvent;
 
 // ─── The visit log ───────────────────────────────────────────────────────────────────────
 // Every time is in milliseconds on the timer's clock since the visit began (chooseVisit).
@@ -403,6 +416,8 @@ export interface VisitLog {
   readonly pauses: readonly LoggedPause[];
   /** Every sound the output stage would not play, in order. */
   readonly refusedPlays: readonly LoggedRefusedPlay[];
+  /** Every practice sound, practice answer that scored nothing, and refused practice sound, kept apart from the trials. Absent in a visit with no practice, as before the audible-start spec. */
+  readonly practice?: LoggedPractice;
 }
 
 /** One kept calibration. */
@@ -1134,3 +1149,102 @@ export type CalibrationSound = "loading" | "music" | "hiss";
 
 /** How a calibration's anchor was set. `hands`: matched to rubbed hands, before the audible-start spec. */
 export type CalibrationAnchor = "hands" | "music" | "hiss";
+
+/**
+ * `practice`: the room's sound plays to one ear at a time until each ear has caught it once;
+ * nothing counts. `notHeard`: a side did not catch it; the pause `practiceNotHeard` holds.
+ * `counting`: the search; the screen holds nothing about a trial.
+ */
+export type RoomPracticePhase = "practice" | "notHeard" | "counting";
+
+/** What the room's screen says about its practice. Every string comes from `src/copy`. */
+export interface RoomPractice {
+  readonly phase: RoomPracticePhase;
+  /** True from a practice sound's presentation until it is answered or its window closes. Never says which side. False outside `practice`. */
+  readonly soundPlaying: boolean;
+  /** The practice heading in `practice` and `notHeard`; null in `counting`. */
+  readonly heading: string | null;
+  /** In `practice` and `notHeard`: what practice is. In `counting`: the line that says the counting has begun. */
+  readonly lines: readonly string[];
+  /** While `soundPlaying`: the line that says a sound is playing now; otherwise null. */
+  readonly soundPlayingLine: string | null;
+  /** In `notHeard`: the sides that did not catch it; otherwise empty. */
+  readonly notHeardEars: readonly Ear[];
+  /** In `notHeard`: which side, what to check, and what each choice does; otherwise empty. */
+  readonly notHeardLines: readonly string[];
+  /** The label of the control that calls `resume` in `notHeard`. */
+  readonly tryAgainLabel: string;
+  /** The label of the control that calls `goOnWithoutPractice` in `notHeard`. */
+  readonly goOnLabel: string;
+}
+
+/** The fields of every practice sound in the log. Times on the visit log's clock. */
+export interface PracticeTrialCommon {
+  /** Its position among the practice sounds of the visit, from 1. */
+  readonly order: number;
+  readonly roomIndex: number;
+  readonly attempt: number;
+  /** 1, then 2 and up after each try again. */
+  readonly round: number;
+  /** Its number within the round, from 1. A sound played again after a pause keeps its number. */
+  readonly practiceNumber: number;
+  /** The ear it was for. */
+  readonly ear: Ear;
+  readonly requestedLevelDb: number;
+  readonly playedLevelDb: number;
+  readonly clampLimit: ClampLimit | null;
+  readonly gapBeforeMs: number;
+  readonly presentedAtMs: number;
+  readonly windowStartMs: number;
+}
+
+export type ScoredPracticeTrial = PracticeTrialCommon & {
+  readonly status: "scored";
+  readonly response: VisitorResponse;
+  /** `caught`, `wrongSide` or `missed`, as for a sound trial. Only `caught` ends the ear's practice. */
+  readonly outcome: SoundOutcome;
+  readonly answeredAtMs: number | null;
+  readonly responseTimeMs: number | null;
+  readonly scoredAtMs: number;
+};
+
+export type DiscardedPracticeTrial = PracticeTrialCommon & {
+  readonly status: "discarded";
+  readonly discardedAtMs: number;
+};
+
+export type PracticeTrial = ScoredPracticeTrial | DiscardedPracticeTrial;
+
+/** A practice sound the output stage would not play. */
+export interface LoggedPracticeRefusedPlay {
+  readonly atMs: number;
+  readonly roomIndex: number;
+  readonly attempt: number;
+  readonly round: number;
+  readonly practiceNumber: number;
+  readonly reason: PlayRefusal;
+}
+
+/** Everything of practice, kept apart from the trials that make the result. */
+export interface LoggedPractice {
+  readonly trials: readonly PracticeTrial[];
+  readonly ignoredAnswers: readonly LoggedIgnoredAnswer[];
+  readonly refusedPlays: readonly LoggedPracticeRefusedPlay[];
+}
+
+/** Released in the same moment a practice sound is scored. */
+export interface PracticeSoundScoredEvent {
+  readonly kind: "practiceSoundScored";
+  readonly room: VisitRoom;
+  readonly trial: ScoredPracticeTrial;
+  /** `ripple` for a caught practice sound, drawn on `trial.ear`; `none` otherwise. */
+  readonly reaction: Extract<TrialReaction, "ripple" | "none">;
+  /** For `ripple`, the ripple's label; otherwise null. */
+  readonly line: string | null;
+}
+
+/** Released when the practice of a room run ends and its counting begins. Says nothing about any trial. */
+export interface CountingStartedEvent {
+  readonly kind: "countingStarted";
+  readonly room: VisitRoom;
+}
