@@ -598,6 +598,174 @@ describe("createVisitStore", () => {
     });
   });
 
+  describe("changePayload (swapped-repeat Q5, decided by the owner on 2026-11-15)", () => {
+    const newPayload =
+      '{"payloadOf":"0000000b","swappedRepeats":[{"runNumber":1}]}';
+    const unknownFields = { writtenBy: "a later page", list: [1, { a: null }] };
+    const brokenEntry = { savedVisitId: "zz", whatever: [true] };
+    const extraEntry = { ...entry(second), extra: "kept" };
+
+    const getters: readonly [string, () => never | null | undefined][] = [
+      [
+        "the getter throws",
+        () => {
+          throw new DOMException("blocked", "SecurityError");
+        },
+      ],
+      ["the getter gives null", () => null],
+      ["the getter gives undefined", () => undefined],
+    ];
+
+    it.each(getters)("%s: unavailable", (_label, get) => {
+      expect(
+        createVisitStore(get).changePayload(first.savedVisitId, newPayload),
+      ).toEqual({ ok: false, reason: "unavailable" });
+    });
+
+    it("getItem throws: unavailable, and nothing is written", () => {
+      const { area, store } = storeOver(valueText([entry(first)]), {
+        getItemThrows: true,
+      });
+      expect(store.changePayload(first.savedVisitId, newPayload)).toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      expect(area.calls.every((call) => call.method === "getItem")).toBe(true);
+    });
+
+    it("nothing under the key: notFound, and nothing is written", () => {
+      const { area, store } = storeOver(null);
+      expect(store.changePayload(first.savedVisitId, newPayload)).toEqual({
+        ok: false,
+        reason: "notFound",
+      });
+      expect(area.calls.every((call) => call.method === "getItem")).toBe(true);
+      expect(area.items()).toEqual({});
+    });
+
+    it.each([
+      ["not JSON", "{not json"],
+      ["JSON null", "null"],
+      ["format version 2", JSON.stringify({ formatVersion: 2, visits: [] })],
+      ["no visits", JSON.stringify({ formatVersion: 1 })],
+    ])(
+      "an unreadable value (%s): unreadable, and nothing is written",
+      (_label, text) => {
+        const { area, store } = storeOver(text, {
+          initialItems: { other: "x" },
+        });
+        expect(store.changePayload(first.savedVisitId, newPayload)).toEqual({
+          ok: false,
+          reason: "unreadable",
+        });
+        expect(area.items()).toEqual({ [key]: text, other: "x" });
+      },
+    );
+
+    it("gives the entry the new payload and a new valid checksum, and keeps its id, dates, visit type, name, place, own unknown fields, every other entry and every unknown field, with one setItem", () => {
+      const { area, store } = storeOver(
+        valueText(
+          [entry(first), brokenEntry, extraEntry, entry(third)],
+          unknownFields,
+        ),
+      );
+      expect(store.changePayload(second.savedVisitId, newPayload)).toEqual({
+        ok: true,
+      });
+      const changed = { ...second, payloadJson: newPayload };
+      expect(storedValue(area.items()[key])).toEqual({
+        formatVersion: 1,
+        visits: [
+          entry(first),
+          brokenEntry,
+          { ...entry(changed), extra: "kept" },
+          entry(third),
+        ],
+        ...unknownFields,
+      });
+      const stored = (
+        storedValue(area.items()[key]) as { visits: Record<string, unknown>[] }
+      ).visits[2]!;
+      expect(stored.checksum).toBe(entryChecksum(changed));
+      expect(stored.checksum).not.toBe(entryChecksum(second));
+      expect(store.read()).toEqual({
+        status: "ready",
+        entries: [first, changed, third],
+        unreadableCount: 1,
+      });
+      expect(
+        area.calls.filter((call) => call.method === "setItem"),
+      ).toHaveLength(1);
+    });
+
+    it("changes a payload and back", () => {
+      const { store } = storeOver(valueText([entry(first)]));
+      store.changePayload(first.savedVisitId, newPayload);
+      expect(store.read()).toEqual({
+        status: "ready",
+        entries: [{ ...first, payloadJson: newPayload }],
+        unreadableCount: 0,
+      });
+      store.changePayload(first.savedVisitId, first.payloadJson);
+      expect(store.read()).toEqual({
+        status: "ready",
+        entries: [first],
+        unreadableCount: 0,
+      });
+    });
+
+    it("setItem throws QuotaExceededError: full, and the stored text stays as it was", () => {
+      const text = valueText([entry(first)]);
+      const { area, store } = storeOver(text, {
+        maxCharacterCount: key.length + text.length,
+      });
+      expect(store.changePayload(first.savedVisitId, newPayload)).toEqual({
+        ok: false,
+        reason: "full",
+      });
+      expect(area.items()).toEqual({ [key]: text });
+    });
+
+    it("setItem throws anything else: refused, and the stored text stays as it was", () => {
+      const text = valueText([entry(first), entry(second)]);
+      const { area, store } = storeOver(text, { setItemThrows: true });
+      expect(store.changePayload(first.savedVisitId, newPayload)).toEqual({
+        ok: false,
+        reason: "refused",
+      });
+      expect(area.items()).toEqual({ [key]: text });
+    });
+
+    it("gives notFound for an id that is not stored, or stored only in an unreadable entry, and writes nothing", () => {
+      const brokenThird = { ...entry(third), checksum: "00000000" };
+      const text = valueText([entry(first), brokenThird]);
+      const { area, store } = storeOver(text);
+      for (const savedVisitId of [second.savedVisitId, third.savedVisitId]) {
+        expect(store.changePayload(savedVisitId, newPayload)).toEqual({
+          ok: false,
+          reason: "notFound",
+        });
+      }
+      expect(area.calls.every((call) => call.method === "getItem")).toBe(true);
+      expect(area.items()).toEqual({ [key]: text });
+    });
+
+    it("never throws for a value that throws nothing but holds strange JSON", () => {
+      for (const text of [
+        "",
+        " ",
+        "{}",
+        '{"__proto__":{"formatVersion":1}}',
+        '{"formatVersion":1,"visits":[null,1,[],{"__proto__":{}}]}',
+      ]) {
+        const { store } = storeOver(text);
+        expect(() =>
+          store.changePayload(first.savedVisitId, newPayload),
+        ).not.toThrow();
+      }
+    });
+  });
+
   describe("idTaken", () => {
     it("gives idTaken for an id already stored, readable or not, and writes nothing", () => {
       const brokenThird = { ...entry(third), checksum: "00000000" };

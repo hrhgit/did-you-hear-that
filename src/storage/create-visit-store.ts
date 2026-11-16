@@ -343,6 +343,30 @@ export function createVisitStore(
       });
     },
 
+    changePayload(savedVisitId: string, payloadJson: string): StoreWrite {
+      // As changeName, for the payload (swapped-repeat Q5, decided by the owner on 2026-11-15): the
+      // entry keeps its id, its dates, its visit type, its name, its place and every field the
+      // store does not know; every other entry is kept as read.
+      return change((loaded) => {
+        const found = findReadable(loaded, savedVisitId);
+        if (found === undefined || loaded.status !== "value") {
+          return refusal("notFound");
+        }
+        const fields: StoreEntryFields = { ...found.fields, payloadJson };
+        const changed = {
+          ...(loaded.value.visits[found.position] as JsonObject),
+          payloadJson,
+          checksum: entryChecksum(fields),
+        };
+        return writeValue(loaded.area, {
+          ...loaded.value,
+          visits: loaded.value.visits.map((stored, position) =>
+            position === found.position ? changed : stored,
+          ),
+        });
+      });
+    },
+
     remove(savedVisitId: string): StoreWrite {
       return change((loaded) => {
         const found = findReadable(loaded, savedVisitId);

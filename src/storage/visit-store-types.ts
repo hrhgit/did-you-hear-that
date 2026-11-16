@@ -48,6 +48,8 @@ export interface VisitStore {
   append(fields: StoreEntryFields): StoreWrite;
   /** Gives one entry a new headphone name and a new checksum. */
   changeName(savedVisitId: string, headphoneName: string | null): StoreWrite;
+  /** Gives one entry a new payload and a new checksum. */
+  changePayload(savedVisitId: string, payloadJson: string): StoreWrite;
   /** Removes one entry; removes the key when nothing else is left. */
   remove(savedVisitId: string): StoreWrite;
   /** Removes the key, readable or not. */
