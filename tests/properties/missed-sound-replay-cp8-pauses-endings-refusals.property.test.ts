@@ -28,7 +28,8 @@ import {
 // replay script, and for one run in three a refusal script on a scripted output: no play while a
 // pause holds, which shows its line and allows neither skip nor proceed; after a resume, the cut
 // sound or the next one, one gap after the pause ended; a device change ends the replay; a refused
-// sound is asked for again one gap later and the third refusal in a row ends the replay; a replay
+// sound is asked for again one gap later and the third refusal in a row ends the replay, where a
+// `busy` refusal before the first sound of the replay has started does not count (D9); a replay
 // with no ending event and every pause resumed finishes within its bound; every finished view has
 // its end line and the whole log's counts; and the log is unchanged.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
@@ -230,6 +231,14 @@ describe("missed-sound replay CP8: pauses, endings and refusals", () => {
 
             // Refusals (R12): notRunning acts as a stop report, notCalibrated as a device change,
             // any other is asked for again one gap later, and the third in a row ends the replay.
+            // A `busy` refusal that comes before the first sound of the replay has started is not
+            // counted: it neither adds to nor resets the count (R12.3, D9).
+            const startedBefore = (seq: number): boolean =>
+              harness.events.some((event) => event.seq < seq);
+            const uncounted = (play: (typeof harness.plays)[number]): boolean =>
+              play.outcome.kind === "refused" &&
+              play.outcome.reason === "busy" &&
+              !startedBefore(play.seq);
             let inARow = 0;
             harness.plays.forEach((play, playIndex) => {
               const after = stepAfter(harness, play.seq);
@@ -257,7 +266,7 @@ describe("missed-sound replay CP8: pauses, endings and refusals", () => {
                 expect(harness.plays[playIndex + 1]).toBeUndefined();
                 return;
               }
-              inARow += 1;
+              inARow += uncounted(play) ? 0 : 1;
               if (inARow >= refusedPlaysInARowMaxCount) {
                 expect(after?.view).toMatchObject({
                   phase: "finished",
@@ -279,7 +288,8 @@ describe("missed-sound replay CP8: pauses, endings and refusals", () => {
               expect(next?.request).toEqual(play.request);
             });
 
-            // A replay with no ending event and every pause resumed finishes within its bound.
+            // A replay with no ending event and every pause resumed finishes within its bound, which
+            // grows by one gap for each uncounted busy refusal (D9).
             const endingInScript = script.events.some((event) =>
               ["proceed", "stop", "pageLeft", "deviceChanged"].includes(
                 event.action,
@@ -309,7 +319,8 @@ describe("missed-sound replay CP8: pauses, endings and refusals", () => {
                 pausedMs +
                 plan.sounds.length *
                   (replayGapMs + scheduleLeadMs + ghostSoundMaxDurationMs) *
-                  refusedPlaysInARowMaxCount;
+                  refusedPlaysInARowMaxCount +
+                harness.plays.filter(uncounted).length * replayGapMs;
               const finished = harness.steps.find(
                 (step) => step.view?.phase === "finished",
               );

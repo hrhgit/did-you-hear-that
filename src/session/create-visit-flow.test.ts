@@ -2236,10 +2236,56 @@ describe('createVisitFlow: the missed-sound replay (missed-sound-replay design.m
       });
     }, 60_000);
 
+    it("busy refusals before the first sound has started do not end the replay; after it, three busy refusals in a row do (R12.3, D9)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      const plan = planMissedSoundReplay(snapshot.visitLog);
+      expect(plan.sounds.length).toBeGreaterThan(1);
+      const busyBefore = visitFlowConfig.refusedPlaysInARowMaxCount + 1;
+      harness.refusePlays(
+        ...Array.from({ length: busyBefore }, () => "busy" as const),
+      );
+      await toFirstReplaySound(harness);
+      const before = replayPlays(harness);
+      expect(before).toHaveLength(busyBefore + 1);
+      for (const [index, play] of before.entries()) {
+        expect(
+          play.outcome.kind === "refused" ? play.outcome.reason : null,
+        ).toBe(index < busyBefore ? "busy" : null);
+        expect(play.atMs - before[0]!.atMs).toBe(index * replayGapMs);
+        expect(play.request.levelDb).toBe(plan.sounds[0]!.askedLevelDb);
+      }
+      expect(viewOf(harness)).toMatchObject({
+        phase: "playing",
+        current: { position: 1 },
+      });
+
+      harness.refusePlays(
+        ...Array.from(
+          { length: visitFlowConfig.refusedPlaysInARowMaxCount },
+          () => "busy" as const,
+        ),
+      );
+      advanceUntil(harness, (view) => view.phase === "finished");
+      const after = replayPlays(harness).slice(before.length);
+      expect(after).toHaveLength(visitFlowConfig.refusedPlaysInARowMaxCount);
+      expect(new Set(after.map((play) => play.request.levelDb))).toEqual(
+        new Set([plan.sounds[1]!.askedLevelDb]),
+      );
+      expect(viewOf(harness)).toMatchObject({
+        phase: "finished",
+        ending: "soundRefused",
+      });
+      await expectNothingMore(harness);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+    }, 60_000);
+
     it("three refusals in a row end the replay with soundRefused, in the stage and with the log kept (R12.3, R12.4)", async () => {
       const harness = createHarness();
       const { snapshot, logCopy } = await enterReplay(harness);
-      harness.refusePlays("busy", "peakBoundNotMet", "busy");
+      // Busy refusals before the first sound has started do not count (D9), so these are others.
+      harness.refusePlays("peakBoundNotMet", "tooLong", "peakBoundNotMet");
       harness.flow.startReplay();
       await harness.settle();
       harness.advance(replayGapMs * 3);

@@ -623,6 +623,44 @@ describe("createMissedSoundReplay on a calibrated shell", () => {
     expect(recorded.events).toHaveLength(1);
   });
 
+  it("asks again for a first sound refused busy while an earlier sound still plays, and does not count those refusals (R12.3, D9)", async () => {
+    const shell = await calibratedShell();
+    const { controller, recorded } = replayOn(shell);
+    // The last room's sound may still play when the stage begins: the nursery's lasts 1400 ms,
+    // longer than the refusals in a row that would end the replay take at one gap each.
+    const earlier = shell.output.play({
+      soundId: "nursery",
+      ear: "right",
+      levelDb: -40,
+      purpose: "trial",
+      random: createSeededRandom(5),
+    });
+    expect(earlier.kind).toBe("scheduled");
+    controller.start();
+    shell.advance(20_000);
+    const firstScheduled = recorded.plays.findIndex(
+      (play) => play.outcome.kind === "scheduled",
+    );
+    expect(firstScheduled).toBeGreaterThanOrEqual(refusedPlaysInARowMaxCount);
+    for (const [index, play] of recorded.plays
+      .slice(0, firstScheduled)
+      .entries()) {
+      expect(play.outcome).toEqual({ kind: "refused", reason: "busy" });
+      expect(play.atMs - recorded.plays[0]!.atMs).toBe(index * replayGapMs);
+      expect(play.request).toEqual(recorded.plays[0]!.request);
+    }
+    expect(recorded.plays[firstScheduled]?.request).toEqual(
+      recorded.plays[0]!.request,
+    );
+    expect(recorded.events.map(({ event }) => event.sound.position)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(controller.view(null)).toMatchObject({
+      phase: "finished",
+      ending: "allPlayed",
+    });
+  });
+
   it("leaves the log deep-equal to itself", async () => {
     const shell = await calibratedShell();
     const log = makeLog(shell.tops);
@@ -759,11 +797,17 @@ describe("createMissedSoundReplay on a scripted output", () => {
   );
 
   it(`ends with soundRefused after ${String(refusedPlaysInARowMaxCount)} refusals in a row, and a scheduled play resets the count`, () => {
+    // Before the first sound has started a busy refusal does not count, so the first sound is
+    // refused for another reason; after it, busy refusals count.
+    const almostBefore = Array.from(
+      { length: refusedPlaysInARowMaxCount - 1 },
+      () => refusedWith("peakBoundNotMet"),
+    );
     const almost = Array.from({ length: refusedPlaysInARowMaxCount - 1 }, () =>
       refusedWith("busy"),
     );
     const replay = scriptedReplay([
-      ...almost,
+      ...almostBefore,
       scheduled(),
       ...almost,
       scheduled(),
@@ -796,6 +840,78 @@ describe("createMissedSoundReplay on a scripted output", () => {
     });
     expect(replay.timer.pendingCount()).toBe(0);
     expect(replay.stopAlls).toEqual([]);
+  });
+
+  it("does not count a busy refusal before the first sound has started, which neither adds to nor resets the refusals in a row (R12.3, D9)", () => {
+    const busyBefore = Array.from(
+      { length: refusedPlaysInARowMaxCount + 1 },
+      () => refusedWith("busy"),
+    );
+    const counted = Array.from({ length: refusedPlaysInARowMaxCount }, () =>
+      refusedWith("peakBoundNotMet"),
+    );
+    // Busy refusals before, between and after the first counted refusals.
+    const script = [
+      ...busyBefore,
+      counted[0]!,
+      refusedWith("busy"),
+      ...counted.slice(1),
+    ];
+    const replay = scriptedReplay(script);
+    replay.controller.start();
+    replay.timer.advanceBy(60_000);
+    expect(replay.plays).toHaveLength(script.length);
+    expect(
+      replay.plays.map((play) => play.atMs - replay.plays[0]!.atMs),
+    ).toEqual(script.map((_, index) => index * replayGapMs));
+    expect(new Set(replay.plays.map((play) => play.request.levelDb)).size).toBe(
+      1,
+    );
+    expect(replay.events).toEqual([]);
+    expect(replay.controller.view(null)).toMatchObject({
+      phase: "finished",
+      ending: "soundRefused",
+    });
+    expect(replay.timer.pendingCount()).toBe(0);
+  });
+
+  it("asks again for a first sound refused busy any number of times, and plays it once the output stage takes it (R12.3, D9)", () => {
+    const busyBefore = Array.from(
+      { length: 2 * refusedPlaysInARowMaxCount },
+      () => refusedWith("busy"),
+    );
+    const replay = scriptedReplay([
+      ...busyBefore,
+      scheduled(),
+      scheduled(),
+      scheduled(),
+    ]);
+    replay.controller.start();
+    replay.timer.advanceBy(60_000);
+    expect(replay.plays).toHaveLength(busyBefore.length + 3);
+    expect(replay.events.map((event) => event.sound.position)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(replay.controller.view(null)).toMatchObject({
+      phase: "finished",
+      ending: "allPlayed",
+    });
+  });
+
+  it(`counts busy refusals once the first sound has started: ${String(refusedPlaysInARowMaxCount)} in a row end with soundRefused (R12.3)`, () => {
+    const busyAfter = Array.from({ length: refusedPlaysInARowMaxCount }, () =>
+      refusedWith("busy"),
+    );
+    const replay = scriptedReplay([scheduled(), ...busyAfter]);
+    replay.controller.start();
+    replay.timer.advanceBy(60_000);
+    expect(replay.plays).toHaveLength(1 + refusedPlaysInARowMaxCount);
+    expect(replay.events.map((event) => event.sound.position)).toEqual([1]);
+    expect(replay.controller.view(null)).toMatchObject({
+      phase: "finished",
+      ending: "soundRefused",
+    });
+    expect(replay.timer.pendingCount()).toBe(0);
   });
 
   it("puts the next request one gap after the end of a sound on the timer's clock", () => {

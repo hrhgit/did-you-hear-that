@@ -17,6 +17,8 @@
 // fault, so that the property cannot slip back to the wrong check.
 
 import { describe, expect, it, vi } from "vitest";
+import { missedSoundReplayConfig } from "../../src/config/missed-sound-replay-config";
+import { visitFlowConfig } from "../../src/config/visit-flow-config";
 import { sideCountLine } from "../../src/copy/replay-lines";
 import { replayCounts } from "../../src/session/replay-counts";
 import type { VisitLog } from "../../src/session/visit-flow-types";
@@ -155,5 +157,59 @@ describe("missed-sound replay regressions", () => {
     ).toBe(
       "On your right I made three sounds. You caught two. Once you named the other side.",
     );
+  });
+
+  it("regression 4: a first replayed sound refused busy three times while the last room's sound still played ended the replay with soundRefused (task 12 review, no seed)", async () => {
+    // Found by reading the code in task 12, not by a property, so there is no fast-check seed.
+    // The stage begins at the last answer, while that trial's sound may still play. A quick press
+    // on the start control then has the first replayed sound refused busy by the output stage,
+    // and before the fix three such refusals ended the replay with a line saying the house could
+    // not play the sounds. The refusal script stands in for that output stage. A busy refusal
+    // before the first replayed sound has started does not count (R12.3, D9), so the replay goes
+    // on and plays every sound.
+    const plan: VisitLogPlan = {
+      visitType: "quick",
+      visitSeed: 0,
+      calibrationSettingsDb: [-40],
+      freeTops: [flatTops(0)],
+      rooms: [
+        { abandoned: [], finished: emptyRun },
+        { abandoned: [], finished: emptyRun },
+        { abandoned: [], finished: { trialCount: 3, seed: 0 } },
+      ],
+      noSoundShareFraction: 0,
+      missShareFraction: 1,
+    };
+    const busyCount = visitFlowConfig.refusedPlaysInARowMaxCount;
+    const harness = await createReplayHarness({
+      log: visitLogOf(plan),
+      outputDelayMs: 0,
+      refusals: Array.from({ length: busyCount }, () => ({
+        kind: "refused" as const,
+        reason: "busy" as const,
+      })),
+    });
+    const soundCount = harness.controller.plan.sounds.length;
+    expect(soundCount).toBeGreaterThan(0);
+    await harness.run(
+      { startTimesMs: [0], events: [], outputDelayMs: 0 },
+      60_000,
+    );
+    const first = harness.plays.slice(0, busyCount + 1);
+    expect(first.map((play) => play.outcome.kind)).toEqual([
+      ...Array.from({ length: busyCount }, () => "refused"),
+      "scheduled",
+    ]);
+    expect(first.map((play) => play.atMs - first[0]!.atMs)).toEqual(
+      first.map((_, index) => index * missedSoundReplayConfig.replayGapMs),
+    );
+    expect(new Set(first.map((play) => play.request.levelDb)).size).toBe(1);
+    expect(harness.events.map(({ event }) => event.sound.position)).toEqual(
+      Array.from({ length: soundCount }, (_, index) => index + 1),
+    );
+    expect(harness.current().view).toMatchObject({
+      phase: "finished",
+      ending: "allPlayed",
+    });
   });
 });

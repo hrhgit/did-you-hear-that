@@ -82,7 +82,9 @@ export interface MissedSoundReplayController {
  * from the log alone, waits for `start`, then plays the planned sounds one at a time through
  * `output.play` with the Purpose `replay`, each one `replayGapMs` after the end of the one before.
  * It holds at most one pending timer, reads time only through the timer it is given, and writes
- * nothing to the log.
+ * nothing to the log. A refused sound is asked for again one gap later, and
+ * `refusedPlaysInARowMaxCount` refusals in a row end the replay; a `busy` refusal before the
+ * first sound of this replay has started does not count towards them.
  *
  * It has no part in gestures, the snapshot's pause field or the stage, which stay in the flow.
  */
@@ -154,6 +156,14 @@ export function createMissedSoundReplay(
       }
       if (outcome.reason === "notCalibrated") {
         finish("deviceChanged");
+        return;
+      }
+      // A `busy` refusal before the first sound of this replay has started comes from the last
+      // room's sound, which may still play when the stage begins. It is asked for again one gap
+      // later and does not count towards the refusals that end the replay; it neither adds to
+      // nor resets the count (D9, D16, R12.3).
+      if (outcome.reason === "busy" && current === null) {
+        askAfter(settings.replayGapMs);
         return;
       }
       refusalsInARow += 1;
