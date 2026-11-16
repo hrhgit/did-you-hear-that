@@ -19,8 +19,60 @@
 // because the code passes it: it asserts the corrected condition for the input that showed the
 // fault, so that the property cannot slip back to the wrong check.
 
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { hearingMethodConfig } from "../../src/config/hearing-method-config";
+import { swappedRepeatView } from "../../src/session/swapped-repeat-view";
+import type { RoomSummary } from "../../src/session/visit-flow-types";
+import { blameWordsIn, repeatViewTexts } from "./swapped-repeat-text";
 
 describe("swapped repeat regressions", () => {
-  it.todo("no counterexample has been found by a swapped repeat property yet");
+  // An expected break, found by task 10 (design.md, "Counterexamples"). The view of the check
+  // after an answer of both sides gives the visit's headphone check line for it, reused word for
+  // word as the design's copy asks ("The hiss came from one side only. ..."). CP9 checks every
+  // string for the word "only" but `calibrationCopy.keptLine`, the exception the owner's
+  // coordinator chose on 2026-11-15, which allows no other. Only that choice or other words for
+  // the line can remove it, so the case stays `it.fails`, and the blame rule of CP9 is skipped,
+  // until one of them is decided. It is the shrunk counterexample's floor: the corridor, 1 kHz,
+  // left −50 and right −65, offered, cap 0 dB; the view's other inputs are those of a check that
+  // waits for a press.
+  it.fails(
+    "regression 1: the swap check's line for an answer of both sides holds the word only (CP9, seed 1924221164)",
+    () => {
+      const counts = {
+        presentationCount: 10,
+        catchCount: 5,
+        wrongSideCount: 0,
+        missCount: 5,
+      };
+      const roomSummary: RoomSummary = {
+        room: { roomIndex: 0, roomId: "corridor", frequencyHz: 1000 },
+        left: { ...counts, state: "found", thresholdDb: -50 },
+        right: { ...counts, state: "found", thresholdDb: -65 },
+        searchCapDb: 0,
+        noSoundTrialCount: 0,
+        falseAlarmCount: 0,
+        rightMinusLeftDb: -15,
+        swappedRepeatOffered: true,
+      };
+      const view = swappedRepeatView({
+        roomSummary,
+        phase: "check",
+        earpieces: "unknown",
+        unavailable: null,
+        again: false,
+        awaitingAnswer: false,
+        playRefusal: null,
+        judgement: "bothSides",
+        cut: false,
+        runNumber: 1,
+        pauseReason: null,
+        ending: null,
+        record: null,
+        floorDb: hearingMethodConfig.floorDb,
+      });
+      for (const placed of repeatViewTexts(view)) {
+        expect(blameWordsIn(placed.text), placed.place).toEqual([]);
+      }
+    },
+  );
 });
