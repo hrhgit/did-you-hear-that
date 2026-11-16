@@ -24,6 +24,10 @@ import type {
   VisitorListenerSpec,
   VisitorReplayBehaviour,
   VisitorScript,
+  VisitorSwapCheckAnswer,
+  VisitorSwappedRepeatBehaviour,
+  VisitorSwappedRepeatEvent,
+  VisitorSwappedRepeatFloor,
 } from "../listeners/simulated-visitor";
 import {
   endingAfterStartMaxMs,
@@ -241,3 +245,96 @@ export function replayVisitRunArbitrary(
     })
     .map(({ run, replay }) => ({ ...run, script: { ...run.script, replay } }));
 }
+
+// ─── The swapped repeat (swapped-repeat design.md, CP10), for that spec's files only ──────────
+
+/** The latest time of a swapped-repeat event, from the moment the visitor first sees the stage. */
+export const swappedRepeatEventMaxMs = 4 * 60_000;
+/** The most events of one swapped-repeat behaviour. */
+export const swappedRepeatEventMaxCount = 4;
+/** The longest delay before a press the visitor makes in the swapped repeat. */
+export const swappedRepeatPressDelayMaxMs = 3000;
+
+const swappedRepeatFloorArbitrary: fc.Arbitrary<VisitorSwappedRepeatFloor> =
+  fc.oneof(
+    { arbitrary: fc.constant({ kind: "firstOffered" as const }), weight: 3 },
+    { arbitrary: fc.constant({ kind: "lastOffered" as const }), weight: 3 },
+    {
+      arbitrary: fc.record({
+        kind: fc.constant("drawnOffered" as const),
+        // From 0 to below 1, in thousandths.
+        fraction: fc.integer({ min: 0, max: 999 }).map((n) => n / 1000),
+      }),
+      weight: 3,
+    },
+    { arbitrary: fc.constant({ kind: "notOffered" as const }), weight: 1 },
+  );
+
+const swapCheckAnswerArbitrary: fc.Arbitrary<VisitorSwapCheckAnswer> = fc.oneof(
+  { arbitrary: fc.constant("heard" as const), weight: 3 },
+  { arbitrary: fc.constant("bothSides" as const), weight: 1 },
+  { arbitrary: fc.constant("nothingHeard" as const), weight: 1 },
+);
+
+const swappedRepeatActions: readonly VisitorSwappedRepeatEvent["action"][] = [
+  "proceed",
+  "stop",
+  "pause",
+  "resume",
+  "hidden",
+  "interrupted",
+  "deviceChanged",
+  "pageLeft",
+  "refusedPress",
+];
+
+const resumingSwappedRepeatActions: readonly VisitorSwappedRepeatEvent["action"][] =
+  ["pause", "hidden", "interrupted"];
+
+const swappedRepeatEventArbitrary: fc.Arbitrary<VisitorSwappedRepeatEvent> = fc
+  .record({
+    atMs: fc.integer({ min: 0, max: swappedRepeatEventMaxMs }),
+    action: fc.constantFrom(...swappedRepeatActions),
+    resumeAfterMs: fc.option(fc.integer({ min: 0, max: resumeAfterMaxMs }), {
+      freq: 4,
+    }),
+  })
+  .map((event) => ({
+    ...event,
+    resumeAfterMs: resumingSwappedRepeatActions.includes(event.action)
+      ? event.resumeAfterMs
+      : null,
+  }));
+
+/**
+ * A swapped-repeat behaviour of the visitor (swapped-repeat design.md, "What tests/listeners
+ * gains", CP10), for that spec's files only: the floor named (the lowest, the highest or a drawn
+ * offered floor nine times in ten, a floor that does not offer it otherwise); whether the visitor
+ * swaps on the first instruction (three times in four); its first answer to the swap check (the
+ * side the hiss reached three times in five, otherwise both sides or nothing heard); press delays
+ * of 0 to 3 s; one time in two no event, otherwise one to four events of the stage at times from 0
+ * to 4 minutes after it is entered, each pause, hidden page or interruption followed by `resume`
+ * after 0 to 10 s or at once; and whether it turns the headphones back on reading the
+ * Turn_Back_Line.
+ */
+export const visitorSwappedRepeatBehaviourArbitrary: fc.Arbitrary<VisitorSwappedRepeatBehaviour> =
+  fc.record({
+    floor: swappedRepeatFloorArbitrary,
+    swapsOnFirstInstruction: fc.oneof(
+      { arbitrary: fc.constant(true), weight: 3 },
+      { arbitrary: fc.constant(false), weight: 1 },
+    ),
+    firstCheckAnswer: swapCheckAnswerArbitrary,
+    pressDelayMaxMs: fc.constant(swappedRepeatPressDelayMaxMs),
+    events: fc.oneof(
+      { arbitrary: fc.constant([]), weight: 1 },
+      {
+        arbitrary: fc.array(swappedRepeatEventArbitrary, {
+          minLength: 1,
+          maxLength: swappedRepeatEventMaxCount,
+        }),
+        weight: 1,
+      },
+    ),
+    turnsBack: fc.boolean(),
+  });

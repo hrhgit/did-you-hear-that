@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { swappedRepeatCopy } from "../../src/copy/swapped-repeat-copy";
 import type { ScoredVisitTrial } from "../../src/session/visit-flow-types";
 import { createVisitHarness } from "../properties/visit-flow-harness";
 import type { PsychometricListenerParameters } from "./psychometric-listener";
-import { playVisit, type VisitorScript } from "./simulated-visitor";
+import {
+  playVisit,
+  type VisitorScript,
+  type VisitorSwappedRepeatBehaviour,
+} from "./simulated-visitor";
 
 // Worst-case renders keep the visit quick (visit-flow D26, audio-output D43).
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
@@ -71,5 +76,146 @@ describe("playVisit", () => {
           (trial.kind === "sound" && trial.outcome === "wrongSide"),
       ),
     ).toEqual([]);
+  });
+
+  it("hears every trial through its headphones: with an imbalance, each ear's sounds are caught at the level its earpiece shifts", async () => {
+    // Both true thresholds at −30.5 dB; the right earpiece plays 20 dB quieter than the left, so
+    // the left earpiece plays 10 dB louder and the right 10 dB quieter than asked.
+    const even: PsychometricListenerParameters = Object.freeze({
+      ...stepListener,
+      trueThresholdDb: Object.freeze({ left: -30.5, right: -30.5 }),
+    });
+    const heardThresholdDb = { left: -40.5, right: -20.5 } as const;
+    const harness = createVisitHarness({
+      seed: 20261206,
+      performanceOffsetMs: 4321,
+    });
+    const run = await playVisit(harness, {
+      ...script,
+      listener: { kind: "psychometric", parameters: even, seed: 8 },
+      headphones: { imbalanceDb: 20 },
+    });
+    expect(run.ending).toBe("done");
+    expect(run.finalStage).toBe("result");
+
+    const sounds = harness.events.flatMap((recorded) =>
+      recorded.event.kind === "trialScored" &&
+      recorded.event.trial.kind === "sound"
+        ? [recorded.event.trial]
+        : [],
+    );
+    expect(sounds.some((trial) => trial.ear === "left")).toBe(true);
+    expect(sounds.some((trial) => trial.ear === "right")).toBe(true);
+    for (const trial of sounds) {
+      if (trial.kind !== "sound") {
+        continue;
+      }
+      expect(
+        trial.outcome,
+        `${trial.ear} at ${String(trial.requestedLevelDb)} dB`,
+      ).toBe(
+        trial.requestedLevelDb >= heardThresholdDb[trial.ear]
+          ? "caught"
+          : "missed",
+      );
+    }
+    // In the rooms of the visit every sound plays in the earpiece of its own ear.
+    for (const trial of run.presentedTrials) {
+      expect(trial.earpiece).toBe(trial.kind === "sound" ? trial.ear : null);
+      expect(trial.swappedRepeatRunNumber).toBeNull();
+    }
+  });
+
+  /** A visitor whose ears are 25 dB apart, so that every floor offers the swapped repeat. */
+  const uneven: VisitorScript = Object.freeze({
+    ...script,
+    listener: Object.freeze({
+      kind: "psychometric" as const,
+      parameters: Object.freeze({
+        ...stepListener,
+        trueThresholdDb: Object.freeze({ left: -42.5, right: -17.5 }),
+      }),
+      seed: 9,
+    }),
+  });
+
+  it("answers the swap check from what it wears: a visitor who does not swap at first hears the hiss on the left", async () => {
+    const behaviour: VisitorSwappedRepeatBehaviour = {
+      floor: { kind: "firstOffered" },
+      swapsOnFirstInstruction: false,
+      firstCheckAnswer: "heard",
+      pressDelayMaxMs: 1000,
+      // Back to the picture once the room has begun, so that the test stays short.
+      events: [{ atMs: 60_000, action: "proceed", resumeAfterMs: null }],
+      turnsBack: false,
+    };
+    const harness = createVisitHarness({
+      seed: 20261207,
+      performanceOffsetMs: 98_765,
+    });
+    const run = await playVisit(harness, {
+      ...uneven,
+      swappedRepeat: behaviour,
+    });
+    expect(run.ending).toBe("done");
+    expect(run.finalStage).toBe("result");
+    const final = harness.flow.snapshot();
+    if (final.stage !== "result") {
+      throw new Error("The visit did not come back to its result.");
+    }
+    const firstOffered = final.summary.rooms.findIndex(
+      (room) => room.swappedRepeatOffered,
+    );
+    expect(firstOffered).toBeGreaterThanOrEqual(0);
+    expect(run.swappedRepeatRoomIndex).toBe(firstOffered);
+
+    const checkAnswers = harness.actions
+      .filter((action) => action.name === "answerSwapCheck")
+      .map((action) => action.args[0]);
+    // Not swapped: the hiss of the left earpiece is on the left ear. Then swapped: on the right.
+    expect(checkAnswers).toEqual(["left", "right"]);
+    expect(
+      harness.actions.filter((action) => action.name === "startSwappedRoom"),
+    ).toHaveLength(1);
+    // The room had begun, with each ear's sounds on the other earpiece.
+    const repeated = run.presentedTrials.filter(
+      (trial) => trial.swappedRepeatRunNumber !== null,
+    );
+    expect(repeated.length).toBeGreaterThan(0);
+    for (const trial of repeated) {
+      expect(trial.swappedRepeatRunNumber).toBe(1);
+      expect(trial.earpiece).toBe(
+        trial.kind === "sound"
+          ? trial.ear === "left"
+            ? "right"
+            : "left"
+          : null,
+      );
+    }
+    // Left before its end: no record, and the line that asks to turn the headphones back.
+    expect(final.swappedRepeats).toEqual([]);
+    expect(final.turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+  });
+
+  it("stops at the result without a swapped-repeat behaviour, even where a floor offers the repeat", async () => {
+    const harness = createVisitHarness({
+      seed: 20261208,
+      performanceOffsetMs: 0,
+    });
+    const run = await playVisit(harness, uneven);
+    expect(run.ending).toBe("done");
+    expect(run.finalStage).toBe("result");
+    expect(run.swappedRepeatRoomIndex).toBeNull();
+    const final = harness.flow.snapshot();
+    if (final.stage !== "result") {
+      throw new Error("The visit did not reach its result.");
+    }
+    expect(final.summary.rooms.some((room) => room.swappedRepeatOffered)).toBe(
+      true,
+    );
+    expect(
+      harness.actions.filter((action) => action.name === "chooseSwappedRepeat"),
+    ).toEqual([]);
+    expect(final.turnBackLine).toBeNull();
   });
 });

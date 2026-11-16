@@ -4,6 +4,12 @@
 // after a delay drawn from a seeded source, and applies the script's disturbances. It knows the
 // flow only through the contract and the flow's test options: it learns of a trial from the
 // presented-trial hook, never from the screen.
+//
+// It wears its headphones (swapped-repeat design.md, "What tests/listeners gains"; R21.2, R21.3,
+// D24): every trial reaches the listener through Worn_Headphones, with the earpiece the hook gives
+// and the arrangement the visitor itself wears, and an optional swapped-repeat behaviour takes it
+// from the result through the swapped repeat. With an imbalance of 0, the as-marked arrangement and
+// no behaviour, every visit plays exactly as before.
 
 import { audioOutputConfig } from "../../src/config/audio-output-config";
 import type { VisitType } from "../../src/config/hearing-method-config";
@@ -11,7 +17,9 @@ import {
   createSeededRandom,
   type RandomSource,
 } from "../../src/config/seeded-random";
+import type { FlowPresentedTrial } from "../../src/session/create-swapped-repeat";
 import type { PresentedTrial } from "../../src/session/create-visit-flow";
+import { earpieceOnEar } from "../../src/session/earpiece-on-ear";
 import type {
   Ear,
   HeadphoneCheckAnswer,
@@ -32,10 +40,21 @@ import {
   createPsychometricListener,
   type PsychometricListenerParameters,
 } from "./psychometric-listener";
+import { wornHeadphones, type WornTrial } from "./worn-headphones";
 
 /** A shell stop report the driver can make the backend send. */
 export type OutputEventKind =
   "hidden" | "interrupted" | "deviceChanged" | "pageLeft";
+
+/**
+ * A presented trial as a driver's hook gives it: the flow's `FlowPresentedTrial`, with the earpiece
+ * of the trial and the run number of its swapped repeat. The two fields are optional in this type
+ * only so that a driver whose hook is typed for the room runner's `PresentedTrial`
+ * (`tests/properties/visit-flow-timeline.ts`) still fits; every driver passes on the flow's own
+ * trial, and the visitor throws on a sound trial that comes without its earpiece.
+ */
+export type DriverPresentedTrial = PresentedTrial &
+  Partial<Pick<FlowPresentedTrial, "earpiece" | "swappedRepeatRunNumber">>;
 
 /**
  * What the visitor needs from a visit flow and its clocks. The Visit_Harness of
@@ -54,12 +73,16 @@ export interface VisitDriver {
   settle(): Promise<void>;
   /** Makes the backend report a stop, as a hidden page, an interruption, a device change or a left page do. */
   fireOutputEvent(kind: OutputEventKind): Promise<void>;
-  /** Calls `listener` with every trial the flow presents. Returns the function that removes it. */
-  onTrialPresented(listener: (trial: PresentedTrial) => void): () => void;
+  /**
+   * Calls `listener` with every trial the flow presents, with the earpiece it plays in. Returns
+   * the function that removes it.
+   */
+  onTrialPresented(listener: (trial: DriverPresentedTrial) => void): () => void;
   /**
    * Makes the backend refuse activation, as a browser that saw no press does, until called with
-   * false. Optional: only a replay behaviour's `refusedResume` and `refusedStartReplay` use it,
-   * and without it they are given as a plain `resume` and `startReplay`.
+   * false. Optional: only a replay behaviour's `refusedResume` and `refusedStartReplay` and a
+   * swapped-repeat behaviour's `refusedPress` use it, and without it they are given as a plain
+   * press.
    */
   refuseActivation?(refused: boolean): void;
 }
@@ -166,6 +189,76 @@ export type VisitorReplayBehaviour =
       readonly events: readonly VisitorReplayEvent[];
     };
 
+/**
+ * Which floor the visitor names at the result: the lowest or the highest floor that offers the
+ * repeat; the offered floor at `fraction` (from 0, the lowest, to below 1) of the offered floors;
+ * or a floor that does not offer it (the first such, or a number that is no room when every floor
+ * offers it).
+ */
+export type VisitorSwappedRepeatFloor =
+  | { readonly kind: "firstOffered" }
+  | { readonly kind: "lastOffered" }
+  | { readonly kind: "drawnOffered"; readonly fraction: number }
+  | { readonly kind: "notOffered" };
+
+/**
+ * How the visitor answers a swap check: with the side the hiss reached in the arrangement it
+ * wears (the hiss plays in the left earpiece), or with one of the two other answers.
+ */
+export type VisitorSwapCheckAnswer = "heard" | "bothSides" | "nothingHeard";
+
+/**
+ * What the visitor does in the swapped repeat besides the presses the stage asks for. Times are
+ * from the moment the visitor first sees the stage.
+ */
+export interface VisitorSwappedRepeatEvent {
+  readonly atMs: number;
+  readonly action:
+    | "proceed"
+    | "stop"
+    | "pause"
+    | "resume"
+    | "hidden"
+    | "interrupted"
+    | "deviceChanged"
+    | "pageLeft"
+    /** The press the stage asks for now (`playSwapCheck`, `startSwappedRoom` or `resume`), while the backend refuses activation. */
+    | "refusedPress";
+  /**
+   * For `pause`, `hidden` and `interrupted`: the wait to the visitor's `resume`. Null: the visitor
+   * resumes at once, as after a disturbance.
+   */
+  readonly resumeAfterMs: number | null;
+}
+
+/**
+ * How the visitor moves from the result through the swapped repeat (swapped-repeat design.md,
+ * "What tests/listeners gains"; R21.3). After a rest at the result it names `floor` with
+ * `chooseSwappedRepeat`. In the stage it presses what the stage asks for, each press from 0 to
+ * `pressDelayMaxMs` after the view changed: on the instruction it swaps the earpieces it wears and
+ * confirms, except on the first instruction when `swapsOnFirstInstruction` is false, where it
+ * confirms without swapping; in the check it plays the hiss and answers it, the first time with
+ * `firstCheckAnswer` and then always with the side the hiss reached; when ready it starts the
+ * room; in the room it answers every trial through what it wears; when the stage is unavailable
+ * or finished it goes back to the picture. It gives each event at its time, and turns the
+ * headphones back on reading the Turn_Back_Line when `turnsBack` is true. Once it is back at the
+ * result, or its press was ignored, or no floor fits `floor`, it stops there.
+ */
+export interface VisitorSwappedRepeatBehaviour {
+  readonly floor: VisitorSwappedRepeatFloor;
+  readonly swapsOnFirstInstruction: boolean;
+  readonly firstCheckAnswer: VisitorSwapCheckAnswer;
+  readonly pressDelayMaxMs: number;
+  readonly events: readonly VisitorSwappedRepeatEvent[];
+  readonly turnsBack: boolean;
+}
+
+/** The headphones the visitor wears. */
+export interface VisitorHeadphones {
+  /** Headphone_Imbalance: how much quieter the right earpiece plays than the left, in dB. */
+  readonly imbalanceDb: number;
+}
+
 /** Everything a Simulated_Visitor does in one visit. */
 export interface VisitorScript {
   readonly visitType: VisitType;
@@ -190,6 +283,16 @@ export interface VisitorScript {
    * rest there, which skips the replay.
    */
   readonly replay?: VisitorReplayBehaviour;
+  /**
+   * The headphones the visitor wears, put on as marked. Without them the imbalance is 0, and every
+   * trial reaches the listener as it is asked for.
+   */
+  readonly headphones?: VisitorHeadphones;
+  /**
+   * What the visitor does after the result: the swapped repeat. Without it the visitor stops at
+   * the result.
+   */
+  readonly swappedRepeat?: VisitorSwappedRepeatBehaviour;
 }
 
 /** How a visit played by the visitor ended. */
@@ -198,9 +301,11 @@ export interface VisitorRun {
   readonly ending: "done" | "stuck" | "stepLimit";
   readonly finalStage: VisitStage;
   /** Trials the hook reported, in order. */
-  readonly presentedTrials: readonly PresentedTrial[];
+  readonly presentedTrials: readonly DriverPresentedTrial[];
   /** How many steps the visitor took: actions and clock moves. */
   readonly stepCount: number;
+  /** The floor the visitor named with `chooseSwappedRepeat`, or null when it named none. */
+  readonly swappedRepeatRoomIndex: number | null;
 }
 
 /** How much earlier than the press an `earlier` time stamp may be (design.md, the visitor script). */
@@ -211,6 +316,37 @@ export const futureStampMs = 1000;
 export const visitorStepLimitCount = 200_000;
 
 const finalStages: readonly VisitStage[] = ["result", "exit", "unsupported"];
+
+/** The floor a behaviour names, from a result's summary, or null when none fits. */
+function swappedRepeatFloorIndex(
+  floor: VisitorSwappedRepeatFloor,
+  offered: readonly boolean[],
+): number | null {
+  const offeredIndexes = offered.flatMap((isOffered, index) =>
+    isOffered ? [index] : [],
+  );
+  switch (floor.kind) {
+    case "firstOffered":
+      return offeredIndexes[0] ?? null;
+    case "lastOffered":
+      return offeredIndexes.at(-1) ?? null;
+    case "drawnOffered": {
+      if (!(floor.fraction >= 0 && floor.fraction < 1)) {
+        throw new RangeError(
+          `A drawn floor's fraction must lie from 0 to below 1, but got ${String(floor.fraction)}.`,
+        );
+      }
+      return (
+        offeredIndexes[Math.floor(floor.fraction * offeredIndexes.length)] ??
+        null
+      );
+    }
+    case "notOffered": {
+      const index = offered.indexOf(false);
+      return index >= 0 ? index : offered.length;
+    }
+  }
+}
 
 /** Creates the listener of a spec. A function listener's position counts every presented trial. */
 export function createVisitorListener(
@@ -229,10 +365,18 @@ export function createVisitorListener(
   return (trial) => listener.respond(trial);
 }
 
-const listenerTrialOf = (trial: PresentedTrial): ListenerTrial =>
-  trial.kind === "sound" && trial.ear !== null && trial.levelDb !== null
-    ? { kind: "sound", ear: trial.ear, levelDb: trial.levelDb }
-    : { kind: "noSound" };
+/** What the visitor's headphones are told of a trial: a sound on its earpiece at the level asked, or no sound. */
+const wornTrialOf = (trial: DriverPresentedTrial): WornTrial => {
+  if (trial.kind !== "sound" || trial.ear === null || trial.levelDb === null) {
+    return { kind: "noSound" };
+  }
+  if (trial.earpiece === null || trial.earpiece === undefined) {
+    throw new Error(
+      `The hook gave sound trial ${String(trial.trialNumber)} of room ${String(trial.roomIndex)} without its earpiece.`,
+    );
+  }
+  return { kind: "sound", earpiece: trial.earpiece, levelDb: trial.levelDb };
+};
 
 /** A whole number of milliseconds from 0 to `maxMs`, from one draw. */
 const drawUpTo = (random: RandomSource, maxMs: number): number =>
@@ -259,6 +403,12 @@ interface PlannedAction {
  * resumes, at the time its disturbance set or at once. Each presented trial goes to the listener,
  * and an answer other than `none` is given after a drawn delay with a drawn time stamp. With a
  * replay behaviour, the visitor follows it in `missedSoundReplay` instead of proceeding at once.
+ *
+ * Every trial reaches the listener through Worn_Headphones: a sound on the earpiece the hook names,
+ * heard on the ear that earpiece sits on in the arrangement the visitor wears, lowered by that
+ * earpiece's share of `script.headphones.imbalanceDb`. The visitor puts the headphones on as
+ * marked. With a swapped-repeat behaviour, `result` is not its last stage until the behaviour has
+ * run: it names a floor, goes through the stage and comes back to the result, and stops there.
  */
 export async function playVisit(
   driver: VisitDriver,
@@ -267,6 +417,20 @@ export async function playVisit(
   const { flow } = driver;
   const random = createSeededRandom(script.visitorSeed);
   const respond = createVisitorListener(script.listener);
+  // What the visitor wears: the arrangement changes when it swaps or turns back.
+  const wearing: {
+    readonly imbalanceDb: number;
+    earpieceOnEar: Readonly<Record<Ear, Ear>>;
+  } = {
+    imbalanceDb: script.headphones?.imbalanceDb ?? 0,
+    earpieceOnEar: earpieceOnEar("asMarked"),
+  };
+  /** The position of the trial being heard among the presented trials, from 0. */
+  let position = 0;
+  const hear = wornHeadphones(
+    { respond: (trial) => respond(trial, position) },
+    wearing,
+  );
   const { calibrationRiseMaxDb, calibrationSettingStepDb } = audioOutputConfig;
   if (script.timeStampModes.length === 0) {
     throw new RangeError(
@@ -287,7 +451,7 @@ export async function playVisit(
     await driver.settle();
   };
 
-  const presentedTrials: PresentedTrial[] = [];
+  const presentedTrials: DriverPresentedTrial[] = [];
   const stampOf = (
     mode: TimeStampMode,
     earlierMs: number,
@@ -307,9 +471,9 @@ export async function playVisit(
     }
   };
   const removeHook = driver.onTrialPresented((trial) => {
-    const position = presentedTrials.length;
+    position = presentedTrials.length;
     presentedTrials.push(trial);
-    const response = respond(listenerTrialOf(trial), position);
+    const response = hear(wornTrialOf(trial));
     if (response === "none") {
       return;
     }
@@ -447,6 +611,110 @@ export async function playVisit(
     }
   };
 
+  // The swapped-repeat behaviour: the floor named, and where the visitor is in it.
+  const repeatBehaviour = script.swappedRepeat;
+  let swappedRepeatRoomIndex: number | null = null;
+  let repeatEntered = false;
+  /** True once the behaviour has run, and from the start without one. */
+  let repeatDone = repeatBehaviour === undefined;
+  let repeatInstructionCount = 0;
+  let repeatCheckAnswerCount = 0;
+  /** The ear the hiss of the left earpiece reaches, in what the visitor wears now. */
+  const hissEar = (): Ear =>
+    wearing.earpieceOnEar.left === "left" ? "left" : "right";
+  const readTurnBackLine = (): void => {
+    if (repeatBehaviour?.turnsBack === true) {
+      wearing.earpieceOnEar = earpieceOnEar("asMarked");
+    }
+  };
+  const planRepeatAction = (atMs: number, run: () => Promise<void>): void => {
+    plan(atMs, async () => {
+      await run();
+      // Look at the stage again even when the action changed nothing.
+      reactedTo = null;
+    });
+  };
+  const resumeLater = (resumeAfterMs: number | null): void => {
+    if (resumeAfterMs !== null) {
+      const atMs = driver.now() + resumeAfterMs;
+      resumeAtMs = resumeAtMs === null ? atMs : Math.max(resumeAtMs, atMs);
+    }
+  };
+  /** The press the stage asks for now, given while the backend refuses activation. */
+  const refusedRepeatPress = (): Promise<void> => {
+    const snapshot = flow.snapshot();
+    if (snapshot.pause !== null) {
+      return withActivationRefused(() => flow.resume());
+    }
+    if (snapshot.stage !== "swappedRepeat") {
+      return Promise.resolve();
+    }
+    switch (snapshot.repeat.phase) {
+      case "check":
+        return withActivationRefused(() => flow.playSwapCheck());
+      case "ready":
+        return withActivationRefused(() => flow.startSwappedRoom());
+      default:
+        return Promise.resolve();
+    }
+  };
+  const giveRepeatEvent = async (
+    event: VisitorSwappedRepeatEvent,
+  ): Promise<void> => {
+    switch (event.action) {
+      case "proceed":
+        return act(() => flow.proceed());
+      case "stop":
+        return act(() => flow.stop());
+      case "pause":
+        await act(() => flow.pause());
+        resumeLater(event.resumeAfterMs);
+        return;
+      case "resume":
+        return act(() => flow.resume());
+      case "hidden":
+      case "interrupted":
+        await driver.fireOutputEvent(event.action);
+        resumeLater(event.resumeAfterMs);
+        return;
+      case "deviceChanged":
+      case "pageLeft":
+        return driver.fireOutputEvent(event.action);
+      case "refusedPress":
+        return refusedRepeatPress();
+    }
+  };
+  /** Follows the behaviour's progress: the stage entered, the Turn_Back_Line read, the result again. */
+  const observeRepeat = (snapshot: VisitSnapshot): void => {
+    if (repeatBehaviour === undefined || repeatDone) {
+      return;
+    }
+    if (snapshot.stage === "swappedRepeat") {
+      if (!repeatEntered) {
+        repeatEntered = true;
+        const enteredAtMs = driver.now();
+        for (const event of repeatBehaviour.events) {
+          planRepeatAction(enteredAtMs + event.atMs, () =>
+            giveRepeatEvent(event),
+          );
+        }
+      }
+      if (snapshot.repeat.phase === "finished") {
+        readTurnBackLine();
+      }
+      return;
+    }
+    if (snapshot.stage === "result" && repeatEntered) {
+      repeatDone = true;
+      if (snapshot.turnBackLine !== null) {
+        readTurnBackLine();
+      }
+    }
+  };
+  const isLastStage = (snapshot: VisitSnapshot): boolean =>
+    finalStages.includes(snapshot.stage) &&
+    (snapshot.stage !== "result" || repeatDone);
+
   const restThen = (body: () => void, delayMs: number): void => {
     stageAction = plan(
       driver.now() + delayMs + drawUpTo(random, script.restMaxMs),
@@ -542,6 +810,81 @@ export async function playVisit(
       case "betweenRooms":
         restThen(() => flow.proceed(), delayMs);
         return;
+      case "result": {
+        if (repeatBehaviour === undefined || repeatDone) {
+          return;
+        }
+        const roomIndex = swappedRepeatFloorIndex(
+          repeatBehaviour.floor,
+          snapshot.summary.rooms.map((room) => room.swappedRepeatOffered),
+        );
+        if (roomIndex === null) {
+          // No floor fits: the visitor names none and stops at the result.
+          repeatDone = true;
+          return;
+        }
+        stageAction = plan(
+          driver.now() + delayMs + drawUpTo(random, script.restMaxMs),
+          async () => {
+            swappedRepeatRoomIndex = roomIndex;
+            await act(() => flow.chooseSwappedRepeat(roomIndex));
+            if (flow.snapshot().stage !== "swappedRepeat") {
+              // The press was ignored: the visitor stops at the result.
+              repeatDone = true;
+            }
+          },
+        );
+        return;
+      }
+      case "swappedRepeat": {
+        if (repeatBehaviour === undefined) {
+          return;
+        }
+        const view = snapshot.repeat;
+        const press = (body: () => void): void =>
+          after(
+            delayMs + drawUpTo(random, repeatBehaviour.pressDelayMaxMs),
+            body,
+          );
+        switch (view.phase) {
+          case "unavailable":
+          case "finished":
+            press(() => flow.proceed());
+            return;
+          case "instruction":
+            press(() => {
+              repeatInstructionCount += 1;
+              if (
+                repeatInstructionCount > 1 ||
+                repeatBehaviour.swapsOnFirstInstruction
+              ) {
+                wearing.earpieceOnEar = earpieceOnEar("swapped");
+              }
+              flow.confirmSwap();
+            });
+            return;
+          case "check":
+            if (view.awaitingAnswer) {
+              press(() => {
+                const kind =
+                  repeatCheckAnswerCount === 0
+                    ? repeatBehaviour.firstCheckAnswer
+                    : "heard";
+                repeatCheckAnswerCount += 1;
+                flow.answerSwapCheck(kind === "heard" ? hissEar() : kind);
+              });
+            } else {
+              press(() => flow.playSwapCheck());
+            }
+            return;
+          case "ready":
+            press(() => flow.startSwappedRoom());
+            return;
+          case "room":
+            return;
+        }
+        return;
+      }
       case "missedSoundReplay": {
         if (replayBehaviour === undefined) {
           restThen(() => flow.proceed(), delayMs);
@@ -573,12 +916,14 @@ export async function playVisit(
   try {
     for (; stepCount < visitorStepLimitCount; stepCount += 1) {
       const snapshot = flow.snapshot();
-      if (finalStages.includes(snapshot.stage)) {
+      observeRepeat(snapshot);
+      if (isLastStage(snapshot)) {
         return Object.freeze({
           ending: "done",
           finalStage: snapshot.stage,
           presentedTrials: Object.freeze([...presentedTrials]),
           stepCount,
+          swappedRepeatRoomIndex,
         });
       }
       if (snapshot !== reactedTo) {
@@ -588,6 +933,9 @@ export async function playVisit(
           stageAction = null;
         }
         react(snapshot);
+        if (isLastStage(snapshot)) {
+          continue;
+        }
       }
       planned.sort((a, b) => a.atMs - b.atMs || a.order - b.order);
       const next = planned[0];
@@ -613,6 +961,7 @@ export async function playVisit(
           finalStage: snapshot.stage,
           presentedTrials: Object.freeze([...presentedTrials]),
           stepCount,
+          swappedRepeatRoomIndex,
         });
       }
       await driver.advanceTo(dueMs);
@@ -622,6 +971,7 @@ export async function playVisit(
       finalStage: flow.snapshot().stage,
       presentedTrials: Object.freeze([...presentedTrials]),
       stepCount,
+      swappedRepeatRoomIndex,
     });
   } finally {
     removeHook();

@@ -16,7 +16,7 @@ import type {
   FakeAudioBackendOptions,
 } from "../../src/audio/output/fake-audio-backend";
 import { createFakeAudioBackend } from "../../src/audio/output/fake-audio-backend";
-import type { PresentedTrial } from "../../src/session/create-visit-flow";
+import type { FlowPresentedTrial } from "../../src/session/create-swapped-repeat";
 import { createVisitFlow } from "../../src/session/create-visit-flow";
 import type {
   Ear,
@@ -66,7 +66,7 @@ export interface RecordedEvent {
 
 export interface RecordedPresentation {
   readonly atMs: number;
-  readonly trial: PresentedTrial;
+  readonly trial: FlowPresentedTrial;
 }
 
 /** One call of a flow action, with the stage and pause it was given in. */
@@ -272,8 +272,8 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
   }
 
   const presented: RecordedPresentation[] = [];
-  const presentationListeners = new Set<(trial: PresentedTrial) => void>();
-  const onTrialPresented = (trial: PresentedTrial): void => {
+  const presentationListeners = new Set<(trial: FlowPresentedTrial) => void>();
+  const onTrialPresented = (trial: FlowPresentedTrial): void => {
     presented.push(Object.freeze({ atMs: manual.now(), trial }));
     for (const listener of [...presentationListeners]) {
       listener(trial);
@@ -415,7 +415,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     advance: (durationMs: number) => advanceTo(manual.now() + durationMs),
     settle,
     fireOutputEvent,
-    onTrialPresented(listener: (trial: PresentedTrial) => void) {
+    onTrialPresented(listener: (trial: FlowPresentedTrial) => void) {
       presentationListeners.add(listener);
       return () => {
         presentationListeners.delete(listener);
