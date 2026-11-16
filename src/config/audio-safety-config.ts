@@ -10,7 +10,11 @@
 export interface AudioSafetyConfig {
   /** Shortest fade in and fade out of any sound. */
   readonly fadeMinMs: number;
-  /** Longest single ghost sound. Also applied to the calibration noise (ghost-sounds D8). */
+  /**
+   * Longest single ghost sound. Also applied to the calibration noise (ghost-sounds D8). The
+   * calibration music is the one exception, approved by the owner on 2026-11-16 (audio-safety.md,
+   * rule 6).
+   */
   readonly ghostSoundMaxDurationMs: number;
   /** Largest absolute value of any output sample, as a fraction of full scale. Equal is allowed. */
   readonly ceilingFraction: number;

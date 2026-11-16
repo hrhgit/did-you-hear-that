@@ -23,9 +23,9 @@ Left ear and right ear searches for one pitch run at the same time and their tri
 
 ## Level scale
 
-All levels are in decibels relative to the calibration anchor. The anchor is the level at which the calibration noise matched the visitor's own hand rubbing. Zero means "as loud as the calibration noise at the setting the visitor chose". Negative numbers are quieter.
+All levels are in decibels relative to the calibration anchor. The anchor is the volume at which the visitor would listen to music in a quiet room: clear and comfortable, not loud. The visitor sets a piece of calibration music to it with the page's control and leaves the system volume at its usual level. Zero means "as loud as the calibration music at the setting the visitor chose", matched by RMS. Where the music cannot be loaded the calibration sound is the hiss, set in the same way. Negative numbers are quieter.
 
-One website states that hand rubbing near the ear is about 65 dB SPL. That is unverified and varies between people. The anchor is a rough reference and nothing more. Never convert a level on this scale to dB SPL or dB HL in visitor-facing output.
+The anchor is a rough reference and nothing more. It is what this visitor finds comfortable on these headphones at this volume, so it differs between people and says nothing about how well anyone hears. Visits whose anchors were set in different ways (rubbed hands before 2026-11-16, the music, the hiss) are never compared. Never convert a level on this scale to dB SPL or dB HL in visitor-facing output.
 
 ## No-sound trials
 
@@ -72,7 +72,7 @@ Every number below lives in `src/config` and is expected to change after listeni
 | Downward step after a catch | 10 dB |
 | Upward step after a miss | 5 dB |
 | Starting level | 25 dB below the anchor |
-| Loudest allowed level | 15 dB above the anchor |
+| Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16: the anchor is now a comfortable music volume, likely louder than rubbed hands, and the lower cap keeps the loudest sound no louder at the ear than before |
 | Quietest playable level | 70 dB below the anchor |
 | Response window after a sound starts | 2.0 s |
 | Gap between trials | random, 1.5 to 4.0 s |

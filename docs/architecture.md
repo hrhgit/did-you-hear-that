@@ -84,7 +84,7 @@ Loaded only when the page is opened with a robot flag in the address. It exposes
 
 ## The level scale
 
-Levels are decibels relative to the calibration anchor. Calibration gives one number, the calibration gain: the linear gain at which the calibration noise matched the visitor's hand rubbing. A sound at level `x` dB is the reference-loudness buffer multiplied by the calibration gain and by `10^(x/20)`.
+Levels are decibels relative to the calibration anchor. Calibration gives one number, the calibration gain: the linear gain of the calibration music at the setting the visitor chose as comfortable. A sound at level `x` dB is the reference-loudness buffer multiplied by the calibration gain and by `10^(x/20)`.
 
 The cap is the lower of two limits: a level relative to the anchor, and an absolute digital ceiling that leaves headroom below full scale. If the visitor calibrates very loud, the absolute ceiling is what protects them.
 
@@ -119,5 +119,5 @@ These need a person with headphones.
 
 1. Do Bluetooth headphones play the quietest levels, or gate them? Decides the floor.
 2. Do the narrow-band ghost sounds give stable thresholds from one visit to the next?
-3. Is the hand-rubbing anchor repeatable enough for "this visit against last visit" to mean anything?
+3. Is a comfortable music volume repeatable enough for this visit against last visit to mean anything?
 4. Is the house frightening without being unpleasant?
