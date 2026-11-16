@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "../config/audio-output-config";
+import { audioSafetyConfig } from "../config/audio-safety-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
+import { missedSoundReplayConfig } from "../config/missed-sound-replay-config";
 import type { ManualTimer } from "../config/manual-timer";
 import { createManualTimer } from "../config/manual-timer";
 import { createSeededRandom } from "../config/seeded-random";
 import { soundRulesConfig } from "../config/sound-rules-config";
+import { visitFlowConfig } from "../config/visit-flow-config";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
+import { replayCopy } from "../copy/replay-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
   AudioOutput,
+  PlayOutcome,
+  PlayRefusal,
+  PlayRequest,
   UnsupportedEvent,
 } from "../audio/output/create-audio-output";
 import { createAudioOutput } from "../audio/output/create-audio-output";
@@ -22,9 +29,13 @@ import { createFakeAudioBackend } from "../audio/output/fake-audio-backend";
 import type { Ear } from "../engine/search-types";
 import type { PresentedTrial } from "./create-visit-flow";
 import { createVisitFlow } from "./create-visit-flow";
+import { planMissedSoundReplay } from "./missed-sound-replay-plan";
+import { replayRenderSeed } from "./replay-render-seed";
 import { roomSearchCapDb } from "./room-search-cap";
 import { summarizeVisit } from "./summarize-visit";
 import type {
+  MissedSoundReplay,
+  MissedSoundReplaySnapshot,
   ResultSnapshot,
   VisitEvent,
   VisitFlow,
@@ -34,7 +45,7 @@ import type {
 } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
 
-const { calibrationSettingMinDb, calibrationSettingKeepMinDb } =
+const { calibrationSettingMinDb, calibrationSettingKeepMinDb, scheduleLeadMs } =
   audioOutputConfig;
 const { capRelativeToAnchorDb, responseWindowMs } = hearingMethodConfig;
 
@@ -49,6 +60,14 @@ interface SpyCall {
   readonly stage: VisitStage | "creation";
 }
 
+/** One `play` the flow made, with when, in which stage, what it asked and what it was answered. */
+interface SpyPlay {
+  readonly atMs: number;
+  readonly stage: VisitStage | "creation";
+  readonly request: PlayRequest;
+  readonly outcome: PlayOutcome;
+}
+
 interface Harness {
   readonly backend: FakeAudioBackend;
   readonly timer: ManualTimer;
@@ -56,6 +75,10 @@ interface Harness {
   readonly flow: VisitFlow;
   /** Every call the flow made to the output shell, with the stage it was made in. */
   readonly calls: SpyCall[];
+  /** Every `play` the flow made, in order. */
+  readonly plays: SpyPlay[];
+  /** The next `play` calls are refused with these reasons, in order, without reaching the shell. */
+  refusePlays(...reasons: readonly PlayRefusal[]): void;
   readonly snapshots: VisitSnapshot[];
   readonly events: VisitEvent[];
   readonly presented: PresentedTrial[];
@@ -90,6 +113,8 @@ function createHarness(
     timer,
   });
   const calls: SpyCall[] = [];
+  const plays: SpyPlay[] = [];
+  const refusals: PlayRefusal[] = [];
   const unsupportedListeners: ((event: UnsupportedEvent) => void)[] = [];
   let flowRef: VisitFlow | null = null;
   const record = (name: string): void => {
@@ -107,7 +132,14 @@ function createHarness(
     },
     play(request) {
       record("play");
-      return real.play(request);
+      const stage = flowRef?.snapshot().stage ?? "creation";
+      const refusal = refusals.shift();
+      const outcome: PlayOutcome =
+        refusal === undefined
+          ? real.play(request)
+          : Object.freeze({ kind: "refused", reason: refusal });
+      plays.push({ atMs: timer.now(), stage, request, outcome });
+      return outcome;
     },
     playHeadphoneCheck(random) {
       record("playHeadphoneCheck");
@@ -147,6 +179,10 @@ function createHarness(
     output,
     flow,
     calls,
+    plays,
+    refusePlays(...reasons) {
+      refusals.push(...reasons);
+    },
     snapshots,
     events,
     presented,
@@ -422,9 +458,10 @@ const stageRows: readonly {
     canProceed: true,
   },
   {
+    // Reached in the phase `announcing`: the step listener misses the sounds below −40 dB.
     stage: "missedSoundReplay",
     reach: (harness) => toMissedSoundReplay(harness),
-    accepts: ["proceed", "stop"],
+    accepts: ["startReplay", "proceed", "stop"],
     canProceed: true,
   },
   {
@@ -1271,7 +1308,7 @@ describe("createVisitFlow: pauses", () => {
     60_000,
   );
 
-  it.each(["missedSoundReplay", "result", "swappedRepeat", "exit"] as const)(
+  it.each(["result", "swappedRepeat", "exit"] as const)(
     "a stop report in %s begins no pause",
     async (stage) => {
       const harness = createHarness();
@@ -1639,25 +1676,709 @@ describe("createVisitFlow: the response window", () => {
   });
 });
 
-describe("createVisitFlow: the missed-sound replay before it plays (missed-sound-replay R1.5)", () => {
-  it("gives a replay view that cannot start, and startReplay plays nothing", async () => {
-    const harness = createHarness();
-    await toMissedSoundReplay(harness);
-    const before = harness.flow.snapshot();
-    if (before.stage !== "missedSoundReplay") {
-      throw new Error(`Expected the replay, but the stage is ${before.stage}.`);
+describe('createVisitFlow: the missed-sound replay (missed-sound-replay design.md, "What each phase accepts")', () => {
+  const { replayGapMs } = missedSoundReplayConfig;
+  /** Long enough for every pending callback of a replay to have run. */
+  const afterwardsMs = 10 * 60_000;
+  /** A step listener whose threshold lies below the floor: it catches every sound. */
+  const catchEveryListener = stepListener({ left: -1000, right: -1000 });
+
+  function replaySnapshotOf(harness: Harness): MissedSoundReplaySnapshot {
+    const snapshot = harness.flow.snapshot();
+    if (snapshot.stage !== "missedSoundReplay") {
+      throw new Error(
+        `Expected the replay, but the stage is ${snapshot.stage}.`,
+      );
     }
-    expect(before.replay).toMatchObject({
-      phase: "announcing",
-      canStart: false,
-    });
-    const callCount = harness.calls.length;
-    const scheduleCount = harness.backend.scheduled().length;
+    return snapshot;
+  }
+
+  const viewOf = (harness: Harness): MissedSoundReplay =>
+    replaySnapshotOf(harness).replay;
+
+  const replayPlays = (harness: Harness): SpyPlay[] =>
+    harness.plays.filter((play) => play.request.purpose === "replay");
+
+  /**
+   * Reaches the replay and returns its snapshot, with a deep copy of the log on entering. The
+   * stage is entered at the last answer, while the last trial's sound may still play, so by
+   * default the clocks then move on by the longest sound the output stage plays, after which no
+   * sound is under way. Nothing in the stage changes meanwhile.
+   */
+  async function enterReplay(
+    harness: Harness,
+    listener: Listener = stepListener(),
+    waitForQuiet = true,
+  ): Promise<{
+    readonly snapshot: MissedSoundReplaySnapshot;
+    readonly logCopy: VisitLog;
+  }> {
+    await toMissedSoundReplay(harness, listener);
+    const snapshot = replaySnapshotOf(harness);
+    if (waitForQuiet) {
+      harness.advance(
+        audioSafetyConfig.ghostSoundMaxDurationMs + scheduleLeadMs,
+      );
+      expect(harness.flow.snapshot()).toBe(snapshot);
+    }
+    return { snapshot, logCopy: structuredClone(snapshot.visitLog) };
+  }
+
+  /** Moves the clocks 1 ms at a time until `done` holds for the replay's view. */
+  function advanceUntil(
+    harness: Harness,
+    done: (view: MissedSoundReplay) => boolean,
+  ): void {
+    for (let waitedMs = 0; waitedMs < afterwardsMs; waitedMs += 1) {
+      if (done(viewOf(harness))) {
+        return;
+      }
+      harness.advance(1);
+    }
+    throw new Error("The replay did not reach the moment asked for.");
+  }
+
+  /** Starts the replay and waits until its first sound has started. */
+  async function toFirstReplaySound(harness: Harness): Promise<void> {
     harness.flow.startReplay();
     await harness.settle();
-    harness.advance(10_000);
-    expect(harness.calls.length).toBe(callCount);
-    expect(harness.backend.scheduled().length).toBe(scheduleCount);
-    expect(harness.flow.snapshot()).toEqual(before);
-  }, 60_000);
+    advanceUntil(
+      harness,
+      (view) => view.phase === "playing" && view.current !== null,
+    );
+  }
+
+  /** The result: the same log object as on entering the replay, deep-equal to its copy (R13.4, R13.5). */
+  function expectResultWithSameLog(
+    harness: Harness,
+    entered: MissedSoundReplaySnapshot,
+    logCopy: VisitLog,
+  ): void {
+    const result = harness.flow.snapshot();
+    expect(result.stage).toBe("result");
+    if (result.stage !== "result") {
+      return;
+    }
+    expect(result.visitLog).toBe(entered.visitLog);
+    expect(result.visitLog).toEqual(logCopy);
+    expect(result.summary).toEqual(summarizeVisit(result.visitLog));
+    expect(result.pause).toBeNull();
+  }
+
+  /** Nothing is played, scheduled or handed out for ten minutes. */
+  async function expectNothingMore(harness: Harness): Promise<void> {
+    const playCount = harness.plays.length;
+    const scheduledCount = harness.backend.scheduled().length;
+    const eventCount = harness.events.length;
+    harness.advance(afterwardsMs);
+    await harness.settle();
+    expect(harness.plays).toHaveLength(playCount);
+    expect(harness.backend.scheduled()).toHaveLength(scheduledCount);
+    expect(harness.events).toHaveLength(eventCount);
+  }
+
+  /** Gives each of `names` and checks that none changes the snapshot, calls the shell or schedules. */
+  async function expectIgnored(
+    harness: Harness,
+    names: readonly (ActionName | "hidden" | "interrupted" | "deviceChanged")[],
+  ): Promise<void> {
+    for (const name of names) {
+      const before = harness.flow.snapshot();
+      const callCount = harness.calls.length;
+      const scheduledCount = harness.backend.scheduled().length;
+      const eventCount = harness.events.length;
+      if (
+        name === "hidden" ||
+        name === "interrupted" ||
+        name === "deviceChanged"
+      ) {
+        harness.backend.fire(name);
+      } else {
+        actions[name](harness.flow);
+      }
+      await harness.settle();
+      expect(harness.flow.snapshot(), name).toEqual(before);
+      expect(harness.calls.length, name).toBe(callCount);
+      expect(harness.backend.scheduled().length, name).toBe(scheduledCount);
+      expect(harness.events.length, name).toBe(eventCount);
+    }
+  }
+
+  describe("nothingMissed", () => {
+    it("plays nothing, ignores startReplay and every stop report but a left page, and proceed shows the result (R9, R11.4, D13)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(
+        harness,
+        catchEveryListener,
+      );
+      expect(snapshot.canProceed).toBe(true);
+      expect(snapshot.replay).toMatchObject({
+        phase: "nothingMissed",
+        line: replayCopy.nothingMissedLine,
+        canStart: false,
+        canSkip: false,
+        proceedLabel: replayCopy.goOnButton,
+        stopLabel: replayCopy.stopButton,
+        missedSoundCount: 0,
+        replaySoundCount: 0,
+      });
+      await expectIgnored(harness, [
+        "startReplay",
+        "pause",
+        "resume",
+        "hidden",
+        "interrupted",
+        "deviceChanged",
+      ]);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      expect(replayPlays(harness)).toEqual([]);
+    }, 60_000);
+
+    it.each(["stop", "pageLeft"] as const)(
+      "%s shows the result",
+      async (ending) => {
+        const harness = createHarness();
+        const { snapshot, logCopy } = await enterReplay(
+          harness,
+          catchEveryListener,
+        );
+        if (ending === "stop") {
+          harness.flow.stop();
+          expect(harness.calls.at(-1)?.name).toBe("stopAll");
+        } else {
+          harness.backend.fire("pageLeft");
+        }
+        expectResultWithSameLog(harness, snapshot, logCopy);
+      },
+      60_000,
+    );
+  });
+
+  describe("announcing", () => {
+    it("announces and plays nothing; a hidden page or an interruption begins no pause; startReplay activates within the call and asks for the first sound one gap after the shell runs (R6.1 to R6.3, R7.1, R11.4)", async () => {
+      const harness = createHarness();
+      const { snapshot } = await enterReplay(harness);
+      const plan = planMissedSoundReplay(snapshot.visitLog);
+      expect(plan.sounds.length).toBeGreaterThan(0);
+      expect(snapshot.canProceed).toBe(true);
+      expect(snapshot.replay).toMatchObject({
+        phase: "announcing",
+        canStart: true,
+        canSkip: true,
+        startLabel: replayCopy.startButton,
+        proceedLabel: replayCopy.skipButton,
+        stopLabel: replayCopy.stopButton,
+        missedSoundCount: plan.missedSounds.length,
+        replaySoundCount: plan.sounds.length,
+      });
+      if (snapshot.replay.phase === "announcing") {
+        expect(snapshot.replay.announcementLines).toHaveLength(4);
+      }
+      await expectIgnored(harness, [
+        "pause",
+        "resume",
+        "hidden",
+        "interrupted",
+      ]);
+      expect(harness.output.state().kind).toBe("stopped");
+
+      const callCount = harness.calls.length;
+      harness.flow.startReplay();
+      // activate is called within the call, before anything is awaited.
+      expect(harness.calls.slice(callCount).map((call) => call.name)).toEqual([
+        "activate",
+      ]);
+      await harness.settle();
+      const runningAtMs = harness.timer.now();
+      expect(viewOf(harness)).toMatchObject({
+        phase: "playing",
+        current: null,
+        counts: null,
+        pauseLine: null,
+        canStart: false,
+        canSkip: true,
+        proceedLabel: replayCopy.skipRestButton,
+      });
+      expect(replayPlays(harness)).toEqual([]);
+      harness.advance(replayGapMs);
+      const [first] = replayPlays(harness);
+      const planned = plan.sounds[0]!;
+      expect(first).toBeDefined();
+      expect(first!.atMs).toBe(runningAtMs + replayGapMs);
+      expect(first!.stage).toBe("missedSoundReplay");
+      expect(first!.request).toMatchObject({
+        soundId: planned.room.roomId,
+        ear: planned.ear,
+        levelDb: planned.askedLevelDb,
+        purpose: "replay",
+      });
+      expect(first!.outcome.kind).toBe("scheduled");
+    }, 60_000);
+
+    it("draws the render seed on entering: it equals replayRenderSeed of the log, after the render seed of the visit and the logged engine seeds; beginRoom comes before the first replayed play (R14.2, R14.3, R16.1 of visit-flow)", async () => {
+      const harness = createHarness();
+      const { snapshot } = await enterReplay(harness);
+      const log = snapshot.visitLog;
+      const source = createSeededRandom(log.visitSeed);
+      const draw = (): number => Math.floor(source.next() * 2 ** 32);
+      draw();
+      for (const attempt of log.roomAttempts) {
+        expect(draw()).toBe(attempt.engineSeed);
+      }
+      const expectedSeed = draw();
+      expect(replayRenderSeed(log)).toBe(expectedSeed);
+
+      await toFirstReplaySound(harness);
+      const plays = replayPlays(harness);
+      expect(plays.length).toBeGreaterThan(0);
+      expect(
+        plays.every((play) => play.request.random.seed === expectedSeed),
+      ).toBe(true);
+
+      const names = harness.calls.map((call) => call.name);
+      const firstReplayPlay = harness.calls.findIndex(
+        (call) => call.name === "play" && call.stage === "missedSoundReplay",
+      );
+      const lastBeginRoom = names.lastIndexOf("beginRoom");
+      expect(lastBeginRoom).toBeGreaterThanOrEqual(0);
+      expect(lastBeginRoom).toBeLessThan(firstReplayPlay);
+      expect(
+        harness.calls
+          .slice(lastBeginRoom + 1, firstReplayPlay)
+          .some((call) => call.name === "play"),
+      ).toBe(false);
+      expect(harness.calls[lastBeginRoom]?.stage).toBe("room");
+    }, 60_000);
+
+    it("sets activationRefused when the browser saw no press, and stays announcing; the next press starts the sounds (R6.4)", async () => {
+      const harness = createHarness();
+      await enterReplay(harness);
+      harness.backend.fire("hidden");
+      harness.backend.setUserActivationActive(false);
+      harness.flow.startReplay();
+      await harness.settle();
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        activationRefused: true,
+        pause: null,
+        replay: { phase: "announcing", canStart: true },
+      });
+      harness.advance(afterwardsMs);
+      expect(replayPlays(harness)).toEqual([]);
+      harness.backend.setUserActivationActive(true);
+      harness.flow.startReplay();
+      await harness.settle();
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        activationRefused: false,
+        replay: { phase: "playing" },
+      });
+    }, 60_000);
+
+    it("proceed skips: the result, with nothing silenced and nothing played (R10.2, R10.3)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      const callCount = harness.calls.length;
+      harness.flow.proceed();
+      expect(harness.calls.slice(callCount)).toEqual([]);
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+      expect(replayPlays(harness)).toEqual([]);
+    }, 60_000);
+
+    it("stop silences and shows the result (R11.1)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      harness.flow.stop();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("a device change ends the replay with deviceChanged; startReplay is then ignored and proceed shows the result (R11.5)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      harness.backend.fire("deviceChanged");
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        pause: null,
+        canProceed: true,
+        replay: {
+          phase: "finished",
+          ending: "deviceChanged",
+          last: null,
+          canStart: false,
+          canSkip: false,
+          proceedLabel: replayCopy.goOnButton,
+        },
+      });
+      await expectIgnored(harness, [
+        "startReplay",
+        "resume",
+        "hidden",
+        "deviceChanged",
+      ]);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      expect(replayPlays(harness)).toEqual([]);
+    }, 60_000);
+
+    it("a left page shows the result (R11.6)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      harness.backend.fire("pageLeft");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+  });
+
+  describe("playing, no pause", () => {
+    it("gives the current sound and its counts; ignores startReplay and pause; proceed during a sound silences and shows the result (R7.4, R8.1, R10.1 to R10.3, R11.8)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      const playing = replaySnapshotOf(harness);
+      expect(playing.canProceed).toBe(true);
+      expect(playing.replay).toMatchObject({
+        phase: "playing",
+        canStart: false,
+        canSkip: true,
+        pauseLine: null,
+        current: { position: 1 },
+      });
+      const started = harness.events.filter(
+        (event) => event.kind === "replaySoundStarted",
+      );
+      expect(started).toHaveLength(1);
+      if (playing.replay.phase === "playing") {
+        expect(started[0]).toEqual({
+          kind: "replaySoundStarted",
+          sound: playing.replay.current,
+        });
+        expect(playing.replay.counts?.throughTrialOrder).toBe(
+          playing.replay.current?.trialOrder,
+        );
+      }
+      await expectIgnored(harness, ["startReplay", "pause"]);
+      harness.flow.proceed();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("stop during a sound silences and shows the result (R11.1)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      harness.flow.stop();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("a hidden page during a sound pauses with its reason and plays nothing; resume activates within the call and asks for the cut sound one gap after the shell runs; no pause of this stage reaches the log (R11.2, R11.3, R11.7, R11.9)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      const cut = replayPlays(harness).at(-1)!;
+      harness.backend.fire("hidden");
+      const paused = replaySnapshotOf(harness);
+      expect(paused).toMatchObject({
+        pause: { reason: "hidden" },
+        canProceed: false,
+        replay: {
+          phase: "playing",
+          canSkip: false,
+          pauseLine: replayCopy.pauseLines.hidden,
+          resumeLabel: replayCopy.resumeButton,
+        },
+      });
+      const playCount = harness.plays.length;
+      harness.advance(10_000);
+      expect(harness.plays).toHaveLength(playCount);
+      expect(harness.flow.snapshot()).toEqual(paused);
+
+      const callCount = harness.calls.length;
+      harness.flow.resume();
+      expect(harness.calls[callCount]?.name).toBe("activate");
+      await harness.settle();
+      const resumedAtMs = harness.timer.now();
+      expect(replaySnapshotOf(harness).pause).toBeNull();
+      harness.advance(replayGapMs);
+      const again = replayPlays(harness).at(-1)!;
+      expect(again).not.toBe(cut);
+      expect(again.atMs).toBe(resumedAtMs + replayGapMs);
+      expect(again.request.soundId).toBe(cut.request.soundId);
+      expect(again.request.ear).toBe(cut.request.ear);
+      expect(again.request.levelDb).toBe(cut.request.levelDb);
+
+      advanceUntil(harness, (view) => view.phase === "finished");
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      const result = harness.flow.snapshot();
+      if (result.stage === "result") {
+        expect(
+          result.visitLog.pauses.some(
+            (entry) => entry.stage === "missedSoundReplay",
+          ),
+        ).toBe(false);
+      }
+    }, 120_000);
+
+    it("an interruption in a gap pauses; resume asks for the next sound one gap after the shell runs (R11.2, R11.3)", async () => {
+      const harness = createHarness();
+      const { snapshot } = await enterReplay(harness);
+      const plan = planMissedSoundReplay(snapshot.visitLog);
+      expect(plan.sounds.length).toBeGreaterThan(1);
+      await toFirstReplaySound(harness);
+      const firstPlay = replayPlays(harness).at(-1)!;
+      if (firstPlay.outcome.kind !== "scheduled") {
+        throw new Error("The first sound was refused.");
+      }
+      // Into the gap after the first sound.
+      harness.advanceTo(
+        harness.timer.now() +
+          (firstPlay.outcome.endMs - firstPlay.outcome.startMs) +
+          1,
+      );
+      expect(replayPlays(harness)).toHaveLength(1);
+      harness.backend.fire("interrupted");
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        pause: { reason: "interrupted" },
+        replay: { pauseLine: replayCopy.pauseLines.interrupted },
+      });
+      harness.flow.resume();
+      await harness.settle();
+      const resumedAtMs = harness.timer.now();
+      harness.advance(replayGapMs);
+      const next = replayPlays(harness).at(-1)!;
+      expect(replayPlays(harness)).toHaveLength(2);
+      expect(next.atMs).toBe(resumedAtMs + replayGapMs);
+      expect(next.request).toMatchObject({
+        soundId: plan.sounds[1]!.room.roomId,
+        ear: plan.sounds[1]!.ear,
+        levelDb: plan.sounds[1]!.askedLevelDb,
+      });
+    }, 60_000);
+
+    it("a first sound refused busy because the last trial's sound still plays is asked for again one gap later (R6.3, R12.3)", async () => {
+      const harness = createHarness();
+      const { snapshot } = await enterReplay(harness, stepListener(), false);
+      const plan = planMissedSoundReplay(snapshot.visitLog);
+      harness.flow.startReplay();
+      await harness.settle();
+      advanceUntil(
+        harness,
+        (view) => view.phase === "playing" && view.current !== null,
+      );
+      const plays = replayPlays(harness);
+      const scheduled = plays.findIndex(
+        (play) => play.outcome.kind === "scheduled",
+      );
+      // With this seed the last answer comes while its sound still plays.
+      expect(scheduled).toBeGreaterThan(0);
+      expect(scheduled).toBeLessThan(
+        visitFlowConfig.refusedPlaysInARowMaxCount,
+      );
+      for (const [index, play] of plays.slice(0, scheduled + 1).entries()) {
+        expect(
+          play.outcome.kind === "refused" ? play.outcome.reason : null,
+        ).toBe(index < scheduled ? "busy" : null);
+        expect(play.atMs - plays[0]!.atMs).toBe(index * replayGapMs);
+        expect(play.request.levelDb).toBe(plan.sounds[0]!.askedLevelDb);
+      }
+    }, 60_000);
+
+    it("a device change ends the replay with deviceChanged and plays nothing more (R11.5)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "finished",
+        ending: "deviceChanged",
+        last: { position: 1 },
+      });
+      await expectNothingMore(harness);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+    }, 60_000);
+
+    it("a left page shows the result and plays nothing more (R11.6)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      harness.backend.fire("pageLeft");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("a play refused notRunning pauses as an interruption; notCalibrated ends with deviceChanged (R12.1, R12.2)", async () => {
+      const running = createHarness();
+      await enterReplay(running);
+      running.refusePlays("notRunning");
+      running.flow.startReplay();
+      await running.settle();
+      running.advance(replayGapMs);
+      expect(replaySnapshotOf(running)).toMatchObject({
+        pause: { reason: "interrupted" },
+        canProceed: false,
+        replay: { phase: "playing", current: null },
+      });
+
+      const calibrated = createHarness();
+      await enterReplay(calibrated);
+      calibrated.refusePlays("notCalibrated");
+      calibrated.flow.startReplay();
+      await calibrated.settle();
+      calibrated.advance(replayGapMs);
+      expect(replaySnapshotOf(calibrated)).toMatchObject({
+        pause: null,
+        replay: { phase: "finished", ending: "deviceChanged" },
+      });
+    }, 60_000);
+
+    it("three refusals in a row end the replay with soundRefused, in the stage and with the log kept (R12.3, R12.4)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      harness.refusePlays("busy", "peakBoundNotMet", "busy");
+      harness.flow.startReplay();
+      await harness.settle();
+      harness.advance(replayGapMs * 3);
+      const plays = replayPlays(harness);
+      expect(plays).toHaveLength(3);
+      expect(plays.map((play) => play.atMs - plays[0]!.atMs)).toEqual([
+        0,
+        replayGapMs,
+        2 * replayGapMs,
+      ]);
+      expect(new Set(plays.map((play) => play.request.levelDb)).size).toBe(1);
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        replay: { phase: "finished", ending: "soundRefused" },
+      });
+      await expectNothingMore(harness);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+    }, 60_000);
+  });
+
+  describe("playing, a pause holds", () => {
+    async function toPaused(harness: Harness) {
+      const entered = await enterReplay(harness);
+      await toFirstReplaySound(harness);
+      harness.backend.fire("hidden");
+      expect(replaySnapshotOf(harness).pause).toEqual({ reason: "hidden" });
+      return entered;
+    }
+
+    it("accepts only resume and stop: startReplay, proceed, pause and further reports of a hidden page or an interruption change nothing; stop silences and shows the result (R11.7, R11.1)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await toPaused(harness);
+      await expectIgnored(harness, [
+        "startReplay",
+        "proceed",
+        "pause",
+        "hidden",
+        "interrupted",
+      ]);
+      harness.flow.stop();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("a device change ends the pause and the replay with deviceChanged (R11.5)", async () => {
+      const harness = createHarness();
+      await toPaused(harness);
+      harness.backend.fire("deviceChanged");
+      expect(replaySnapshotOf(harness)).toMatchObject({
+        pause: null,
+        canProceed: true,
+        replay: { phase: "finished", ending: "deviceChanged" },
+      });
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it("a left page ends the pause and shows the result (R11.6)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await toPaused(harness);
+      harness.backend.fire("pageLeft");
+      expectResultWithSameLog(harness, snapshot, logCopy);
+      await expectNothingMore(harness);
+    }, 60_000);
+  });
+
+  describe("finished", () => {
+    it("plays the plan to its end with the Purpose replay, then ignores everything but proceed, stop and a left page; proceed shows the result (R7.1, R13.1 to R13.5)", async () => {
+      const harness = createHarness();
+      const { snapshot, logCopy } = await enterReplay(harness);
+      const plan = planMissedSoundReplay(snapshot.visitLog);
+      harness.flow.startReplay();
+      await harness.settle();
+      advanceUntil(harness, (view) => view.phase === "finished");
+      const finished = replaySnapshotOf(harness);
+      expect(finished.canProceed).toBe(true);
+      expect(finished.replay).toMatchObject({
+        phase: "finished",
+        ending: "allPlayed",
+        canStart: false,
+        canSkip: false,
+        proceedLabel: replayCopy.goOnButton,
+        last: { position: plan.sounds.length },
+      });
+      const plays = replayPlays(harness);
+      expect(
+        plays.map((play) => ({
+          soundId: play.request.soundId,
+          ear: play.request.ear,
+          levelDb: play.request.levelDb,
+        })),
+      ).toEqual(
+        plan.sounds.map((sound) => ({
+          soundId: sound.room.roomId,
+          ear: sound.ear,
+          levelDb: sound.askedLevelDb,
+        })),
+      );
+      expect(plays.every((play) => play.stage === "missedSoundReplay")).toBe(
+        true,
+      );
+      expect(
+        harness.plays.filter(
+          (play) =>
+            play.stage === "missedSoundReplay" &&
+            play.request.purpose !== "replay",
+        ),
+      ).toEqual([]);
+      expect(
+        harness.events.filter((event) => event.kind === "replaySoundStarted"),
+      ).toHaveLength(plan.sounds.length);
+      await expectIgnored(harness, [
+        "startReplay",
+        "pause",
+        "resume",
+        "hidden",
+        "interrupted",
+        "deviceChanged",
+      ]);
+      harness.flow.proceed();
+      expectResultWithSameLog(harness, snapshot, logCopy);
+    }, 120_000);
+
+    it.each(["stop", "pageLeft"] as const)(
+      "%s shows the result",
+      async (ending) => {
+        const harness = createHarness();
+        const { snapshot, logCopy } = await enterReplay(harness);
+        harness.backend.fire("deviceChanged");
+        expect(viewOf(harness).phase).toBe("finished");
+        if (ending === "stop") {
+          harness.flow.stop();
+          expect(harness.calls.at(-1)?.name).toBe("stopAll");
+        } else {
+          harness.backend.fire("pageLeft");
+        }
+        expectResultWithSameLog(harness, snapshot, logCopy);
+      },
+      60_000,
+    );
+  });
 });

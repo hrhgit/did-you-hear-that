@@ -8,7 +8,6 @@ import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
-import { replayCopy } from "../copy/replay-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
@@ -25,6 +24,8 @@ import { createWebAudioBackend } from "../audio/output/web-audio-backend";
 import type { RoomResult } from "../engine/search-types";
 import { createThresholdSearch } from "../engine/threshold-search";
 import { createCalibrationController } from "./calibration-controller";
+import type { MissedSoundReplayController } from "./create-missed-sound-replay";
+import { createMissedSoundReplay } from "./create-missed-sound-replay";
 import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
@@ -38,8 +39,8 @@ import type {
   EntrySnapshot,
   ExitReason,
   LoggedCalibration,
+  MissedSoundReplay,
   PauseReason,
-  ReplayAnnouncing,
   ScoredVisitTrial,
   SnapshotBase,
   TrialReaction,
@@ -77,26 +78,6 @@ const drawSeed = (source: RandomSource): number =>
   Math.floor(source.next() * seedRangeCount);
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
-
-/**
- * The stand-in view of the missed-sound replay (missed-sound-replay tasks.md, task 1). It promises
- * nothing: no announcement, no counts, and no start, so the stage plays nothing. Task 12 replaces
- * it with the Replay_Controller's view.
- */
-const standInReplayView: ReplayAnnouncing = Object.freeze({
-  phase: "announcing",
-  heading: replayCopy.heading,
-  missedSoundCount: 0,
-  replaySoundCount: 0,
-  selectionLine: null,
-  stopLabel: replayCopy.stopButton,
-  canStart: false,
-  canSkip: true,
-  // `proceed` leads to the result, so its control skips the replay.
-  proceedLabel: replayCopy.skipButton,
-  announcementLines: Object.freeze([]),
-  startLabel: replayCopy.startButton,
-});
 
 const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
 
@@ -192,6 +173,8 @@ interface Visit {
   activeRoomIndex: number;
   attempt: number;
   log: VisitLog | null;
+  /** The missed-sound replay, made when the rooms are over (missed-sound-replay design.md). */
+  replay: MissedSoundReplayController | null;
   summary: VisitSummary | null;
   swappedRoom: VisitRoom | null;
 }
@@ -387,7 +370,7 @@ export function createVisitFlow(
         return Object.freeze({
           ...base("missedSoundReplay"),
           visitLog: logOf(current),
-          replay: standInReplayView,
+          replay: replayViewOf(current),
         });
       case "result":
         return Object.freeze({
@@ -410,6 +393,21 @@ export function createVisitFlow(
       throw new Error("The visit log is assembled when the rooms are over.");
     }
     return current.log;
+  }
+
+  function replayOf(current: Visit): MissedSoundReplayController {
+    if (current.replay === null) {
+      throw new Error("The replay is made when the rooms are over.");
+    }
+    return current.replay;
+  }
+
+  /** The replay's view, with the reason of the pause that holds (missed-sound-replay D21). */
+  function replayViewOf(current: Visit): MissedSoundReplay {
+    const reason = pause?.reason ?? null;
+    return replayOf(current).view(
+      reason === "hidden" || reason === "interrupted" ? reason : null,
+    );
   }
 
   function summaryOf(current: Visit): VisitSummary {
@@ -658,6 +656,13 @@ export function createVisitFlow(
     if (current === null || holding === null) {
       return;
     }
+    if (stage === "missedSoundReplay") {
+      // A pause of the replay is not written to the log, which was assembled when the rooms
+      // ended (missed-sound-replay R11.3, D18).
+      pause = null;
+      replayOf(current).resume();
+      return;
+    }
     current.recorder.pauseEnded(timer.now());
     pause = null;
     const calibrated = output.rangeReport() !== null;
@@ -686,8 +691,50 @@ export function createVisitFlow(
     }
   };
 
+  /**
+   * What a stop report of the output shell does in the missed-sound replay (missed-sound-replay
+   * design.md, "What the flow does", R11.2 to R11.6, R12.1). A pause here sets the snapshot's pause
+   * field only and writes nothing to the log (D18).
+   */
+  function replayStopped(reason: StopReason): void {
+    const current = visit;
+    if (current === null || stage !== "missedSoundReplay") {
+      return;
+    }
+    const replay = replayOf(current);
+    switch (reason) {
+      case "control":
+        // The flow caused it (stop, skip).
+        return;
+      case "pageLeft":
+        replay.cancel();
+        pause = null;
+        summaryOf(current);
+        enterStage("result");
+        return;
+      case "deviceChanged": {
+        const phase = replay.phase();
+        if (phase === "announcing" || phase === "playing") {
+          replay.end("deviceChanged");
+          pause = null;
+        }
+        return;
+      }
+      case "hidden":
+      case "interrupted":
+        if (pause === null && replay.cut()) {
+          pause = Object.freeze({ reason });
+        }
+        return;
+    }
+  }
+
   /** What a stop report of the output shell does (design.md, "Pauses"). */
   function onOutputStopped(reason: StopReason): void {
+    if (stage === "missedSoundReplay") {
+      replayStopped(reason);
+      return;
+    }
     if (
       reason === "control" ||
       visit === null ||
@@ -725,7 +772,19 @@ export function createVisitFlow(
       }
       // The replay is a span of its own for the rise limit (R16.1).
       output.beginRoom();
-      current.log = current.recorder.log();
+      const log = current.recorder.log();
+      current.log = log;
+      // The draw after the render seed and the engine seeds, so it equals replayRenderSeed(log)
+      // (missed-sound-replay R14.2, D2).
+      const renderSeed = drawSeed(current.source);
+      current.replay = createMissedSoundReplay({
+        output,
+        timer: current.timer,
+        log,
+        random: createSeededRandom(renderSeed),
+        emit,
+        notRunning: (reason) => replayStopped(reason),
+      });
       enterStage("missedSoundReplay");
     };
 
@@ -870,6 +929,7 @@ export function createVisitFlow(
           activeRoomIndex: 0,
           attempt: 0,
           log: null,
+          replay: null,
           summary: null,
           swappedRoom: null,
         };
@@ -1009,6 +1069,8 @@ export function createVisitFlow(
             startRoom();
             return;
           case "missedSoundReplay":
+            // Skips the replay, or goes on once it has finished (missed-sound-replay R10.2, R13.3).
+            replayOf(current).skip();
             summaryOf(current);
             enterStage("result");
             return;
@@ -1064,6 +1126,12 @@ export function createVisitFlow(
         }
         switch (stage) {
           case "missedSoundReplay":
+            // Silenced above; the replay plays nothing more (missed-sound-replay R11.1).
+            replayOf(current).cancel();
+            pause = null;
+            summaryOf(current);
+            enterStage("result");
+            return;
           case "swappedRepeat":
             summaryOf(current);
             current.swappedRoom = null;
@@ -1091,8 +1159,24 @@ export function createVisitFlow(
     },
 
     startReplay() {
-      // Does nothing in every stage until task 12 of missed-sound-replay tasks.md builds the
-      // replay, so the stage plays nothing before its checks exist (missed-sound-replay R1.5).
+      step(() => {
+        const current = inVisit("missedSoundReplay");
+        if (current === null || replayOf(current).phase() !== "announcing") {
+          return;
+        }
+        // A press: it may start sound, so activate is called within the call (R6.3, R6.4, D8).
+        withSound(() => {
+          const replay = replayOf(current);
+          if (
+            visit === current &&
+            stage === "missedSoundReplay" &&
+            pause === null &&
+            replay.phase() === "announcing"
+          ) {
+            replay.start();
+          }
+        });
+      });
     },
 
     backToFrontDoor() {
