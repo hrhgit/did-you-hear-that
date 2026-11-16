@@ -8,7 +8,7 @@ describe("hearingMethodConfig", () => {
     expect(config).toEqual({
       downwardStepDb: 10,
       upwardStepDb: 5,
-      startingLevelDb: -25,
+      startingLevelDb: -10,
       capRelativeToAnchorDb: 5,
       floorDb: -70,
       responseWindowMs: 2000,

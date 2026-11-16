@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hearingMethodConfig } from "../config/hearing-method-config";
+import { hearingMethodConfig as shippedHearingMethodConfig } from "../config/hearing-method-config";
 import { createSeededRandom, type RandomSource } from "../config/seeded-random";
 import type {
   Ear,
@@ -11,6 +11,16 @@ import type {
   VisitorResponse,
 } from "./search-types";
 import { createThresholdSearch } from "./threshold-search";
+
+/**
+ * The shipped settings with the starting level these examples were written for, 25 dB below the
+ * anchor. The shipped start moved to 10 dB below on 2026-11-16 (audible-start, light plan); the
+ * engine's rules do not depend on where it starts, and its examples keep their levels.
+ */
+const hearingMethodConfig = Object.freeze({
+  ...shippedHearingMethodConfig,
+  startingLevelDb: -25,
+});
 
 /** The largest value sfc32 can return: (2^32 − 1) / 2^32. */
 const largestDraw = (2 ** 32 - 1) / 2 ** 32;

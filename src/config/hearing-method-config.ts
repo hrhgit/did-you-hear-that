@@ -60,8 +60,11 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   downwardStepDb: 10,
   // "Upward step after a miss | 5 dB"
   upwardStepDb: 5,
-  // "Starting level | 25 dB below the anchor"
-  startingLevelDb: -25,
+  // "Starting level | 10 dB below the anchor". Raised from 25 dB below on 2026-11-16 (the light plan
+  // of audible-start, a decision of the owner's coordinator at the owner's request): each room now
+  // begins with practice at the anchor, so the search starts where the visitor has just heard the
+  // ghost, and no room opens on sounds too quiet to hear. Still below the anchor and the cap
+  startingLevelDb: -10,
   // "Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16 (brief 08b, a
   // decision of the owner's coordinator at the owner's request): the music anchor is likely louder
   // than rubbed hands, so the lower cap keeps the loudest sound no louder at the ear than before.

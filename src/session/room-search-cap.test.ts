@@ -82,8 +82,8 @@ describe("roomSearchCapDb", () => {
   );
 
   it("keeps a top that lies exactly on the grid, or a rounding error below it", () => {
-    // The highest, 6, is the cap of 5 dB itself.
-    for (const k of [-9, -1, 0, 1, 6]) {
+    // The highest, 3, is the cap of 5 dB itself, three steps above the start of −10 dB.
+    for (const k of [-9, -1, 0, 1, 3]) {
       const gridDb = startingLevelDb + k * upwardStepDb;
       expect(roomSearchCapDb(gridDb, hearingMethodConfig)).toBe(gridDb);
       expect(roomSearchCapDb(gridDb - 1e-12, hearingMethodConfig)).toBe(gridDb);

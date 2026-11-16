@@ -17,8 +17,9 @@ const parameters = Object.freeze({
   seed: 20261119,
   roomsPerListenerCount: 20,
   // (cap − start) / upward step + capMissesForWorseThanCapCount with the shipped settings:
-  // (5 + 25) / 5 + 2. It was 10 with the cap of 15 (audible-start design.md, "The cap").
-  neverAnswersPresentationCount: 8,
+  // (5 + 10) / 5 + 2. It was 10 with the cap of 15 (audible-start design.md, "The cap"), and 8 with
+  // the start 25 dB below the anchor (audible-start, light plan).
+  neverAnswersPresentationCount: 5,
   timeoutMs: 30_000,
 });
 
@@ -51,7 +52,7 @@ export const extremeListenerExamples: readonly ExtremeListenerExample[] =
     {
       listener: "neverAnswers",
       expectation:
-        "both ears worse than cap after exactly 8 presentations, and no false alarm",
+        "both ears worse than cap after exactly 5 presentations, and no false alarm",
       problemWith: (result: RoomResult) => {
         for (const ear of ["left", "right"] as const) {
           const earResult = result[ear];
@@ -118,7 +119,7 @@ export const playExampleRoom = (
 /**
  * CP12. Extreme listeners, the examples (R8, R10, R13.5). Each of never answers, always
  * answers, always answers on the wrong side and always presses left plays 20 rooms with seeds
- * drawn from 20261119. Never answers ends both ears worse than cap after exactly 8
+ * drawn from 20261119. Never answers ends both ears worse than cap after exactly 5
  * presentations with no false alarm. The other three end with both ears unreliable for the
  * false alarm rate. Every room ends within Room_Trial_Limit.
  */

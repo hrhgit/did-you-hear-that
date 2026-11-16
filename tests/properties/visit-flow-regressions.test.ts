@@ -69,12 +69,13 @@ describe("visit flow regressions", () => {
   //
   // This case keeps the script fast-check drew except its listener, which was a drawn function,
   // its calibration and the times of the two device changes. The audible-start Keep_Minimum
-  // (−27 dB, D25) and the playable floor moved the calibration from −40 dB to −27 dB and the
-  // listener's threshold from −30 dB to −20 dB, above the Search_Floor, which changed the times.
-  // The listener here answers the side of every sound at or above −20 dB and nothing otherwise.
-  // With it, the third room's first attempt presents its first trial at 192 815 ms; the first
-  // device change at 200 000 ms abandons it; attempt 2 runs from 230 217 ms to its first trial at
-  // 233 377 ms, so the second device change is set at 232 000 ms, between the two. The case
+  // (−27 dB, D25), the playable floor and the start 10 dB below the anchor moved the calibration
+  // from −40 dB to −27 dB and the listener's threshold from −30 dB to −20 dB, above the
+  // Search_Floor, which changed the times. The listener here answers the side of every sound at or
+  // above −20 dB and nothing otherwise. With it, the third room's first attempt presents its first
+  // trial at 240 393 ms; the first device change at 248 000 ms abandons it; attempt 2 runs from
+  // 253 870 ms to its first trial at 257 030 ms, so the second device change is set at 255 500 ms,
+  // between the two. The case
   // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
@@ -92,8 +93,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 200_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 232_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 248_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 255_500, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };

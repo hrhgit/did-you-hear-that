@@ -71,7 +71,7 @@ Every number below lives in `src/config` and is expected to change after listeni
 |---|---|
 | Downward step after a catch | 10 dB |
 | Upward step after a miss | 5 dB |
-| Starting level | 25 dB below the anchor |
+| Starting level | 10 dB below the anchor |
 | Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16: the anchor is now a comfortable music volume, likely louder than rubbed hands, and the lower cap keeps the loudest sound no louder at the ear than before |
 | Quietest playable level | 70 dB below the anchor |
 | Response window after a sound starts | 2.0 s |

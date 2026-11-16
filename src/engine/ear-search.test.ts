@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { hearingMethodConfig } from "../config/hearing-method-config";
+import { hearingMethodConfig as shippedHearingMethodConfig } from "../config/hearing-method-config";
 import { createEarSearch, type EarEnding } from "./ear-search";
 import type { Direction, SoundOutcome } from "./search-types";
+
+/**
+ * The shipped settings with the starting level these examples were written for, 25 dB below the
+ * anchor. The shipped start moved to 10 dB below on 2026-11-16 (audible-start, light plan); the
+ * engine's rules do not depend on where it starts, and its examples keep their levels.
+ */
+const hearingMethodConfig = Object.freeze({
+  ...shippedHearingMethodConfig,
+  startingLevelDb: -25,
+});
 
 const C: SoundOutcome = "caught";
 const M: SoundOutcome = "missed";
