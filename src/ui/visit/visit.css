@@ -508,41 +508,162 @@ p.visit-status {
   min-height: 3.3em;
 }
 
-/* The calibration control as a drawn line: quiet at the left end, loud at the right. */
-.visit-meter {
-  position: relative;
-  height: 1.5rem;
-  max-width: 22rem;
-  margin: 1.5rem 0.4rem 0;
-  border-bottom: 1px solid var(--color-graphite);
+/*
+ * The calibration control as a drawn line: quiet at the left end, loud at the right. The ring is
+ * where the visitor has put the control. The lit part of the line and its mark are where the sound
+ * has got to, which follows the ring a little at a time.
+ */
+/* What to do comes first and stands out. Why, and how the sound follows, are said more quietly. */
+.visit-calibration-lines p + p {
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
 }
 
-.visit-meter::before,
-.visit-meter::after {
+.visit-dial {
+  max-width: 26rem;
+  margin: 1.5rem 0.4rem 0;
+}
+
+.visit-meter {
+  --visit-thumb: 1.5rem;
+  --visit-travel: calc(100% - var(--visit-thumb));
+  position: relative;
+  height: 2.75rem;
+}
+
+.visit-meter-line,
+.visit-meter-fill,
+.visit-meter-mark {
+  position: absolute;
+  top: 50%;
+  pointer-events: none;
+}
+
+.visit-meter-line {
+  right: calc(var(--visit-thumb) / 2);
+  left: calc(var(--visit-thumb) / 2);
+  border-top: 1px solid var(--color-graphite);
+}
+
+.visit-meter-line::before,
+.visit-meter-line::after {
   content: "";
   position: absolute;
-  bottom: -0.3rem;
-  height: 0.9rem;
+  top: -0.5rem;
+  height: 0.95rem;
   border-left: 1px solid var(--color-graphite);
 }
 
-.visit-meter::before {
+.visit-meter-line::before {
   left: 0;
 }
 
-.visit-meter::after {
+.visit-meter-line::after {
   right: 0;
 }
 
+.visit-meter-fill {
+  left: calc(var(--visit-thumb) / 2);
+  width: calc(var(--visit-setting, 0) * var(--visit-travel));
+  height: 3px;
+  margin-top: -1px;
+  background: var(--color-lamp-low);
+  transition: width 0.4s ease;
+}
+
 .visit-meter-mark {
-  position: absolute;
-  bottom: -0.35rem;
-  left: calc(var(--visit-setting, 0) * 100%);
+  left: calc(
+    var(--visit-thumb) / 2 + var(--visit-setting, 0) * var(--visit-travel)
+  );
   width: 2px;
-  height: 1.6rem;
-  margin-left: -1px;
+  height: 1.1rem;
+  margin: -0.55rem 0 0 -1px;
   background: var(--color-lamp);
   transition: left 0.4s ease;
+}
+
+.visit-meter-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.visit-meter-range:active {
+  cursor: grabbing;
+}
+
+.visit-meter-range::-webkit-slider-runnable-track {
+  height: var(--visit-thumb);
+  background: transparent;
+}
+
+.visit-meter-range::-moz-range-track {
+  height: var(--visit-thumb);
+  background: transparent;
+}
+
+.visit-meter-range::-webkit-slider-thumb {
+  box-sizing: border-box;
+  width: var(--visit-thumb);
+  height: var(--visit-thumb);
+  border: 1.5px solid var(--color-moonlight);
+  border-radius: 50%;
+  background: transparent;
+  appearance: none;
+}
+
+.visit-meter-range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--visit-thumb);
+  height: var(--visit-thumb);
+  border: 1.5px solid var(--color-moonlight);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.visit-meter-range:hover::-webkit-slider-thumb,
+.visit-meter-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--color-lamp);
+}
+
+.visit-meter-range:hover::-moz-range-thumb,
+.visit-meter-range:focus-visible::-moz-range-thumb {
+  border-color: var(--color-lamp);
+}
+
+.visit-meter-range:focus-visible {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 0.2rem;
+}
+
+/* Quieter and Louder sit under the two ends of the line, so each also names its end. */
+.visit-dial-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 0.9rem;
+}
+
+p.visit-keys-line {
+  max-width: 26rem;
+  margin: 1.5rem 0 1.25rem;
+  font-size: 0.9375rem;
+}
+
+/* The keys are no use without a keyboard. */
+@media (pointer: coarse) {
+  p.visit-keys-line {
+    display: none;
+  }
 }
 
 .visit-rules {
@@ -805,5 +926,10 @@ p.visit-swap-turn-back {
   .visit-caption,
   .visit-caption[data-shown="true"] {
     transition-duration: 0.25s;
+  }
+
+  .visit-meter-fill,
+  .visit-meter-mark {
+    transition: none;
   }
 }

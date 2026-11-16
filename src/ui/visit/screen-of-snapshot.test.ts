@@ -1,3 +1,4 @@
+import { audioOutputConfig } from "../../config/audio-output-config";
 import { describe, expect, it } from "vitest";
 import { calibrationCopy } from "../../copy/calibration-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
@@ -194,28 +195,77 @@ describe("screenOfSnapshot", () => {
     expect(screen.stopShown).toBe(true);
   });
 
-  it("offers only the start of calibration before the hiss plays", () => {
+  it("offers only the start of calibration before the sound plays", () => {
     const screen = screenOfSnapshot(calibration);
     expect(screen.sheet).toBe("calibration");
     expect(screen.calibration).toEqual({
       heading: visitCopy.calibrationHeading,
+      introLines: [calibrationCopy.openLine],
+      keysLine: null,
       started: false,
       canKeep: false,
       canGoLouder: false,
+      bottomDb: -60,
+      topDb: -10,
+      stepDb: audioOutputConfig.calibrationSettingStepDb,
+      targetDb: -60,
       settingFraction: null,
       statusLine: null,
     });
   });
 
-  it("places the calibration setting between the ends of the control", () => {
+  it("shows the snapshot's heading and lines, with the keys line apart", () => {
+    const screen = screenOfSnapshot({
+      ...calibration,
+      heading: calibrationCopy.hiss.heading,
+      introLines: [
+        calibrationCopy.hiss.openLine,
+        calibrationCopy.whyLine,
+        calibrationCopy.hiss.riseLine,
+        calibrationCopy.keysLine,
+      ],
+      line: calibrationCopy.hiss.openLine,
+    });
+    expect(screen.calibration?.heading).toBe(calibrationCopy.hiss.heading);
+    expect(screen.calibration?.introLines).toEqual([
+      calibrationCopy.hiss.openLine,
+      calibrationCopy.whyLine,
+      calibrationCopy.hiss.riseLine,
+    ]);
+    expect(screen.calibration?.keysLine).toBe(calibrationCopy.keysLine);
+    expect(screen.calibration?.statusLine).toBeNull();
+  });
+
+  it("says the music is loading under the opening lines", () => {
+    const screen = screenOfSnapshot({
+      ...calibration,
+      calibrationSound: "loading",
+      introLines: [calibrationCopy.openLine],
+      line: calibrationCopy.loadingLine,
+    });
+    expect(screen.calibration?.statusLine).toBe(calibrationCopy.loadingLine);
+  });
+
+  it("puts the thumb at the target and the mark where the sound has got to", () => {
+    const screen = screenOfSnapshot({
+      ...calibration,
+      playing: true,
+      playedSettingDb: -35,
+      targetSettingDb: -20,
+    });
+    expect(screen.calibration?.targetDb).toBe(-20);
+    expect(screen.calibration?.settingFraction).toBeCloseTo(0.5);
+    expect(screen.calibration?.canKeep).toBe(true);
+    expect(screen.calibration?.canGoLouder).toBe(true);
+  });
+
+  it("puts the thumb at the played setting when the snapshot names no target", () => {
     const screen = screenOfSnapshot({
       ...calibration,
       playing: true,
       playedSettingDb: -35,
     });
-    expect(screen.calibration?.settingFraction).toBeCloseTo(0.5);
-    expect(screen.calibration?.canKeep).toBe(true);
-    expect(screen.calibration?.canGoLouder).toBe(true);
+    expect(screen.calibration?.targetDb).toBe(-35);
   });
 
   it("stops offering louder at the top of the control and says so", () => {
@@ -234,6 +284,15 @@ describe("screenOfSnapshot", () => {
   it("names a calibration after a device change differently", () => {
     const screen = screenOfSnapshot({ ...calibration, again: true });
     expect(screen.calibration?.heading).toBe(visitCopy.recalibrateHeading);
+  });
+
+  it("takes the heading from the snapshot when it gives one", () => {
+    const screen = screenOfSnapshot({
+      ...calibration,
+      again: true,
+      heading: calibrationCopy.againHeading,
+    });
+    expect(screen.calibration?.heading).toBe(calibrationCopy.againHeading);
   });
 
   it("lets the headphone check go on only when the flow says so", () => {

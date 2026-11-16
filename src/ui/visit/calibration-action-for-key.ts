@@ -25,7 +25,7 @@ export type CalibrationKeyAction =
  *
  * - The right and up arrows move the control one step louder, the left and down arrows one step
  *   quieter. With Shift they move `bigMoveStepCount` steps, as Page Up and Page Down do. A key
- *   held down keeps moving the control: the hiss still rises a little at a time, so holding a
+ *   held down keeps moving the control: the sound still rises a little at a time, so holding a
  *   key cannot make it jump.
  * - Home and End put the control at its bottom and its top.
  * - Enter keeps the setting. It does so once for a key held down, and not at all while a button

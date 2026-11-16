@@ -10,8 +10,7 @@ import { visitCopy } from "../../src/copy/visit-copy";
 // The steps from the front door into the first room, shared by the tests that walk a visit on
 // the public page.
 
-const { calibrationSettingMinDb, calibrationSettingKeepMinDb } =
-  audioOutputConfig;
+const { calibrationSettingKeepMinDb } = audioOutputConfig;
 
 export const heading = (page: Page, name: string) =>
   page.getByRole("heading", { level: 1, name });
@@ -21,22 +20,34 @@ export const button = (page: Page, name: string) =>
 export const quickVisit = (page: Page) =>
   page.getByRole("button", { name: frontDoorCopy.choices.quick.button });
 
-/** Chooses the short visit, matches the hiss up to the lowest setting that can be kept. */
+const escaped = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The calibration heading, whichever sound the browser could play: the music, or the hiss where
+ * this browser cannot decode the music.
+ */
+export const calibrationHeading = (page: Page) =>
+  page.getByRole("heading", {
+    level: 1,
+    name: new RegExp(
+      `^(${escaped(calibrationCopy.heading)}|${escaped(calibrationCopy.hiss.heading)})$`,
+    ),
+  });
+
+/** The calibration control, which is named by the heading of its sheet. */
+export const calibrationSlider = (page: Page) => page.getByRole("slider");
+
+/** Chooses the short visit and drags the control to the lowest setting that can be kept. */
 export async function calibrate(page: Page): Promise<void> {
   await quickVisit(page).click();
-  await expect(heading(page, visitCopy.calibrationHeading)).toBeVisible();
+  await expect(calibrationHeading(page)).toBeVisible();
   await button(page, calibrationCopy.startButton).click();
-  const louder = button(page, calibrationCopy.louderButton);
-  await expect(louder).toBeVisible();
-  for (
-    let press = 0;
-    press < calibrationSettingKeepMinDb - calibrationSettingMinDb;
-    press += 1
-  ) {
-    await louder.click();
-  }
-  // The hiss rises a few decibels from one repeat to the next, so it takes a few repeats to
-  // reach the setting asked for. Until then the house does not keep the setting.
+  const slider = calibrationSlider(page);
+  await expect(slider).toBeVisible();
+  await slider.fill(String(calibrationSettingKeepMinDb));
+  // The sound follows the control a little at a time, so it takes some seconds to reach the
+  // setting asked for. Until then the house does not keep the setting.
   await expect(async () => {
     await button(page, calibrationCopy.keepButton).click();
     await expect(heading(page, visitCopy.headphoneCheckHeading)).toBeVisible({

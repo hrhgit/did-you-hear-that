@@ -12,6 +12,7 @@ import { drawHouseSection } from "../house/draw-house-section";
 import { startMotionLayer } from "../house/motion-layer";
 import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
+import { joinCalibrationControl } from "./join-calibration-control";
 import { joinReplayButtons } from "./join-replay-buttons";
 import { joinSwapButtons } from "./join-swap-buttons";
 import { listenForAnswers } from "./listen-for-answers";
@@ -125,6 +126,19 @@ export function startVisit(
   });
   press(page.calibration.keepButton, () => {
     flow.keepCalibration();
+  });
+  joinCalibrationControl({
+    doc,
+    page,
+    current: () => screenView.current()?.calibration ?? null,
+    actions: {
+      setTarget: (settingDb) => {
+        flow.setCalibrationTarget(settingDb);
+      },
+      keep: () => {
+        flow.keepCalibration();
+      },
+    },
   });
   press(page.headphoneCheck.playButton, () => {
     flow.playHeadphoneCheck();

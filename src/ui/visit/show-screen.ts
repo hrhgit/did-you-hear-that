@@ -75,6 +75,7 @@ export function createScreenView(options: {
   let restShownAtMs: number | null = null;
   let replaySheetShownAtMs: number | null = null;
   let replayLinesShown = "";
+  let calibrationLinesShown = "";
   let swapLinesShown = "";
   let swapComparisonShown: unknown = null;
   let swapPhaseKey: string | null = null;
@@ -93,13 +94,37 @@ export function createScreenView(options: {
     const sheet = page.calibration;
     const startHadFocus = doc.activeElement === sheet.startButton;
     setText(sheet.heading, calibration.heading);
+    const lines = calibration.introLines.join("\n");
+    if (lines !== calibrationLinesShown) {
+      calibrationLinesShown = lines;
+      sheet.introLines.replaceChildren(
+        ...calibration.introLines.map((line) => {
+          const paragraph = doc.createElement("p");
+          paragraph.textContent = line;
+          return paragraph;
+        }),
+      );
+    }
+    setLine(sheet.keysLine, calibration.started ? calibration.keysLine : null);
     sheet.startButton.hidden = calibration.started;
-    sheet.quieterButton.hidden = !calibration.started;
-    sheet.louderButton.hidden = !calibration.started;
     sheet.keepButton.hidden = !calibration.started;
+    sheet.dial.hidden = !calibration.started;
     sheet.louderButton.disabled = !calibration.canGoLouder;
     sheet.keepButton.disabled = !calibration.canKeep;
-    sheet.meter.hidden = !calibration.started;
+    const { range } = sheet;
+    const ends = [
+      ["min", calibration.bottomDb],
+      ["max", calibration.topDb],
+      ["step", calibration.stepDb],
+    ] as const;
+    for (const [name, value] of ends) {
+      if (range.getAttribute(name) !== String(value)) {
+        range.setAttribute(name, String(value));
+      }
+    }
+    if (range.value !== String(calibration.targetDb)) {
+      range.value = String(calibration.targetDb);
+    }
     sheet.meter.style.setProperty(
       "--visit-setting",
       String(calibration.settingFraction ?? 0),
@@ -109,7 +134,8 @@ export function createScreenView(options: {
       screen.soundNotStartedLine ?? calibration.statusLine ?? "",
     );
     if (calibration.started && startHadFocus) {
-      focus(sheet.louderButton);
+      // The slider takes the focus, so that the keys move it at once.
+      focus(range);
     }
   };
 

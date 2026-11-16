@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { calibrationCopy } from "../../src/copy/calibration-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
@@ -16,6 +17,8 @@ import { previewServers } from "./preview-servers";
 import {
   button,
   calibrate,
+  calibrationHeading,
+  calibrationSlider,
   checkHeadphones,
   enterFirstRoom,
   heading,
@@ -189,12 +192,55 @@ test.describe(`a visit at ${address}`, () => {
   test("stops from the calibration screen with one press", async ({ page }) => {
     await openPage(page, address);
     await quickVisit(page).click();
-    await expect(heading(page, visitCopy.calibrationHeading)).toBeVisible();
+    await expect(calibrationHeading(page)).toBeVisible();
     await button(page, calibrationCopy.startButton).click();
-    await expect(button(page, calibrationCopy.louderButton)).toBeVisible();
+    await expect(calibrationSlider(page)).toBeVisible();
 
     await button(page, roomCopy.stopButton).click();
     await expect(heading(page, leavingCopy.exitHeading)).toBeVisible();
-    await expect(button(page, calibrationCopy.louderButton)).toBeHidden();
+    await expect(calibrationSlider(page)).toBeHidden();
+  });
+
+  test("moves the calibration control by the keys the sheet names", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(
+      isMobile,
+      "A phone has no keys, and the keys line is not shown there.",
+    );
+    const { calibrationSettingMinDb, calibrationSettingStepDb } =
+      audioOutputConfig;
+    await openPage(page, address);
+    await quickVisit(page).click();
+    await button(page, calibrationCopy.startButton).click();
+    const slider = calibrationSlider(page);
+    // The control takes the focus once the sound starts, and the keys line appears under it.
+    await expect(slider).toBeFocused();
+    await expect(page.getByText(calibrationCopy.keysLine)).toBeVisible();
+    await expect(slider).toHaveValue(String(calibrationSettingMinDb));
+
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveValue(
+      String(calibrationSettingMinDb + calibrationSettingStepDb),
+    );
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect(slider).toHaveValue(
+      String(calibrationSettingMinDb + 6 * calibrationSettingStepDb),
+    );
+    await page.keyboard.press("PageDown");
+    await expect(slider).toHaveValue(
+      String(calibrationSettingMinDb + calibrationSettingStepDb),
+    );
+    // The keys work with the focus on a button too.
+    await button(page, calibrationCopy.quieterButton).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveValue(
+      String(calibrationSettingMinDb + 2 * calibrationSettingStepDb),
+    );
+    await page.keyboard.press("Home");
+    await expect(slider).toHaveValue(String(calibrationSettingMinDb));
+
+    await button(page, roomCopy.stopButton).click();
   });
 });

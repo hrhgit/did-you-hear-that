@@ -1,3 +1,4 @@
+import { audioOutputConfig } from "../../config/audio-output-config";
 import { ghostSoundIds, type GhostSoundId } from "../../config/sound-id";
 import { calibrationCopy } from "../../copy/calibration-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
@@ -38,14 +39,24 @@ export type NoticeAction = "resume" | "backToFrontDoor" | "proceed";
 /** The calibration sheet. */
 export interface CalibrationScreen {
   readonly heading: string;
-  /** Whether the hiss has been started, so that the control can be used. */
+  /** What to read before using the control, in order, without the line about the keys. */
+  readonly introLines: readonly string[];
+  /** The line that names the keys, shown under the control, or null. */
+  readonly keysLine: string | null;
+  /** Whether the calibration sound has been started, so that the control can be used. */
   readonly started: boolean;
   /** Whether a setting has been played, so that it can be kept. */
   readonly canKeep: boolean;
   readonly canGoLouder: boolean;
-  /** Where the control stands between its bottom (0) and its top (1), or null before a repeat. */
+  /** The control's ends and its step, in dB of the setting. */
+  readonly bottomDb: number;
+  readonly topDb: number;
+  readonly stepDb: number;
+  /** Where the visitor has put the control: the thumb of the slider. */
+  readonly targetDb: number;
+  /** Where the sound has got to between the bottom (0) and the top (1), or null before it plays. */
   readonly settingFraction: number | null;
-  /** What the house says about the setting, or null while only the opening line applies. */
+  /** What the house says about the setting, or null while only the opening lines apply. */
   readonly statusLine: string | null;
 }
 
@@ -440,16 +451,30 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     case "calibration": {
       const { playedSettingDb, controlBottomDb, controlTopDb } = snapshot;
       const span = controlTopDb - controlBottomDb;
+      const introLines = snapshot.introLines ?? [calibrationCopy.openLine];
       return {
         ...base,
         sheet: "calibration",
         calibration: {
-          heading: snapshot.again
-            ? visitCopy.recalibrateHeading
-            : visitCopy.calibrationHeading,
+          heading:
+            snapshot.heading ??
+            (snapshot.again
+              ? visitCopy.recalibrateHeading
+              : visitCopy.calibrationHeading),
+          introLines: introLines.filter(
+            (line) => line !== calibrationCopy.keysLine,
+          ),
+          keysLine: introLines.includes(calibrationCopy.keysLine)
+            ? calibrationCopy.keysLine
+            : null,
           started: snapshot.playing,
           canKeep: snapshot.playing && playedSettingDb !== null,
           canGoLouder: snapshot.playing && !snapshot.atTop,
+          bottomDb: controlBottomDb,
+          topDb: controlTopDb,
+          stepDb: audioOutputConfig.calibrationSettingStepDb,
+          targetDb:
+            snapshot.targetSettingDb ?? playedSettingDb ?? controlBottomDb,
           settingFraction:
             playedSettingDb === null || !(span > 0)
               ? null
@@ -457,8 +482,8 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
                   1,
                   Math.max(0, (playedSettingDb - controlBottomDb) / span),
                 ),
-          statusLine:
-            snapshot.line === calibrationCopy.openLine ? null : snapshot.line,
+          // The opening lines stand above the control already.
+          statusLine: introLines.includes(snapshot.line) ? null : snapshot.line,
         },
       };
     }

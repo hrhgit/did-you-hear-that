@@ -47,9 +47,18 @@ export interface VisitPage {
     readonly statusLine: HTMLElement;
   };
   readonly calibration: Sheet & {
-    readonly openLine: HTMLElement;
-    /** A drawn line with a mark on it: where the control stands between its two ends. */
+    /** Holds one paragraph for each line to read before using the control. */
+    readonly introLines: HTMLElement;
+    /** The control and the buttons at its two ends. */
+    readonly dial: HTMLElement;
+    /**
+     * A drawn line with a lit part and a mark on it: how far the sound has got between the two
+     * ends. Set by `--visit-setting`, from 0 to 1.
+     */
     readonly meter: HTMLElement;
+    /** The slider over the drawn line. Its thumb is where the visitor has put the control. */
+    readonly range: HTMLInputElement;
+    readonly keysLine: HTMLElement;
     readonly statusLine: HTMLElement;
     readonly startButton: HTMLButtonElement;
     readonly quieterButton: HTMLButtonElement;
@@ -254,21 +263,39 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     make("p", "visit-quiet", [frontDoorCopy.privacyLine]),
   ]);
 
-  // Calibration: one control, quieter and louder, and a button to keep the setting.
+  // Calibration: a control that can be dragged, quieter and louder at its two ends, and a button
+  // to keep the setting.
   const calibrationHeading = heading(visitCopy.calibrationHeading);
-  const openLine = make("p", "", [calibrationCopy.openLine]);
+  calibrationHeading.id = "visit-calibration-heading";
+  const introLines = make("div", "visit-calibration-lines", [
+    make("p", "", [calibrationCopy.openLine]),
+  ]);
   const statusLine = status();
-  const meter = make("div", "visit-meter", [make("span", "visit-meter-mark")]);
-  meter.setAttribute("aria-hidden", "true");
-  meter.hidden = true;
+  const range = make("input", "visit-meter-range");
+  range.type = "range";
+  range.setAttribute("aria-labelledby", calibrationHeading.id);
+  const meter = make("div", "visit-meter", [
+    make("span", "visit-meter-line"),
+    make("span", "visit-meter-fill"),
+    make("span", "visit-meter-mark"),
+    range,
+  ]);
   const startButton = button(calibrationCopy.startButton, "visit-button-lit");
   const quieterButton = button(calibrationCopy.quieterButton);
   const louderButton = button(calibrationCopy.louderButton);
   const keepButton = button(calibrationCopy.keepButton, "visit-button-lit");
-  const calibration = sheet("calibration", calibrationHeading, [
-    openLine,
+  const dial = make("div", "visit-dial", [
     meter,
-    controls([startButton, quieterButton, louderButton, keepButton]),
+    make("div", "visit-dial-ends", [quieterButton, louderButton]),
+  ]);
+  dial.hidden = true;
+  const keysLine = make("p", "visit-keys-line visit-quiet");
+  keysLine.hidden = true;
+  const calibration = sheet("calibration", calibrationHeading, [
+    introLines,
+    dial,
+    keysLine,
+    controls([startButton, keepButton]),
     statusLine,
   ]);
 
@@ -469,8 +496,11 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     calibration: {
       element: calibration,
       heading: calibrationHeading,
-      openLine,
+      introLines,
+      dial,
       meter,
+      range,
+      keysLine,
       statusLine,
       startButton,
       quieterButton,
