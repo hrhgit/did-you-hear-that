@@ -22,3 +22,7 @@ These values shape what is drawn. They change no sound and no decision about an 
 ## The missed-sound replay
 
 - `missed-sound-replay-config.ts`: `missedSoundReplayConfig`, the numbers the replay adds, deeply frozen by the file's own `deepFreeze`. `replayRaiseDb` (20) is how much louder each sound is played than when it was missed, from brief 07. `replaySoundsMaxCount` (20) is the most sounds one replay plays, PROPOSED, NOT APPROVED (question Q1 of `.kiro/specs/missed-sound-replay/design.md`). `replayGapMs` (400) is the wait from the end of one replayed sound to the request for the next, PROPOSED, NOT APPROVED (Q2). The file comments say so beside each value. The most refusals in a row of one replayed sound are not here: the replay reads `visitFlowConfig.refusedPlaysInARowMaxCount`.
+
+## The swapped repeat
+
+- `swapped-repeat-config.ts`: `swappedRepeatConfig`, the one number the swapped repeat adds, deeply frozen by the file's own `deepFreeze`. `unclearBelowLimitFraction` (0.5) is the share of `hearingMethodConfig.swappedRepeatDifferenceDb` below which the repeat's left and right difference counts as shrunk and the outcome is unclear, from brief 08 ("a difference that shrank below half the limit"); with the limit of 15 dB that is 7.5 dB. Every other number the repeat uses is an existing value: the limit and the search's settings of `hearingMethodConfig`, the hiss's level of `audioOutputConfig.headphoneCheckLevelDb` through the output stage, and `visitFlowConfig.refusedPlaysInARowMaxCount`.
