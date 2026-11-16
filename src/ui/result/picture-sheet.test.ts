@@ -4,6 +4,7 @@ import type {
   PictureWing,
   ResultPicture,
 } from "../../session/result-page-types";
+import type { SwappedRepeatComparison } from "../../session/visit-flow-types";
 import { layoutPictureSheet, wrapText } from "./picture-sheet";
 import { resultViewBox } from "./result-geometry";
 
@@ -20,24 +21,23 @@ const wing = (ear: "left" | "right"): PictureWing => ({
   earlier: null,
 });
 
-// The cast lets this literal stand while the swapped repeat adds a field to the floor.
-const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor =>
-  ({
-    room: {
-      roomIndex: ["corridor", "stairs", "attic"].indexOf(roomId),
-      roomId,
-      frequencyHz: 1000,
-    },
-    roomName: roomId,
-    pitchLabel: "1 kHz",
-    left: wing("left"),
-    right: wing("right"),
-    rightMinusLeftDb: 0,
-    differenceLabel: "0 dB",
-    differenceLine: "difference line",
-    swappedRepeat: null,
-    description: `description of the ${roomId}`,
-  }) as PictureFloor;
+const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
+  room: {
+    roomIndex: ["corridor", "stairs", "attic"].indexOf(roomId),
+    roomId,
+    frequencyHz: 1000,
+  },
+  roomName: roomId,
+  pitchLabel: "1 kHz",
+  left: wing("left"),
+  right: wing("right"),
+  rightMinusLeftDb: 0,
+  differenceLabel: "0 dB",
+  differenceLine: "difference line",
+  swappedRepeat: null,
+  repeat: null,
+  description: `description of the ${roomId}`,
+});
 
 const picture: ResultPicture = {
   kind: "live",
@@ -200,6 +200,49 @@ describe("layoutPictureSheet", () => {
     expect(fullerTexts).toContain("The notice");
     expect(fullerTexts).toContain("The notice's line.");
     expect(fullerTexts).toContain("The earlier line.");
+  });
+
+  it("writes what a swapped repeat came to under its floor, and nothing for the other floors", () => {
+    const repeat = {
+      outcomeLabel: "The difference stayed with your ear",
+      description: "The stairs both ways round, in words.",
+    } as SwappedRepeatComparison;
+    const repeated = layoutPictureSheet(
+      {
+        ...picture,
+        floors: [
+          floor("corridor"),
+          { ...floor("stairs"), repeat },
+          floor("attic"),
+        ],
+      },
+      null,
+      measure,
+    );
+    const yOf = (text: string): number =>
+      repeated.lines.find((line) => line.text === text)?.y ?? Number.NaN;
+    const xOf = (text: string): number =>
+      repeated.lines.find((line) => line.text === text)?.x ?? Number.NaN;
+    expect(yOf("description of the stairs")).toBeLessThan(
+      yOf(repeat.outcomeLabel),
+    );
+    expect(yOf(repeat.outcomeLabel)).toBeLessThan(yOf(repeat.description));
+    expect(yOf(repeat.description)).toBeLessThan(
+      yOf("description of the corridor"),
+    );
+    // The words of the repeat stand in from the floor they belong to.
+    expect(xOf(repeat.outcomeLabel)).toBeGreaterThan(
+      xOf("description of the stairs"),
+    );
+    expect(xOf(repeat.description)).toBe(xOf(repeat.outcomeLabel));
+    expect(repeated.height).toBeGreaterThanOrEqual(sheet.height);
+    for (const line of repeated.lines) {
+      expect(line.x + measure(line.text, line.sizePx)).toBeLessThanOrEqual(
+        repeated.width,
+      );
+      expect(line.y).toBeLessThan(repeated.height);
+    }
+    expect(texts).not.toContain(repeat.outcomeLabel);
   });
 
   it("gives the same sheet for the same picture", () => {

@@ -13,8 +13,11 @@ import { createResultView } from "./create-result-view";
  * visit with no visit flow behind it, and a record of what the result asked the flow to do.
  */
 export interface ResultSheet {
-  /** Shows the result of a visit, as the page does when the flow reaches its result. */
-  show(visit: VisitToSave): void;
+  /**
+   * Shows the result of a visit, as the page does when the flow reaches its result. After a
+   * swapped repeat the flow gives a line that asks the visitor to turn the headphones back.
+   */
+  show(visit: VisitToSave, turnBackLine?: string | null): void;
   /** Hides the result and forgets the visit, as the page does when the visit leaves it. */
   clear(): void;
   /** Every request the result made of the flow, in order: `back`, or `swappedRepeat:` and a room index. */
@@ -65,8 +68,8 @@ function startResultSheet(
   main.replaceChildren(resultView.element);
 
   const sheet: ResultSheet = {
-    show(visit) {
-      resultView.show(visit);
+    show(visit, turnBackLine = null) {
+      resultView.show(visit, turnBackLine);
       resultView.heading.focus({ preventScroll: true });
     },
     clear() {

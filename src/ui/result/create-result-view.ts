@@ -1,5 +1,6 @@
 import { leavingCopy } from "../../copy/leaving-copy";
 import { resultPageCopy } from "../../copy/result-page-copy";
+import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import type {
   FindEarlierVisit,
   PictureFloor,
@@ -13,6 +14,7 @@ import type {
 } from "../../session/result-page-types";
 import { drawResultSection } from "./draw-result-section";
 import { savePictureAsImage } from "./save-picture";
+import { repeatComparisonBlock } from "./show-repeat-comparison";
 
 /** The seed of the pencil that draws the result, so the house looks the same every time. */
 const resultDrawingSeed = 1887;
@@ -44,8 +46,11 @@ export interface ResultView {
   readonly element: HTMLElement;
   /** The heading, which takes the focus when the result appears. */
   readonly heading: HTMLElement;
-  /** Shows the result of the visit that has just ended. */
-  show(visit: VisitToSave): void;
+  /**
+   * Shows the result of the visit that has just ended. After a swapped repeat the visit comes
+   * again, with the repeat in it and a line that asks to turn the headphones back.
+   */
+  show(visit: VisitToSave, turnBackLine?: string | null): void;
   /** Hides the result and forgets the visit. Nothing of it is kept unless it was saved. */
   clear(): void;
 }
@@ -104,9 +109,14 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const noticeHeading = make("h2", "result-notice-heading");
   const noticeLine = make("p", "visit-voice");
   const notice = make("div", "result-notice", [noticeHeading, noticeLine]);
+  // After a swapped repeat: the headphones may still be the other way round.
+  const turnBack = make("p", "result-turn-back");
+  turnBack.setAttribute("role", "status");
+  turnBack.hidden = true;
   const head = make("header", "result-head", [
     heading,
     make("p", "result-meta", [dateLabel, visitTypeLabel]),
+    turnBack,
     shownVisit,
     falseAlarmLine,
     notice,
@@ -155,10 +165,17 @@ export function createResultView(options: ResultViewOptions): ResultView {
   }
   const saveButton = button(resultPageCopy.saveButton, "visit-button-lit");
   const saveStatus = status();
+  // Shown while the saved copy of this visit lacks a room that was visited again since.
+  const savedCopyLacks = make("p", "result-keep-lacks", [
+    swappedRepeatCopy.savedCopyLacksLine,
+  ]);
+  savedCopyLacks.id = "result-keep-lacks";
+  savedCopyLacks.hidden = true;
   const keep = make("section", "result-keep", [
     nameLabel,
     nameInput,
     nameHint,
+    savedCopyLacks,
     make("div", "result-controls", [saveButton]),
     saveStatus,
   ]);
@@ -214,6 +231,8 @@ export function createResultView(options: ResultViewOptions): ResultView {
 
   // What is on the page now.
   let live: VisitToSave | null = null;
+  /** The line that asks to turn the headphones back, while the live visit is the one shown. */
+  let liveTurnBackLine: string | null = null;
   /** The id the live visit was saved under, once it has been saved. */
   let liveSavedId: string | null = null;
   /** The saved visit whose picture is shown in place of the live one, or null. */
@@ -300,6 +319,15 @@ export function createResultView(options: ResultViewOptions): ResultView {
           make("p", "", [offer.line]),
           make("div", "result-controls", [swapButton]),
         ]),
+      );
+    }
+    if (floor.repeat !== null) {
+      // The floor was visited again with the headphones swapped: both runs, side by side.
+      item.append(
+        repeatComparisonBlock(doc, floor.repeat, {
+          idPrefix: `result-repeat-${String(floor.repeat.roomIndex)}`,
+          headingLevel: 4,
+        }),
       );
     }
     return item;
@@ -450,6 +478,17 @@ export function createResultView(options: ResultViewOptions): ResultView {
     backToThisVisitButton.hidden = live === null;
     // Only the visit that has just ended can be saved or named.
     keep.hidden = shownSaved !== null || live === null;
+    setLine(turnBack, shownSaved === null ? liveTurnBackLine : null);
+    const lacks =
+      live !== null &&
+      shownSaved === null &&
+      archive.savedCopyLacksRepeats(live);
+    savedCopyLacks.hidden = !lacks;
+    if (lacks) {
+      saveButton.setAttribute("aria-describedby", savedCopyLacks.id);
+    } else {
+      saveButton.removeAttribute("aria-describedby");
+    }
     drawSavedList(list);
   }
 
@@ -544,7 +583,8 @@ export function createResultView(options: ResultViewOptions): ResultView {
   return {
     element,
     heading,
-    show(visit) {
+    show(visit, turnBackLine = null) {
+      liveTurnBackLine = turnBackLine;
       if (live?.visitLog !== visit.visitLog) {
         // A new visit: nothing of the last one stays on the page.
         liveSavedId = null;
@@ -570,6 +610,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
       }
       nameInput.value = "";
       live = null;
+      liveTurnBackLine = null;
       liveSavedId = null;
       shownSaved = null;
       shownPicture = null;

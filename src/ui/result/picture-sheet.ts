@@ -60,6 +60,8 @@ const sheetWidth = 1600;
 const margin = 72;
 const drawingWidth = 600;
 const columnGap = 64;
+/** How far the words of a swapped repeat stand in from the floor they belong to. */
+const repeatIndent = 28;
 
 /**
  * Breaks text into lines no wider than `maxWidth`. A single word wider than that keeps a line to
@@ -256,6 +258,27 @@ export function layoutPictureSheet(
       true,
       "moonlight",
     );
+    if (floor.repeat !== null) {
+      // The floor was visited again with the headphones swapped: what that came to, in words.
+      columnY = paragraph(
+        floor.repeat.outcomeLabel,
+        columnX + repeatIndent,
+        columnY + 8,
+        columnWidth - repeatIndent,
+        22,
+        false,
+        "lamp",
+      );
+      columnY = paragraph(
+        floor.repeat.description,
+        columnX + repeatIndent,
+        columnY + 2,
+        columnWidth - repeatIndent,
+        22,
+        true,
+        "moonlight",
+      );
+    }
   }
   if (picture.comparison !== null) {
     columnY = paragraph(

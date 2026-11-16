@@ -98,6 +98,13 @@ p.result-silence {
   border-left: 1px solid var(--color-lamp);
 }
 
+/* After a swapped repeat: the headphones may still be the other way round. */
+p.result-turn-back {
+  margin-top: 1.25rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-lamp);
+}
+
 .result h2 {
   margin: 0 0 0.6rem;
   font-size: 1.3125rem;
@@ -372,6 +379,13 @@ p.result-status {
   border-bottom-color: var(--color-lamp);
   outline: 2px solid var(--color-lamp);
   outline-offset: 0.3rem;
+}
+
+/* The saved copy lacks a room that was visited again since. */
+p.result-keep-lacks {
+  margin-top: 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-lamp);
 }
 
 p.result-name-hint {
