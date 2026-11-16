@@ -34,7 +34,7 @@ Nothing else is claimed. Floors are never compared with each other. There is no 
 ## Experience rules
 
 - The fear comes from things getting quieter. There are no sudden loud sounds anywhere in the product.
-- Before the visitor answers, nothing on screen may reveal when a sound plays or which side it is on.
+- Before the visitor answers, nothing on screen may reveal when a sound plays or which side it is on. The one exception is the practice at the start of each room: while a practice sound plays, the screen says that a sound is playing now, never which side. Practice counts for nothing, comes before every counted sound of the room, and is there so that the visitor knows the house and the headphones work and what to do.
 - A visitor with no headphones, and a judge who only watches a video, must still be able to follow what happened. Every caught sound is drawn as a ripple labelled with its pitch and level, and the replay mode shows a whole recorded visit.
 - All interface text is in English.
 
