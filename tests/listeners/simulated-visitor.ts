@@ -56,6 +56,12 @@ export interface VisitDriver {
   fireOutputEvent(kind: OutputEventKind): Promise<void>;
   /** Calls `listener` with every trial the flow presents. Returns the function that removes it. */
   onTrialPresented(listener: (trial: PresentedTrial) => void): () => void;
+  /**
+   * Makes the backend refuse activation, as a browser that saw no press does, until called with
+   * false. Optional: only a replay behaviour's `refusedResume` and `refusedStartReplay` use it,
+   * and without it they are given as a plain `resume` and `startReplay`.
+   */
+  refuseActivation?(refused: boolean): void;
 }
 
 /** How a visitor's listener is made. */
@@ -108,6 +114,58 @@ export interface VisitorExtraPress {
   readonly side: Ear;
 }
 
+/**
+ * What the visitor does in the missed-sound replay besides a pause's `resume`, as a replay script
+ * of missed-sound-replay design.md ("Correctness properties") gives it. Times are from the moment
+ * the visitor first sees the stage.
+ */
+export interface VisitorReplayEvent {
+  readonly atMs: number;
+  readonly action:
+    | "proceed"
+    | "stop"
+    | "pause"
+    | "resume"
+    | "hidden"
+    | "interrupted"
+    | "deviceChanged"
+    | "pageLeft"
+    /** `resume` while the backend refuses activation. */
+    | "refusedResume"
+    /** `startReplay` while the backend refuses activation. */
+    | "refusedStartReplay";
+  /**
+   * For `hidden` and `interrupted`: the wait to the visitor's `resume`. Null: the visitor resumes
+   * at once, as after a disturbance, so that the visit reaches its result.
+   */
+  readonly resumeAfterMs: number | null;
+}
+
+/**
+ * How the visitor moves through the missed-sound replay (missed-sound-replay design.md, CP10).
+ * Times are from the moment the visitor first sees the stage. In every behaviour the visitor
+ * proceeds after a rest once the replay has finished or had nothing to play, and resumes a pause
+ * as it does in every stage.
+ *
+ * - `watch`: presses start after `startAfterMs` and waits for the end.
+ * - `skip`, `stop`: presses start after `startAfterMs`, then `proceed` or `stop`
+ *   `endAfterStartMs` after that press.
+ * - `script`: presses start at each of `startTimesMs` and gives each event at its time. Once
+ *   every one has been given, a replay still announcing is skipped after a rest.
+ */
+export type VisitorReplayBehaviour =
+  | { readonly kind: "watch"; readonly startAfterMs: number }
+  | {
+      readonly kind: "skip" | "stop";
+      readonly startAfterMs: number;
+      readonly endAfterStartMs: number;
+    }
+  | {
+      readonly kind: "script";
+      readonly startTimesMs: readonly number[];
+      readonly events: readonly VisitorReplayEvent[];
+    };
+
 /** Everything a Simulated_Visitor does in one visit. */
 export interface VisitorScript {
   readonly visitType: VisitType;
@@ -127,6 +185,11 @@ export interface VisitorScript {
   readonly extraPresses: readonly VisitorExtraPress[];
   readonly disturbances: readonly VisitorDisturbance[];
   readonly ending: VisitorEnding | null;
+  /**
+   * What the visitor does in the missed-sound replay. Without it the visitor proceeds after a
+   * rest there, which skips the replay.
+   */
+  readonly replay?: VisitorReplayBehaviour;
 }
 
 /** How a visit played by the visitor ended. */
@@ -194,7 +257,8 @@ interface PlannedAction {
  * holding the button), and keeps it; at the headphone check it plays the check and answers; at
  * `rules`, `betweenRooms` and `missedSoundReplay` it proceeds after a rest; while a pause holds it
  * resumes, at the time its disturbance set or at once. Each presented trial goes to the listener,
- * and an answer other than `none` is given after a drawn delay with a drawn time stamp.
+ * and an answer other than `none` is given after a drawn delay with a drawn time stamp. With a
+ * replay behaviour, the visitor follows it in `missedSoundReplay` instead of proceeding at once.
  */
 export async function playVisit(
   driver: VisitDriver,
@@ -299,6 +363,90 @@ export async function playVisit(
   /** True when the visitor's last stage action left the snapshot as it was. */
   let retrying = false;
 
+  // The replay behaviour's own actions, planned when the visitor first sees the replay.
+  const replayBehaviour = script.replay;
+  let replayPlanned = false;
+  let replayActionsLeft = 0;
+  const planReplayAction = (atMs: number, run: () => Promise<void>): void => {
+    replayActionsLeft += 1;
+    plan(atMs, async () => {
+      replayActionsLeft -= 1;
+      await run();
+      // Look at the stage again even when the action changed nothing.
+      reactedTo = null;
+    });
+  };
+  const withActivationRefused = async (body: () => void): Promise<void> => {
+    driver.refuseActivation?.(true);
+    try {
+      await act(body);
+    } finally {
+      driver.refuseActivation?.(false);
+    }
+  };
+  const giveReplayEvent = async (event: VisitorReplayEvent): Promise<void> => {
+    switch (event.action) {
+      case "proceed":
+        return act(() => flow.proceed());
+      case "stop":
+        return act(() => flow.stop());
+      case "pause":
+        return act(() => flow.pause());
+      case "resume":
+        return act(() => flow.resume());
+      case "hidden":
+      case "interrupted": {
+        await driver.fireOutputEvent(event.action);
+        if (event.resumeAfterMs !== null) {
+          const atMs = driver.now() + event.resumeAfterMs;
+          resumeAtMs = resumeAtMs === null ? atMs : Math.max(resumeAtMs, atMs);
+        }
+        return;
+      }
+      case "deviceChanged":
+      case "pageLeft":
+        return driver.fireOutputEvent(event.action);
+      case "refusedResume":
+        return withActivationRefused(() => flow.resume());
+      case "refusedStartReplay":
+        return withActivationRefused(() => flow.startReplay());
+    }
+  };
+  const planReplay = (behaviour: VisitorReplayBehaviour): void => {
+    replayPlanned = true;
+    const enteredAtMs = driver.now();
+    switch (behaviour.kind) {
+      case "watch":
+        planReplayAction(enteredAtMs + behaviour.startAfterMs, () =>
+          act(() => flow.startReplay()),
+        );
+        return;
+      case "skip":
+      case "stop":
+        planReplayAction(enteredAtMs + behaviour.startAfterMs, async () => {
+          await act(() => flow.startReplay());
+          planReplayAction(driver.now() + behaviour.endAfterStartMs, () =>
+            act(() =>
+              behaviour.kind === "skip" ? flow.proceed() : flow.stop(),
+            ),
+          );
+        });
+        return;
+      case "script":
+        for (const atMs of behaviour.startTimesMs) {
+          planReplayAction(enteredAtMs + atMs, () =>
+            act(() => flow.startReplay()),
+          );
+        }
+        for (const event of behaviour.events) {
+          planReplayAction(enteredAtMs + event.atMs, () =>
+            giveReplayEvent(event),
+          );
+        }
+        return;
+    }
+  };
+
   const restThen = (body: () => void, delayMs: number): void => {
     stageAction = plan(
       driver.now() + delayMs + drawUpTo(random, script.restMaxMs),
@@ -315,6 +463,13 @@ export async function playVisit(
     const delayMs = retrying ? audioOutputConfig.calibrationRepeatGapMs : 0;
     retrying = false;
     const atOnce = (body: () => void): void => after(delayMs, body);
+    if (
+      snapshot.stage === "missedSoundReplay" &&
+      replayBehaviour !== undefined &&
+      !replayPlanned
+    ) {
+      planReplay(replayBehaviour);
+    }
     if (snapshot.pause !== null) {
       const atMs = Math.max(driver.now() + delayMs, resumeAtMs ?? driver.now());
       stageAction = plan(atMs, () => {
@@ -385,9 +540,30 @@ export async function playVisit(
         return;
       case "rules":
       case "betweenRooms":
-      case "missedSoundReplay":
         restThen(() => flow.proceed(), delayMs);
         return;
+      case "missedSoundReplay": {
+        if (replayBehaviour === undefined) {
+          restThen(() => flow.proceed(), delayMs);
+          return;
+        }
+        const view = snapshot.replay;
+        if (view.phase === "nothingMissed" || view.phase === "finished") {
+          restThen(() => flow.proceed(), delayMs);
+          return;
+        }
+        if (view.phase === "playing" || replayActionsLeft > 0) {
+          return;
+        }
+        // Still announcing with nothing of the behaviour left: a script skips the replay, and
+        // the other behaviours press start again (after a press the browser did not see).
+        if (replayBehaviour.kind === "script") {
+          restThen(() => flow.proceed(), delayMs);
+        } else {
+          atOnce(() => flow.startReplay());
+        }
+        return;
+      }
       default:
         return;
     }
