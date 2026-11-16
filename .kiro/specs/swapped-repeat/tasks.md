@@ -154,10 +154,10 @@ The tasks are done in five batches, marked below. A batch is what one unattended
   - Every property of the visit flow, the replay and the result page must still pass, unchanged but for one change to visit-flow CP8 that the owner's coordinator chose on 2026-11-15 (option (a) of "Visit-flow CP8 and the Turn_Back_Line" under "Counterexamples" in `design.md`; the owner may reverse it): after the stop in the swapped repeat, `tests/properties/visit-flow-cp8-stop-leaves-nothing.property.test.ts` compares the result with the one before in every field but `turnBackLine`, and asserts `turnBackLine` exactly, `swappedRepeatCopy.turnBackLine` after a stop past the entry of the phase `instruction` (R9.1, R9.2) and the line before otherwise. If one fails only because the hook's trial now has two more fields, stop and report it.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 3.1 to 3.7, 4.2, 4.4, 5.1, 5.5, 6.2, 6.3, 7.3, 8.7, 8.8, 9.1, 9.2, 9.4, 9.5, 11.3, 11.4, 14.2 to 14.9, 15.2 to 15.4, 16.1, 16.2, 19.1_
-  - _Properties: CP5, CP10 (task 16); the visit flow's own properties unchanged_
+  - _Properties: CP5, CP10 (task 16); the visit flow's own properties unchanged but for visit-flow CP8, whose expectation after the stop in the swapped repeat now asserts the Turn_Back_Line (option (a) of "Visit-flow CP8 and the Turn_Back_Line" under "Counterexamples" in `design.md`, chosen by the owner's coordinator on 2026-11-15; the owner may reverse it)_
   - _Decisions: D5, D7, D8, D12, D13, D15, D22, D25; Q4 as decided; Q6 and Q7 as proposed_
-  - _Files: changes `src/session/create-visit-flow.ts`, `src/session/create-visit-flow.test.ts`_
-  - _Commit: `Run the swapped repeat in the visit flow`, covering `src/session/create-visit-flow.ts`, `src/session/create-visit-flow.test.ts`_
+  - _Files: changes `src/session/create-visit-flow.ts`, `src/session/create-visit-flow.test.ts`, `tests/properties/visit-flow-cp8-stop-leaves-nothing.property.test.ts` (the one change to visit-flow CP8 above, made after task 15)_
+  - _Commit: `Run the swapped repeat in the visit flow`, covering `src/session/create-visit-flow.ts`, `src/session/create-visit-flow.test.ts`, `tests/properties/visit-flow-cp8-stop-leaves-nothing.property.test.ts`_
 
 - [x] 12. Draw the repeat beside its floor
   - Change `src/session/result-picture.ts` as in "`resultPicture`": each floor's `repeat` is `swappedRepeatComparison` of its record in `visit.swappedRepeats` (live) or `savedVisit.swappedRepeats` (saved), or null; a missing list is empty; a floor with a record offers no repeat (Q4, decided); every other field of the floor and of the picture is what it is today for the same summary.
@@ -210,12 +210,12 @@ The tasks are done in five batches, marked below. A batch is what one unattended
 
 **End of batch 4.** The flow runs the repeat, the picture draws it, and a saved visit keeps it.
 
-- [ ] 16. Play the repeat in whole visits
+- [x] 16. Play the repeat in whole visits
   - Change `tests/listeners/simulated-visitor.ts` as "What tests/listeners gains" describes: every trial heard through Worn_Headphones, with the earpiece from the hook; the script's optional `headphones` and `swappedRepeat` behaviour; the check answered from the visitor's own arrangement; the `VisitDriver`'s hook type `FlowPresentedTrial`. With an imbalance of 0, the as-marked arrangement and no behaviour, every visit plays exactly as before. Add to `tests/listeners/simulated-visitor.test.ts`: a visitor with an imbalance hears through it; a visitor who does not swap answers the check `left`; without a behaviour the visitor stops at `result`.
   - Change `tests/properties/visit-flow-arbitraries.ts` by an arbitrary of that behaviour that only this spec's files use; the existing arbitraries draw as before. Change `tests/properties/visit-flow-harness.ts` only so that its hook type is `FlowPresentedTrial`.
   - Create the file for CP10 with its run count and a timeout of 120 seconds, including CP4's check that the seed of the run equals the next draw of the visit's source, and the save and read back through an archive on a fake storage area.
   - Create `tests/properties/swapped-repeat-simulated-visits.test.ts`: a quick and a full visit with an uneven Step_Listener through `visit-flow-harness.ts` and the simulated visitor, with fixed seeds and the worst-case renderers through `vi.mock`, played to the result and the repeat to its end, once with an ear difference only and once with an imbalance only, and the outcome checked (R20.6).
-  - Every property of the visit flow, the replay and the result page must still pass unchanged.
+  - Every property of the visit flow, the replay and the result page must still pass, unchanged but for visit-flow CP8, which was changed in batch 4 for the Turn_Back_Line (task 11; option (a) of "Visit-flow CP8 and the Turn_Back_Line" under "Counterexamples" in `design.md`, chosen by the owner's coordinator on 2026-11-15; the owner may reverse it). No task changes a property of those specs again.
   - Record the times of CP10 and of the simulated visits as the preamble says, under "Run counts and time".
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 1.1, 1.2, 8.7, 8.8, 9.1 to 9.5, 11.1, 11.4, 12.1 to 12.4, 13.1, 13.3, 20.2, 20.4, 20.5, 20.6, 21.2, 21.3_
@@ -224,7 +224,7 @@ The tasks are done in five batches, marked below. A batch is what one unattended
   - _Files: changes `tests/listeners/simulated-visitor.ts`, `tests/listeners/simulated-visitor.test.ts`, `tests/properties/visit-flow-arbitraries.ts`, `tests/properties/visit-flow-harness.ts`, `.kiro/specs/swapped-repeat/design.md` (the times); creates `tests/properties/swapped-repeat-cp10-whole-visits.property.test.ts`, `tests/properties/swapped-repeat-simulated-visits.test.ts`_
   - _Commit: `Play the swapped repeat in whole simulated visits`, covering `tests/listeners/simulated-visitor.ts`, `tests/listeners/simulated-visitor.test.ts`, `tests/properties/visit-flow-arbitraries.ts`, `tests/properties/visit-flow-harness.ts`, `.kiro/specs/swapped-repeat/design.md`, `tests/properties/swapped-repeat-cp10-whole-visits.property.test.ts`, `tests/properties/swapped-repeat-simulated-visits.test.ts`_
 
-- [ ] 17. Add the attribution measurement again
+- [x] 17. Add the attribution measurement again
   - Create `tests/listeners/attribution-measurement.ts`, the measurement of "Measurements" as a function, and `tests/listeners/print-attribution-measurement.ts`, which prints its tables as Markdown with the method and seeds stated there: the shipped engine through `specSearchUnderTest` with `hearingMethodConfig`; the grid of E and H from −40 to 40 dB in 2 dB steps; Step_Listeners, and psychometric listeners of the Attentive and the Plausible ranges with three runs per pair, from seed 20261120; the one-sided measurement from seed 20261121; the literal reading and the rule oracle with one and two steps. It chooses nothing, writes no file, changes no config value and needs no `package.json` script.
   - Run `npx tsx tests/listeners/print-attribution-measurement.ts` and compare its tables with those of "Measurements". If any figure differs, write the printed tables below the paragraph that says so, with the date, and say which figures changed. Change no question and no proposed value; if a change bears on Q2, say so in the report.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
@@ -234,7 +234,7 @@ The tasks are done in five batches, marked below. A batch is what one unattended
   - _Files: creates `tests/listeners/attribution-measurement.ts`, `tests/listeners/print-attribution-measurement.ts`; changes `.kiro/specs/swapped-repeat/design.md` only if a figure differs_
   - _Commit: `Add the attribution measurement`, covering `tests/listeners/attribution-measurement.ts`, `tests/listeners/print-attribution-measurement.ts`, and `.kiro/specs/swapped-repeat/design.md` if the task changed it_
 
-- [ ] 18. Update the READMEs
+- [x] 18. Update the READMEs
   - `src/session/README.md`: a section on the swapped repeat: the contracts' additions and the rule of only adding, with Q8 as chosen by the owner's coordinator; the earpiece view, the record and its earpieces, the earpiece state, the outcome, the controller and the flow's part; that the visit log and the summary are not changed; the picture's `repeat`; the payload key and its checks; the second save and `savedCopyLacksRepeats` (Q5 decided by the owner, its sub-question chosen by the coordinator). Q3, Q6, Q7 and Q10 are described as PROPOSED, NOT APPROVED.
   - `src/copy/README.md`: a section on the repeat's copy: `swappedRepeatCopy`, the lines, "seems" in every attribution, the professional sentence taken from the limits statement, and levels labelled relative to the visitor's calibration.
   - `src/config/README.md`: `swapped-repeat-config.ts` with its value, from brief 08.
@@ -249,7 +249,7 @@ The tasks are done in five batches, marked below. A batch is what one unattended
   - _Files: changes `src/session/README.md`, `src/copy/README.md`, `src/config/README.md`, `tests/properties/README.md`, `tests/listeners/README.md`, `src/storage/README.md` (one line)_
   - _Commit: `Describe the swapped repeat in the READMEs`, covering `src/session/README.md`, `src/copy/README.md`, `src/config/README.md`, `tests/properties/README.md`, `tests/listeners/README.md`, `src/storage/README.md`_
 
-- [ ] 19. Final checks and the time budget
+- [x] 19. Final checks and the time budget
   - Run `npm run typecheck`, `npm test` three times with the JSON reporter as the preamble says, `npm run lint`, `npm run check:copy` and `npm run build`.
   - Compute the budget by the rule of Q9: for each of the three runs, the sum of the times of this spec's property files; the largest of the three sums, plus three tenths of it, rounded up to a multiple of 15 seconds. Write under "Run counts and time" the three runs, their sums, the whole `npm test` times and the budget, marked PROPOSED, NOT APPROVED (Q9), and say whether the machine was loaded. Change no run count and no timeout. Report the budget to the owner.
   - Search the new and changed files in `src/session/`, `src/copy/` and `src/storage/` for numbers that set a level, a wait, a count or a limit outside `src/config`, apart from 0 and 1 and the formats already there (R2.5). Confirm that the stand-in view of task 1 is gone and that `savedCopyLacksRepeats` no longer answers false for every visit.
