@@ -11,6 +11,9 @@ import { visitFlowConfig } from "../config/visit-flow-config";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
 import { replayCopy } from "../copy/replay-copy";
+import { differenceLabel } from "../copy/result-lines";
+import { pitchLabel, roomNames } from "../copy/room-copy";
+import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
@@ -378,6 +381,10 @@ type ActionName =
   | "stop"
   | "chooseSwappedRepeat"
   | "startReplay"
+  | "confirmSwap"
+  | "playSwapCheck"
+  | "answerSwapCheck"
+  | "startSwappedRoom"
   | "backToFrontDoor";
 
 const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
@@ -395,6 +402,10 @@ const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
   stop: (flow) => flow.stop(),
   chooseSwappedRepeat: (flow) => flow.chooseSwappedRepeat(0),
   startReplay: (flow) => flow.startReplay(),
+  confirmSwap: (flow) => flow.confirmSwap(),
+  playSwapCheck: (flow) => flow.playSwapCheck(),
+  answerSwapCheck: (flow) => flow.answerSwapCheck("right"),
+  startSwappedRoom: (flow) => flow.startSwappedRoom(),
   backToFrontDoor: (flow) => flow.backToFrontDoor(),
 };
 
@@ -1488,6 +1499,65 @@ describe("createVisitFlow: the replay, the result and the swapped repeat", () =>
     });
     harness.flow.proceed();
     expect(harness.flow.snapshot()).toEqual(result);
+  }, 60_000);
+
+  it("shows the stand-in instruction view in the swapped repeat, whose four presses play nothing, and a result with no repeat and no turn-back line (swapped-repeat task 1, R1.6, R3.5)", async () => {
+    const harness = createHarness();
+    const result = await toResult(harness, unevenListener);
+    expect(result.swappedRepeats).toEqual([]);
+    expect(Object.isFrozen(result.swappedRepeats)).toBe(true);
+    expect(result.turnBackLine).toBeNull();
+    const offered = result.summary.rooms.findIndex(
+      (room) => room.swappedRepeatOffered,
+    );
+    const roomSummary = result.summary.rooms[offered]!;
+    harness.flow.chooseSwappedRepeat(offered);
+    const entered = harness.flow.snapshot();
+    if (entered.stage !== "swappedRepeat") {
+      throw new Error(`Expected the swapped repeat, but got ${entered.stage}.`);
+    }
+    expect(entered.repeat).toEqual({
+      phase: "instruction",
+      heading: swappedRepeatCopy.heading,
+      roomName: roomNames[roomSummary.room.roomId],
+      pitchLabel: pitchLabel(roomSummary.room.frequencyHz),
+      firstDifferenceLabel: differenceLabel(roomSummary.rightMinusLeftDb),
+      earpieces: "unknown",
+      stopLabel: swappedRepeatCopy.stopButton,
+      backLabel: swappedRepeatCopy.backButton,
+      lines: swappedRepeatCopy.instructionLines,
+      againLine: null,
+      confirmLabel: swappedRepeatCopy.confirmButton,
+    });
+    expect(isDeeplyFrozen(entered.repeat)).toBe(true);
+
+    const callCount = harness.calls.length;
+    const scheduleCount = harness.backend.scheduled().length;
+    const pendingCount = harness.timer.pendingCount();
+    harness.flow.confirmSwap();
+    harness.flow.playSwapCheck();
+    for (const answer of [
+      "left",
+      "right",
+      "bothSides",
+      "nothingHeard",
+    ] as const) {
+      harness.flow.answerSwapCheck(answer);
+    }
+    harness.flow.startSwappedRoom();
+    await harness.settle();
+    harness.advance(60_000);
+    expect(harness.calls.length).toBe(callCount);
+    expect(harness.backend.scheduled().length).toBe(scheduleCount);
+    expect(harness.timer.pendingCount()).toBe(pendingCount);
+    expect(harness.flow.snapshot()).toEqual(entered);
+
+    harness.flow.proceed();
+    expect(harness.flow.snapshot()).toEqual(result);
+    expect(harness.flow.snapshot()).toMatchObject({
+      swappedRepeats: [],
+      turnBackLine: null,
+    });
   }, 60_000);
 });
 

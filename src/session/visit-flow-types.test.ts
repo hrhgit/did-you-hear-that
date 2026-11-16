@@ -8,8 +8,11 @@ import type {
 import type {
   BetweenRoomsSnapshot,
   CalibrationSnapshot,
+  EarpieceArrangement,
+  EarpieceState,
   EntrySnapshot,
   ExitSnapshot,
+  HeadphoneCheckAnswer,
   HeadphoneCheckSnapshot,
   LoggedEarResult,
   LoggedRoomResult,
@@ -28,7 +31,23 @@ import type {
   RoomSnapshot,
   RulesSnapshot,
   ScoredVisitTrial,
+  SwapCheckJudgement,
+  SwappedRepeat,
+  SwappedRepeatCheck,
+  SwappedRepeatEnding,
+  SwappedRepeatFinished,
+  SwappedRepeatInstruction,
+  SwappedRepeatOutcome,
+  SwappedRepeatPauseReason,
+  SwappedRepeatPhase,
+  SwappedRepeatReady,
+  SwappedRepeatRoom,
+  SwappedRepeatRun,
   SwappedRepeatSnapshot,
+  SwappedRepeatUnavailable,
+  SwappedRepeatUnavailableReason,
+  SwappedRepeatUnclearReason,
+  SwappedTrialScoredEvent,
   UnsupportedSnapshot,
   VisitEvent,
   VisitFlow,
@@ -61,6 +80,11 @@ type SnapshotFor<Stage extends VisitStage> = Extract<
 
 type ReplayViewFor<Phase extends ReplayPhase> = Extract<
   MissedSoundReplay,
+  { readonly phase: Phase }
+>;
+
+type RepeatViewFor<Phase extends SwappedRepeatPhase> = Extract<
+  SwappedRepeat,
   { readonly phase: Phase }
 >;
 
@@ -157,6 +181,86 @@ describe("visit-flow-types", () => {
     >();
     expectTypeOf<ReplayEnding>().toEqualTypeOf<
       "allPlayed" | "deviceChanged" | "soundRefused"
+    >();
+  });
+
+  // The additions of the swapped repeat (swapped-repeat design.md, "Interface contract").
+
+  it("gives VisitFlow the four presses of the swapped repeat", () => {
+    expectTypeOf<VisitFlow["confirmSwap"]>().toEqualTypeOf<() => void>();
+    expectTypeOf<VisitFlow["playSwapCheck"]>().toEqualTypeOf<() => void>();
+    expectTypeOf<VisitFlow["answerSwapCheck"]>().toEqualTypeOf<
+      (answer: HeadphoneCheckAnswer) => void
+    >();
+    expectTypeOf<VisitFlow["startSwappedRoom"]>().toEqualTypeOf<() => void>();
+  });
+
+  it("gives the swapped repeat snapshot its repeat view", () => {
+    expectTypeOf<
+      SwappedRepeatSnapshot["repeat"]
+    >().toEqualTypeOf<SwappedRepeat>();
+  });
+
+  it("gives the result snapshot its swapped repeats and its turn-back line", () => {
+    expectTypeOf<ResultSnapshot["swappedRepeats"]>().toEqualTypeOf<
+      readonly SwappedRepeatRun[]
+    >();
+    expectTypeOf<ResultSnapshot["turnBackLine"]>().toEqualTypeOf<
+      string | null
+    >();
+  });
+
+  it("has every repeat phase in exactly one SwappedRepeat member", () => {
+    expectTypeOf<SwappedRepeat["phase"]>().toEqualTypeOf<SwappedRepeatPhase>();
+    expectTypeOf<
+      RepeatViewFor<"unavailable">
+    >().toEqualTypeOf<SwappedRepeatUnavailable>();
+    expectTypeOf<
+      RepeatViewFor<"instruction">
+    >().toEqualTypeOf<SwappedRepeatInstruction>();
+    expectTypeOf<RepeatViewFor<"check">>().toEqualTypeOf<SwappedRepeatCheck>();
+    expectTypeOf<RepeatViewFor<"ready">>().toEqualTypeOf<SwappedRepeatReady>();
+    expectTypeOf<RepeatViewFor<"room">>().toEqualTypeOf<SwappedRepeatRoom>();
+    expectTypeOf<
+      RepeatViewFor<"finished">
+    >().toEqualTypeOf<SwappedRepeatFinished>();
+  });
+
+  it("adds swappedTrialScored to VisitEvent as SwappedTrialScoredEvent", () => {
+    expectTypeOf<
+      Extract<VisitEvent, { readonly kind: "swappedTrialScored" }>
+    >().toEqualTypeOf<SwappedTrialScoredEvent>();
+  });
+
+  it("gives the repeat's pause reasons as visitor, hidden and interrupted, all pause reasons", () => {
+    expectTypeOf<SwappedRepeatPauseReason>().toEqualTypeOf<
+      "visitor" | "hidden" | "interrupted"
+    >();
+    expectTypeOf<SwappedRepeatPauseReason>().toExtend<PauseReason>();
+  });
+
+  it("lists the swapped repeat's unions", () => {
+    expectTypeOf<EarpieceState>().toEqualTypeOf<
+      "asMarked" | "swapped" | "unknown"
+    >();
+    expectTypeOf<EarpieceArrangement>().toEqualTypeOf<"asMarked" | "swapped">();
+    expectTypeOf<SwapCheckJudgement>().toEqualTypeOf<
+      "confirmed" | "notSwapped" | "bothSides" | "notHeard"
+    >();
+    expectTypeOf<SwappedRepeatPhase>().toEqualTypeOf<
+      "unavailable" | "instruction" | "check" | "ready" | "room" | "finished"
+    >();
+    expectTypeOf<SwappedRepeatUnavailableReason>().toEqualTypeOf<
+      "calibrationGone" | "calibrationChanged"
+    >();
+    expectTypeOf<SwappedRepeatEnding>().toEqualTypeOf<
+      "finished" | "deviceChanged" | "soundRefused"
+    >();
+    expectTypeOf<SwappedRepeatOutcome>().toEqualTypeOf<
+      "followsEar" | "followsEarpiece" | "unclear"
+    >();
+    expectTypeOf<SwappedRepeatUnclearReason>().toEqualTypeOf<
+      "noLevel" | "differenceShrank"
     >();
   });
 });

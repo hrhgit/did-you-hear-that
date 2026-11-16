@@ -92,9 +92,13 @@ export interface VisitFlow {
   /**
    * In a room: the visitor names a side. `pressedAtMs` is the input event's `timeStamp`, on the
    * clock of the timer. Returns nothing and changes nothing visible unless it scores a trial.
+   * Also in the phase `room` of the swapped repeat, where the side is the visitor's own ear.
    */
   answer(side: Ear, pressedAtMs?: number): void;
-  /** In a room: pauses at once. A trial that was under way is played again later. */
+  /**
+   * In a room: pauses at once. A trial that was under way is played again later. Also in the
+   * phase `room` of the swapped repeat.
+   */
   pause(): void;
   /** While paused: starts sound again and goes on. */
   resume(): void;
@@ -109,6 +113,21 @@ export interface VisitFlow {
    * the result once it has finished, and `stop` silences at once and shows the result.
    */
   startReplay(): void;
+  /** Swapped repeat, phase `instruction`: the visitor says the earpieces are swapped. Plays nothing. */
+  confirmSwap(): void;
+  /**
+   * Swapped repeat, phase `check`: plays the hiss in the left earpiece. Call it from the visitor's
+   * press, because it may start sound (it calls `activate` within the call).
+   */
+  playSwapCheck(): void;
+  /** Swapped repeat, phase `check`: the answer to "Which side was the hiss on?". Ignored until a check has been played. */
+  answerSwapCheck(answer: HeadphoneCheckAnswer): void;
+  /**
+   * Swapped repeat, phase `ready`: runs the room again. Call it from the visitor's press, because
+   * it starts sound. In this stage `proceed` goes back to the picture at any moment, silencing any
+   * sound, and `stop` silences at once and goes back to the picture.
+   */
+  startSwappedRoom(): void;
   /** Exit or result: drops the visit and shows the front door again. */
   backToFrontDoor(): void;
 }
@@ -244,9 +263,13 @@ export interface ResultSnapshot extends SnapshotBase<"result"> {
   readonly visitLog: VisitLog;
   /** Each floor's result, with the visit-level rule applied. */
   readonly summary: VisitSummary;
+  /** Every swapped repeat of this visit that ran to its end, in the order they ended. Pass the snapshot to `resultPicture`, which draws each beside its floor. */
+  readonly swappedRepeats: readonly SwappedRepeatRun[];
+  /** Once a swapped repeat has begun, the line that asks the visitor to turn the headphones back; otherwise null. Show it above the picture. */
+  readonly turnBackLine: string | null;
 }
 
-/** The swapped repeat of one floor. The swapped-repeat spec adds its behaviour and its fields. */
+/** The swapped repeat of one floor (swapped-repeat design.md). */
 export interface SwappedRepeatSnapshot extends SnapshotBase<"swappedRepeat"> {
   /** The floor to repeat. */
   readonly room: VisitRoom;
@@ -254,6 +277,8 @@ export interface SwappedRepeatSnapshot extends SnapshotBase<"swappedRepeat"> {
   readonly visitLog: VisitLog;
   /** The result the repeat was offered from. */
   readonly summary: VisitSummary;
+  /** What the repeat shows and says now. Every string comes from `src/copy`. */
+  readonly repeat: SwappedRepeat;
 }
 
 /** Why the visitor is outside the house. */
@@ -328,7 +353,8 @@ export type VisitEvent =
   | RoomStartedEvent
   | TrialScoredEvent
   | RoomFinishedEvent
-  | ReplaySoundStartedEvent;
+  | ReplaySoundStartedEvent
+  | SwappedTrialScoredEvent;
 
 // ─── The visit log ───────────────────────────────────────────────────────────────────────
 // Every time is in milliseconds on the timer's clock since the visit began (chooseVisit).
@@ -771,3 +797,300 @@ export interface ReplayFinished extends ReplayViewBase<"finished"> {
 /** The replay as the stage shows it now. */
 export type MissedSoundReplay =
   ReplayNothingMissed | ReplayAnnouncing | ReplayPlaying | ReplayFinished;
+
+// ─── The swapped repeat ──────────────────────────────────────────────────────────────────
+// swapped-repeat design.md. An ear is the visitor's own ear: the side the visitor names. An
+// earpiece is a side of the headphones: the channel the output stage plays. Every level is in
+// decibels relative to the visitor's calibration.
+
+/**
+ * What the house knows of how the headphones sit. `asMarked`: the left earpiece is on the left
+ * ear, as the visit's headphone check found. `swapped`: the left earpiece is on the right ear, as
+ * a swap check of the repeat under way found. `unknown`: the visitor was asked to swap or to turn
+ * the headphones back, and nothing has checked it since.
+ */
+export type EarpieceState = "asMarked" | "swapped" | "unknown";
+
+/** How the earpieces sat during one run of a room. */
+export type EarpieceArrangement = "asMarked" | "swapped";
+
+/**
+ * What an answer to the swap check says. The hiss always plays in the left earpiece.
+ * `confirmed`: heard on the right, so the earpieces are swapped. `notSwapped`: heard on the left.
+ * `bothSides` and `notHeard`: as in the visit's headphone check.
+ */
+export type SwapCheckJudgement =
+  "confirmed" | "notSwapped" | "bothSides" | "notHeard";
+
+/**
+ * `unavailable`: the repeat cannot run; nothing plays. `instruction`: how to swap the earpieces.
+ * `check`: the hiss in one earpiece and the answer. `ready`: the swap is confirmed; the room starts
+ * on a press. `room`: the room runs again. `finished`: no more sound plays.
+ */
+export type SwappedRepeatPhase =
+  "unavailable" | "instruction" | "check" | "ready" | "room" | "finished";
+
+/**
+ * `calibrationGone`: the audio device changed after the rooms, so the house holds no calibration.
+ * `calibrationChanged`: this floor was measured with an earlier calibration than the one the house
+ * holds now, because the audio device changed during the visit.
+ */
+export type SwappedRepeatUnavailableReason =
+  "calibrationGone" | "calibrationChanged";
+
+/**
+ * `finished`: the room's search ended. `deviceChanged`: the audio device changed during the room,
+ * so the calibration is gone. `soundRefused`: the house could not play a sound three times in a row.
+ */
+export type SwappedRepeatEnding = "finished" | "deviceChanged" | "soundRefused";
+
+/**
+ * `followsEar`: the same ear needed the louder sound both times. `followsEarpiece`: the same
+ * earpiece did. `unclear`: anything else.
+ */
+export type SwappedRepeatOutcome = "followsEar" | "followsEarpiece" | "unclear";
+
+/**
+ * Why an outcome is unclear. `noLevel`: an ear of the repeat has no level (unreliable, quieter than
+ * the house can whisper, or not caught at the loudest). `differenceShrank`: left and right of the
+ * repeat came out less than half the limit apart.
+ */
+export type SwappedRepeatUnclearReason = "noLevel" | "differenceShrank";
+
+/** The pause reasons that pause the repeat's room. A device change ends the room instead. */
+export type SwappedRepeatPauseReason = Extract<
+  PauseReason,
+  "visitor" | "hidden" | "interrupted"
+>;
+
+/** One answered swap check. */
+export interface LoggedSwapCheck {
+  readonly answer: HeadphoneCheckAnswer;
+  readonly judgement: SwapCheckJudgement;
+  /** The earpiece the hiss played in: always `left`. */
+  readonly earpiece: Ear;
+  /** On the visit log's clock. */
+  readonly answeredAtMs: number;
+}
+
+/** The two fields every trial of a repeat adds to a trial of the visit log. */
+export interface EarpiecePart {
+  /** The earpiece the sound played in, or null for a no-sound trial. `ear` is the ear it reached. */
+  readonly earpiece: Ear | null;
+  /** For a scored trial answered with a side, the earpiece on the ear named; otherwise null. */
+  readonly responseEarpiece: Ear | null;
+}
+
+/** One played trial of a swapped repeat. */
+export type SwappedRepeatTrial = VisitTrial & EarpiecePart;
+
+/** One scored trial of a swapped repeat. */
+export type ScoredSwappedRepeatTrial = ScoredVisitTrial & EarpiecePart;
+
+/** An answer in the repeat's room that scored nothing. */
+export interface SwappedRepeatIgnoredAnswer extends LoggedIgnoredAnswer {
+  /** The earpiece on the ear named. */
+  readonly earpiece: Ear;
+}
+
+/**
+ * The record of one swapped repeat that ran to its end. Plain data, frozen: it survives
+ * JSON.stringify and JSON.parse unchanged. Times are on the visit log's clock.
+ */
+export interface SwappedRepeatRun {
+  /** The version of this format. Raised when a field changes meaning. */
+  readonly formatVersion: 1;
+  /** The floor it repeated. */
+  readonly roomIndex: number;
+  /** 1 for the first repeat begun in this visit, then 2 and up; runs that did not end count too. */
+  readonly runNumber: number;
+  /** The calibration of the visit log it used: the one the floor's first run used. */
+  readonly calibrationIndex: number;
+  /** For each ear, the earpiece on it while the room ran: `{ left: "right", right: "left" }`. */
+  readonly earpieceOnEar: Readonly<Record<Ear, Ear>>;
+  /** Every answered swap check of this repeat, in order. The last is `confirmed`. */
+  readonly swapChecks: readonly LoggedSwapCheck[];
+  /** The run of the room's search, as the visit log records a room run: attempt 1, ending `finished`. */
+  readonly attempt: LoggedRoomAttempt;
+  /** Every trial that was played, in order, numbered from 1. */
+  readonly trials: readonly SwappedRepeatTrial[];
+  readonly ignoredAnswers: readonly SwappedRepeatIgnoredAnswer[];
+  readonly pauses: readonly LoggedPause[];
+  readonly refusedPlays: readonly LoggedRefusedPlay[];
+  /** Each ear's result: the search's, made unreliable with `levelNotAsAsked` as a room of the visit is. */
+  readonly left: VisitEarResult;
+  readonly right: VisitEarResult;
+  /** Right threshold minus left threshold, by ear, when both are found; otherwise null. */
+  readonly rightMinusLeftDb: number | null;
+  /** The floor's first run, as the summary gave it: right minus left, by ear. */
+  readonly firstRightMinusLeftDb: number;
+  /** The left and right difference that offered the repeat: `swappedRepeatDifferenceDb` then. */
+  readonly differenceLimitDb: number;
+  /** Below this size the repeat's difference counts as shrunk: half the limit then. */
+  readonly unclearBelowDb: number;
+  readonly outcome: SwappedRepeatOutcome;
+  /** For `unclear`, why; otherwise null. */
+  readonly unclearReason: SwappedRepeatUnclearReason | null;
+}
+
+/** Released in the same moment a trial of the repeat is scored, never earlier. */
+export interface SwappedTrialScoredEvent {
+  readonly kind: "swappedTrialScored";
+  readonly room: VisitRoom;
+  readonly runNumber: number;
+  /** The trial, with its ear and its earpiece. Draw a ripple on `trial.ear`. */
+  readonly trial: ScoredSwappedRepeatTrial;
+  /** What to show now, as in every room. */
+  readonly reaction: TrialReaction;
+  /** For `ripple`, the ripple's label, naming the ear, the earpiece, the pitch and the level; for `noSoundLine`, the line; otherwise null. */
+  readonly line: string | null;
+}
+
+/** One ear of one run in a comparison. */
+export interface SwappedRepeatComparisonWing {
+  readonly ear: Ear;
+  /** The earpiece on this ear in this run. */
+  readonly earpiece: Ear;
+  /** Such as "Right earpiece". */
+  readonly earpieceLabel: string;
+  readonly state: VisitEarResult["state"];
+  /** The level for `found`, otherwise null. */
+  readonly thresholdDb: number | null;
+  /** As `PictureWing.lightDepthFraction`, on this floor's own scale; null for `unreliable`. */
+  readonly lightDepthFraction: number | null;
+  /** As `PictureWing.line`. */
+  readonly line: string;
+  /** For an unreliable ear, why, in one line; otherwise null. */
+  readonly reasonLine: string | null;
+}
+
+/** One run of the floor in a comparison. */
+export interface SwappedRepeatComparisonRun {
+  readonly arrangement: EarpieceArrangement;
+  /** "Headphones as marked" or "Headphones swapped". */
+  readonly label: string;
+  /** The visitor's left ear. */
+  readonly left: SwappedRepeatComparisonWing;
+  /** The visitor's right ear. */
+  readonly right: SwappedRepeatComparisonWing;
+  /** Right minus left, by ear, when both are found; otherwise null. */
+  readonly rightMinusLeftDb: number | null;
+  /** As `PictureFloor.differenceLabel`: "–", "0 dB", or such as "15 dB quieter on the left". */
+  readonly differenceLabel: string;
+}
+
+/** A floor's first run and its swapped repeat side by side. Plain data, frozen. */
+export interface SwappedRepeatComparison {
+  readonly roomIndex: number;
+  readonly runNumber: number;
+  readonly heading: string;
+  /** In this order: the first run, as marked; the repeat, swapped. */
+  readonly runs: readonly [
+    SwappedRepeatComparisonRun,
+    SwappedRepeatComparisonRun,
+  ];
+  readonly outcome: SwappedRepeatOutcome;
+  readonly unclearReason: SwappedRepeatUnclearReason | null;
+  /** Short, beside the floor. */
+  readonly outcomeLabel: string;
+  /** In order. For `followsEar` the last line says when to see a hearing professional. */
+  readonly outcomeLines: readonly string[];
+  /** Everything above in words, for a visitor who cannot see the picture. */
+  readonly description: string;
+}
+
+/** What every phase of the repeat gives. */
+export interface SwappedRepeatViewBase<Phase extends SwappedRepeatPhase> {
+  readonly phase: Phase;
+  readonly heading: string;
+  /** Such as "Stairs". */
+  readonly roomName: string;
+  /** Such as "4 kHz". */
+  readonly pitchLabel: string;
+  /** The first run's difference, as the picture labels it. */
+  readonly firstDifferenceLabel: string;
+  /** What the house knows of the earpieces now. */
+  readonly earpieces: EarpieceState;
+  /** The label of the visible stop control. Show the control in every phase of this stage. */
+  readonly stopLabel: string;
+  /** The label of the control that calls `proceed`, which goes back to the picture. */
+  readonly backLabel: string;
+}
+
+export interface SwappedRepeatUnavailable extends SwappedRepeatViewBase<"unavailable"> {
+  readonly reason: SwappedRepeatUnavailableReason;
+  readonly line: string;
+}
+
+export interface SwappedRepeatInstruction extends SwappedRepeatViewBase<"instruction"> {
+  /** How to swap, the volume line and what comes next. Show all of them before the confirm control. */
+  readonly lines: readonly string[];
+  /** After a check heard on the left: the headphones are still the way they were. Otherwise null. */
+  readonly againLine: string | null;
+  /** The label of the control that calls `confirmSwap`. */
+  readonly confirmLabel: string;
+}
+
+export interface SwappedRepeatCheck extends SwappedRepeatViewBase<"check"> {
+  /** "Which side was the hiss on?" */
+  readonly question: string;
+  /** The label of each answer to pass to `answerSwapCheck`. */
+  readonly answers: Readonly<Record<HeadphoneCheckAnswer, string>>;
+  /** The label of the control that calls `playSwapCheck`. */
+  readonly playLabel: string;
+  /** True from a played check until its answer. Show the answers only then. */
+  readonly awaitingAnswer: boolean;
+  /** Why the last press of play did not play the check, or null. */
+  readonly playRefusal: PlayRefusal | null;
+  readonly playRefusalLine: string | null;
+  /** The judgement of the last answer while it keeps the visitor here, or null. */
+  readonly judgement: Extract<
+    SwapCheckJudgement,
+    "bothSides" | "notHeard"
+  > | null;
+  readonly judgementLine: string | null;
+  /** When the last check was cut off by a hidden page or an interruption, the line that asks for it again; otherwise null. */
+  readonly cutLine: string | null;
+}
+
+export interface SwappedRepeatReady extends SwappedRepeatViewBase<"ready"> {
+  /** The line of the confirmed check. */
+  readonly judgementLine: string;
+  /** What happens next. */
+  readonly lines: readonly string[];
+  /** The label of the control that calls `startSwappedRoom`. */
+  readonly startLabel: string;
+}
+
+/** The room runs again. Nothing here changes while a trial waits to be scored. */
+export interface SwappedRepeatRoom extends SwappedRepeatViewBase<"room"> {
+  readonly runNumber: number;
+  /** The two answers, as in every room: the visitor names the ear. */
+  readonly answers: Readonly<
+    Record<Ear, { readonly name: string; readonly hint: string }>
+  >;
+  /** The label of the control that calls `pause`. */
+  readonly pauseLabel: string;
+  /** While the snapshot's pause holds, why and what happens next; otherwise null. */
+  readonly pauseLine: string | null;
+  /** The label of the control that calls `resume`. */
+  readonly resumeLabel: string;
+}
+
+export interface SwappedRepeatFinished extends SwappedRepeatViewBase<"finished"> {
+  readonly ending: SwappedRepeatEnding;
+  readonly endLine: string;
+  /** For the ending `finished`, both runs side by side and the outcome; otherwise null. */
+  readonly comparison: SwappedRepeatComparison | null;
+  /** Always: the headphones may still be swapped. */
+  readonly turnBackLine: string;
+}
+
+/** The swapped repeat as the stage shows it now. */
+export type SwappedRepeat =
+  | SwappedRepeatUnavailable
+  | SwappedRepeatInstruction
+  | SwappedRepeatCheck
+  | SwappedRepeatReady
+  | SwappedRepeatRoom
+  | SwappedRepeatFinished;

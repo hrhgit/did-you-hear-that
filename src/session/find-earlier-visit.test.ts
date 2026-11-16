@@ -66,6 +66,7 @@ function savedVisit(
     visitLog,
     floorDb: hearingMethodConfig.floorDb,
     swappedRepeatDifferenceDb: hearingMethodConfig.swappedRepeatDifferenceDb,
+    swappedRepeats: [],
   };
 }
 

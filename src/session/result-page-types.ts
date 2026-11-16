@@ -11,6 +11,9 @@ import type { VisitType } from "../config/hearing-method-config";
 import type { GhostSoundId } from "../config/sound-id";
 import type {
   Ear,
+  SwappedRepeatComparison,
+  SwappedRepeatOutcome,
+  SwappedRepeatRun,
   VisitEarResult,
   VisitLog,
   VisitRoom,
@@ -21,6 +24,9 @@ import type {
 export type {
   Ear,
   GhostSoundId,
+  SwappedRepeatComparison,
+  SwappedRepeatOutcome,
+  SwappedRepeatRun,
   VisitEarResult,
   VisitLog,
   VisitRoom,
@@ -85,6 +91,8 @@ export type CreateVisitArchive = (options: VisitArchiveOptions) => VisitArchive;
 export interface VisitToSave {
   readonly visitLog: VisitLog;
   readonly summary: VisitSummary;
+  /** The swapped repeats that ran to their end (swapped-repeat design.md). Missing means none. */
+  readonly swappedRepeats?: readonly SwappedRepeatRun[];
 }
 
 /** The saved visits of this browser. No method throws, whatever local storage does or holds. */
@@ -99,8 +107,20 @@ export interface VisitArchive {
    * Saves a visit with the name the visitor typed for the headphones, which may be empty. The page
    * calls it only when the visitor presses the save control (D10). Called again on this page with
    * the same `visitLog` object, it changes the name of the visit it saved and adds nothing.
+   * When the visit now holds swapped repeats that the saved copy lacks, it replaces the saved
+   * copy's payload and keeps its id, date and name.
    */
   save(visit: VisitToSave, typedHeadphoneName: string): SaveOutcome;
+  /**
+   * Whether this visit's saved copy lacks swapped repeats that the visit now holds: true when this
+   * page saved the same `visitLog` object before, that saved copy is still listed, and the visit
+   * holds a swapped repeat whose run number no repeat of the saved copy has. `save` would then
+   * replace the saved copy's payload, so show the save control again while this is true
+   * (swapped-repeat Q5). False for a visit this page has not saved, for a saved copy that is no
+   * longer listed, in robot mode and whenever local storage cannot be read. Reads local storage
+   * now, as `list()` does. Never throws.
+   */
+  savedCopyLacksRepeats(visit: VisitToSave): boolean;
   /** Deletes one saved visit. */
   deleteVisit(savedVisitId: string): DeleteOutcome;
   /** Deletes every saved visit, including those that could not be read. */
@@ -135,6 +155,8 @@ export interface SavedVisit {
   readonly floorDb: number;
   /** The left and right difference that offered the swapped repeat when it was saved. */
   readonly swappedRepeatDifferenceDb: number;
+  /** The swapped repeats saved with it, in the order they ended. Empty for a visit saved without one, and for every visit saved before the swapped-repeat spec. */
+  readonly swappedRepeats: readonly SwappedRepeatRun[];
 }
 
 /**
@@ -316,8 +338,10 @@ export interface PictureFloor {
   readonly differenceLabel: string;
   /** The difference as a sentence, also part of `description`. */
   readonly differenceLine: string;
-  /** The swapped repeat, on the live result only and when the floor offers it; otherwise null. */
+  /** The swapped repeat, on the live result only and when the floor offers it; otherwise null. Null also once this floor has a repeat (swapped-repeat Q4). */
   readonly swappedRepeat: SwappedRepeatOffer | null;
+  /** This floor's swapped repeat beside its first run, or null when the visit has none for it. */
+  readonly repeat: SwappedRepeatComparison | null;
   /** Everything about this floor in words, for a visitor who cannot see the picture. */
   readonly description: string;
 }

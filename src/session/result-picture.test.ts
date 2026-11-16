@@ -160,6 +160,7 @@ function savedVisitOf(
     visitLog: visit.visitLog,
     floorDb: hearingMethodConfig.floorDb,
     swappedRepeatDifferenceDb: hearingMethodConfig.swappedRepeatDifferenceDb,
+    swappedRepeats: [],
     ...change,
   };
 }
@@ -397,6 +398,23 @@ describe("resultPicture", () => {
       expect(picture.floors[0]?.differenceLabel).toBe(
         "15 dB quieter on the left",
       );
+    });
+
+    it("draws no repeat beside any floor, live or saved, until the records are read (swapped-repeat task 1)", () => {
+      const full = visitOf("full", [
+        ...mixedQuick,
+        { left: found(-20), right: found(-45) },
+        { left: worseThanCap, right: found(-10) },
+      ]);
+      for (const shown of [visit, full]) {
+        const pictures = [live(shown), saved(savedVisitOf(shown))];
+        for (const picture of pictures) {
+          expect(picture.floors.length).toBe(shown.summary.rooms.length);
+          expect(picture.floors.map((floor) => floor.repeat)).toEqual(
+            shown.summary.rooms.map(() => null),
+          );
+        }
+      }
     });
   });
 

@@ -100,6 +100,10 @@ const flowActionNames = [
   "stop",
   "chooseSwappedRepeat",
   "startReplay",
+  "confirmSwap",
+  "playSwapCheck",
+  "answerSwapCheck",
+  "startSwappedRoom",
   "backToFrontDoor",
 ] as const satisfies readonly (keyof VisitFlow)[];
 

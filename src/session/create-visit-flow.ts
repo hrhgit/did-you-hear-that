@@ -8,6 +8,9 @@ import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
+import { differenceLabel } from "../copy/result-lines";
+import { pitchLabel, roomNames } from "../copy/room-copy";
+import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
@@ -43,6 +46,8 @@ import type {
   PauseReason,
   ScoredVisitTrial,
   SnapshotBase,
+  SwappedRepeat,
+  SwappedRepeatRun,
   TrialReaction,
   VisitEvent,
   VisitFlow,
@@ -78,6 +83,9 @@ const drawSeed = (source: RandomSource): number =>
   Math.floor(source.next() * seedRangeCount);
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
+
+/** Until task 11 of the swapped-repeat spec, the result holds no swapped repeat. */
+const noSwappedRepeats: readonly SwappedRepeatRun[] = Object.freeze([]);
 
 const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
 
@@ -377,16 +385,45 @@ export function createVisitFlow(
           ...base("result"),
           visitLog: logOf(current),
           summary: summaryOf(current),
+          swappedRepeats: noSwappedRepeats,
+          turnBackLine: null,
         });
-      case "swappedRepeat":
+      case "swappedRepeat": {
+        const room = current.swappedRoom ?? roomAt(current, 0);
         return Object.freeze({
           ...base("swappedRepeat"),
-          room: current.swappedRoom ?? roomAt(current, 0),
+          room,
           visitLog: logOf(current),
           summary: summaryOf(current),
+          repeat: standInRepeatView(current, room),
         });
+      }
     }
   };
+
+  /**
+   * The stand-in view of the swapped repeat: the phase `instruction`, the phase the stage enters
+   * (swapped-repeat R3.5). Nothing plays and no press of the stage acts yet (R1.6). Task 11 of the
+   * swapped-repeat spec replaces it with the Repeat_Controller's view.
+   */
+  function standInRepeatView(current: Visit, room: VisitRoom): SwappedRepeat {
+    const roomSummary = summaryOf(current).rooms[room.roomIndex];
+    return Object.freeze({
+      phase: "instruction",
+      heading: swappedRepeatCopy.heading,
+      roomName: roomNames[room.roomId],
+      pitchLabel: pitchLabel(room.frequencyHz),
+      firstDifferenceLabel: differenceLabel(
+        roomSummary?.rightMinusLeftDb ?? null,
+      ),
+      earpieces: "unknown",
+      stopLabel: swappedRepeatCopy.stopButton,
+      backLabel: swappedRepeatCopy.backButton,
+      lines: swappedRepeatCopy.instructionLines,
+      againLine: null,
+      confirmLabel: swappedRepeatCopy.confirmButton,
+    });
+  }
 
   function logOf(current: Visit): VisitLog {
     if (current.log === null) {
@@ -1178,6 +1215,16 @@ export function createVisitFlow(
         });
       });
     },
+
+    // The presses of the swapped repeat do nothing until task 11 of the swapped-repeat spec, so the
+    // stage plays nothing before the repeat's properties exist (swapped-repeat R1.6).
+    confirmSwap() {},
+
+    playSwapCheck() {},
+
+    answerSwapCheck() {},
+
+    startSwappedRoom() {},
 
     backToFrontDoor() {
       step(() => {

@@ -158,6 +158,7 @@ function floor(
             buttonLabel: resultPageCopy.swappedRepeatButton,
           }
         : null,
+    repeat: null,
     description: floorDescription(
       room.roomId,
       room.frequencyHz,

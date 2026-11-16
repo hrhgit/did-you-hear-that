@@ -348,6 +348,10 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     stop: recorded("stop"),
     chooseSwappedRepeat: recorded("chooseSwappedRepeat"),
     startReplay: recorded("startReplay"),
+    confirmSwap: recorded("confirmSwap"),
+    playSwapCheck: recorded("playSwapCheck"),
+    answerSwapCheck: recorded("answerSwapCheck"),
+    startSwappedRoom: recorded("startSwappedRoom"),
     backToFrontDoor: recorded("backToFrontDoor"),
   });
 

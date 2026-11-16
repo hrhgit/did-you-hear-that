@@ -2,11 +2,15 @@ import { describe, expectTypeOf, it } from "vitest";
 import type {
   DeleteOutcome,
   DeleteRefusal,
+  PictureFloor,
   ResultPictureInput,
   SaveOutcome,
   SaveRefusal,
   SavedVisit,
   StorageArea,
+  SwappedRepeatComparison,
+  SwappedRepeatRun,
+  VisitArchive,
   VisitEarResult,
   VisitToSave,
   WingState,
@@ -63,5 +67,35 @@ describe("result-page-types", () => {
     expectTypeOf<Exclude<DeleteOutcome, Deleted>>().toEqualTypeOf<NotDeleted>();
     expectTypeOf<Deleted["deletedCount"]>().toEqualTypeOf<number>();
     expectTypeOf<NotDeleted["reason"]>().toEqualTypeOf<DeleteRefusal>();
+  });
+
+  // The additions of the swapped repeat (swapped-repeat design.md, "Interface contract").
+
+  it("gives a visit to save optional swapped repeats", () => {
+    expectTypeOf<VisitToSave["swappedRepeats"]>().toEqualTypeOf<
+      readonly SwappedRepeatRun[] | undefined
+    >();
+    expectTypeOf<{
+      readonly visitLog: VisitToSave["visitLog"];
+      readonly summary: VisitToSave["summary"];
+    }>().toExtend<VisitToSave>();
+  });
+
+  it("gives a saved visit its swapped repeats", () => {
+    expectTypeOf<SavedVisit["swappedRepeats"]>().toEqualTypeOf<
+      readonly SwappedRepeatRun[]
+    >();
+  });
+
+  it("gives a floor its repeat or null", () => {
+    expectTypeOf<
+      PictureFloor["repeat"]
+    >().toEqualTypeOf<SwappedRepeatComparison | null>();
+  });
+
+  it("gives the archive savedCopyLacksRepeats", () => {
+    expectTypeOf<VisitArchive["savedCopyLacksRepeats"]>().toEqualTypeOf<
+      (visit: VisitToSave) => boolean
+    >();
   });
 });

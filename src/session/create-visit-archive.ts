@@ -26,6 +26,7 @@ import type {
   SavedVisitListing,
   SaveOutcome,
   SaveRefusal,
+  SwappedRepeatRun,
   VisitArchive,
   VisitArchiveOptions,
   VisitLog,
@@ -36,6 +37,9 @@ import {
   parseSavedVisitPayload,
   savedVisitPayloadJson,
 } from "./saved-visit-payload";
+
+/** A saved visit's swapped repeats until task 13 of the swapped-repeat spec reads them from the payload. */
+const noSwappedRepeats: readonly SwappedRepeatRun[] = Object.freeze([]);
 
 /** Saved visit ids are eight hexadecimal digits: a whole number below 2³². A format, not a tunable number. */
 const savedVisitIdRange = 0x100000000;
@@ -76,6 +80,7 @@ function savedVisitOf(
     visitLog: payload.visitLog,
     floorDb: payload.floorDb,
     swappedRepeatDifferenceDb: payload.swappedRepeatDifferenceDb,
+    swappedRepeats: noSwappedRepeats,
   });
 }
 
@@ -361,6 +366,12 @@ export function createVisitArchive(options: VisitArchiveOptions): VisitArchive {
           return saveRefused(saveRefusalOf(written.reason));
         }
       }
+    },
+
+    // No saved copy holds a swapped repeat yet, so none lacks one. Task 15 of the swapped-repeat
+    // spec builds the answer (swapped-repeat R1.6, R13.9).
+    savedCopyLacksRepeats(): boolean {
+      return false;
     },
 
     deleteVisit(savedVisitId: string): DeleteOutcome {

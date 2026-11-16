@@ -563,6 +563,7 @@ export function savedVisitOfDrawn(
     visitLog: drawn.visit.visitLog,
     floorDb: envelope.floorDb,
     swappedRepeatDifferenceDb: drawn.settings.swappedRepeatDifferenceDb,
+    swappedRepeats: [],
   };
 }
 

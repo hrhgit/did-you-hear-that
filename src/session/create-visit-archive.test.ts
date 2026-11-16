@@ -351,6 +351,7 @@ describe("createVisitArchive", () => {
         floorDb: hearingMethodConfig.floorDb,
         swappedRepeatDifferenceDb:
           hearingMethodConfig.swappedRepeatDifferenceDb,
+        swappedRepeats: [],
       });
       const value = storedValue(area);
       expect(value.visits).toHaveLength(1);
@@ -768,6 +769,24 @@ describe("createVisitArchive", () => {
     it("gives null for a visit that is not listed", () => {
       const { archive } = setUp();
       expect(archive.exportVisitLog("00000001")).toBeNull();
+    });
+  });
+
+  describe("savedCopyLacksRepeats", () => {
+    it("is false for a visit not saved, for a saved visit and in robot mode, until the records are saved (swapped-repeat task 1)", () => {
+      const { archive } = setUp();
+      const visit = visitOf("quick", 5);
+      expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
+      const saved = savedVisitOf(archive.save(visit, "Buds"));
+      expect(saved.swappedRepeats).toEqual([]);
+      expect(Object.isFrozen(saved.swappedRepeats)).toBe(true);
+      expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
+      expect(archive.savedCopyLacksRepeats(visitOf("full", 6))).toBe(false);
+
+      const robot = setUp({}, 7, "robot");
+      expect(robot.archive.savedCopyLacksRepeats(visit)).toBe(false);
+      expect(robot.getArea).not.toHaveBeenCalled();
+      expect(robot.area.calls).toEqual([]);
     });
   });
 
