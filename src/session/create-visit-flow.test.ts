@@ -30,16 +30,20 @@ import type {
 } from "../audio/output/fake-audio-backend";
 import { createFakeAudioBackend } from "../audio/output/fake-audio-backend";
 import type { Ear } from "../engine/search-types";
-import type { PresentedTrial } from "./create-visit-flow";
+import type { FlowPresentedTrial } from "./create-swapped-repeat";
 import { createVisitFlow } from "./create-visit-flow";
 import { planMissedSoundReplay } from "./missed-sound-replay-plan";
 import { replayRenderSeed } from "./replay-render-seed";
 import { roomSearchCapDb } from "./room-search-cap";
 import { summarizeVisit } from "./summarize-visit";
+import { swappedRepeatEngineSeed } from "./swapped-repeat-engine-seed";
 import type {
   MissedSoundReplay,
   MissedSoundReplaySnapshot,
   ResultSnapshot,
+  SwappedRepeat,
+  SwappedRepeatRun,
+  SwappedTrialScoredEvent,
   VisitEvent,
   VisitFlow,
   VisitLog,
@@ -82,9 +86,11 @@ interface Harness {
   readonly plays: SpyPlay[];
   /** The next `play` calls are refused with these reasons, in order, without reaching the shell. */
   refusePlays(...reasons: readonly PlayRefusal[]): void;
+  /** While true, `rangeReport` answers null, as if the shell held no calibration. */
+  hideCalibration(hidden: boolean): void;
   readonly snapshots: VisitSnapshot[];
   readonly events: VisitEvent[];
-  readonly presented: PresentedTrial[];
+  readonly presented: FlowPresentedTrial[];
   /** Delivers an unsupported report from the output shell to the flow. */
   fireUnsupported(event: UnsupportedEvent): void;
   /** Moves the audio clock and the timer together, 1 ms at a time. */
@@ -119,6 +125,7 @@ function createHarness(
   const plays: SpyPlay[] = [];
   const refusals: PlayRefusal[] = [];
   const unsupportedListeners: ((event: UnsupportedEvent) => void)[] = [];
+  let calibrationHidden = false;
   let flowRef: VisitFlow | null = null;
   const record = (name: string): void => {
     calls.push({ name, stage: flowRef?.snapshot().stage ?? "creation" });
@@ -148,6 +155,9 @@ function createHarness(
       record("playHeadphoneCheck");
       return real.playHeadphoneCheck(random);
     },
+    rangeReport() {
+      return calibrationHidden ? null : real.rangeReport();
+    },
     stopAll() {
       record("stopAll");
       real.stopAll();
@@ -157,7 +167,7 @@ function createHarness(
       return real.onUnsupported(listener);
     },
   };
-  const presented: PresentedTrial[] = [];
+  const presented: FlowPresentedTrial[] = [];
   const flow = createVisitFlow({
     output,
     timer,
@@ -185,6 +195,9 @@ function createHarness(
     plays,
     refusePlays(...reasons) {
       refusals.push(...reasons);
+    },
+    hideCalibration(hidden) {
+      calibrationHidden = hidden;
     },
     snapshots,
     events,
@@ -269,7 +282,7 @@ async function toRoom(harness: Harness): Promise<void> {
   await harness.settle();
 }
 
-type Listener = (trial: PresentedTrial, index: number) => Ear | null;
+type Listener = (trial: FlowPresentedTrial, index: number) => Ear | null;
 
 /** Catches every sound at or above its ear's threshold, on the right side, and nothing else. */
 function stepListener(
@@ -484,9 +497,10 @@ const stageRows: readonly {
     canProceed: false,
   },
   {
+    // Reached in the phase `instruction`, the phase it enters (swapped-repeat R3.5).
     stage: "swappedRepeat",
     reach: toSwappedRepeat,
-    accepts: ["proceed", "stop"],
+    accepts: ["confirmSwap", "proceed", "stop"],
     canProceed: true,
   },
   {
@@ -1319,7 +1333,9 @@ describe("createVisitFlow: pauses", () => {
     60_000,
   );
 
-  it.each(["result", "swappedRepeat", "exit"] as const)(
+  // In the swapped repeat a stop report acts by phase ("What each phase accepts" in the
+  // swapped-repeat design); its rows are checked in "createVisitFlow: the swapped repeat".
+  it.each(["result", "exit"] as const)(
     "a stop report in %s begins no pause",
     async (stage) => {
       const harness = createHarness();
@@ -1498,10 +1514,14 @@ describe("createVisitFlow: the replay, the result and the swapped repeat", () =>
       canProceed: true,
     });
     harness.flow.proceed();
-    expect(harness.flow.snapshot()).toEqual(result);
+    // The visitor was asked to swap, so the result now asks them to turn back (swapped-repeat R9.2).
+    expect(harness.flow.snapshot()).toEqual({
+      ...result,
+      turnBackLine: swappedRepeatCopy.turnBackLine,
+    });
   }, 60_000);
 
-  it("shows the stand-in instruction view in the swapped repeat, whose four presses play nothing, and a result with no repeat and no turn-back line (swapped-repeat task 1, R1.6, R3.5)", async () => {
+  it("enters the swapped repeat in the instruction, with the copy's labels, playing nothing; the result before it holds no repeat and no turn-back line (swapped-repeat R3.5, R3.7, R9.2)", async () => {
     const harness = createHarness();
     const result = await toResult(harness, unevenListener);
     expect(result.swappedRepeats).toEqual([]);
@@ -1511,6 +1531,8 @@ describe("createVisitFlow: the replay, the result and the swapped repeat", () =>
       (room) => room.swappedRepeatOffered,
     );
     const roomSummary = result.summary.rooms[offered]!;
+    const callCount = harness.calls.length;
+    const scheduleCount = harness.backend.scheduled().length;
     harness.flow.chooseSwappedRepeat(offered);
     const entered = harness.flow.snapshot();
     if (entered.stage !== "swappedRepeat") {
@@ -1530,34 +1552,770 @@ describe("createVisitFlow: the replay, the result and the swapped repeat", () =>
       confirmLabel: swappedRepeatCopy.confirmButton,
     });
     expect(isDeeplyFrozen(entered.repeat)).toBe(true);
-
-    const callCount = harness.calls.length;
-    const scheduleCount = harness.backend.scheduled().length;
-    const pendingCount = harness.timer.pendingCount();
-    harness.flow.confirmSwap();
-    harness.flow.playSwapCheck();
-    for (const answer of [
-      "left",
-      "right",
-      "bothSides",
-      "nothingHeard",
-    ] as const) {
-      harness.flow.answerSwapCheck(answer);
-    }
-    harness.flow.startSwappedRoom();
-    await harness.settle();
-    harness.advance(60_000);
     expect(harness.calls.length).toBe(callCount);
     expect(harness.backend.scheduled().length).toBe(scheduleCount);
-    expect(harness.timer.pendingCount()).toBe(pendingCount);
-    expect(harness.flow.snapshot()).toEqual(entered);
+  }, 60_000);
+});
 
+describe('createVisitFlow: the swapped repeat (swapped-repeat design.md, "What each phase accepts")', () => {
+  const afterwardsMs = 10 * 60_000;
+  /** Long enough for every sound of the stage to end: the hiss lasts 1500 ms. */
+  const quietMs = 2000;
+
+  function repeatSnapshotOf(harness: Harness) {
+    const snapshot = harness.flow.snapshot();
+    if (snapshot.stage !== "swappedRepeat") {
+      throw new Error(
+        `Expected the swapped repeat, but got ${snapshot.stage}.`,
+      );
+    }
+    return snapshot;
+  }
+
+  const viewOf = (harness: Harness): SwappedRepeat =>
+    repeatSnapshotOf(harness).repeat;
+
+  const phaseOf = (harness: Harness) => viewOf(harness).phase;
+
+  const resultOf = (harness: Harness): ResultSnapshot => {
+    const snapshot = harness.flow.snapshot();
+    if (snapshot.stage !== "result") {
+      throw new Error(`Expected the result, but got ${snapshot.stage}.`);
+    }
+    return snapshot;
+  };
+
+  const repeatEvents = (harness: Harness): SwappedTrialScoredEvent[] =>
+    harness.events.filter(
+      (event): event is SwappedTrialScoredEvent =>
+        event.kind === "swappedTrialScored",
+    );
+
+  /** The offered floors of a result, in order. */
+  const offeredFloors = (result: ResultSnapshot): number[] =>
+    result.summary.rooms
+      .filter((room) => room.swappedRepeatOffered)
+      .map((room) => room.room.roomIndex);
+
+  /** Plays a quick visit to the result with every floor offered, and keeps a copy of its log and summary. */
+  async function toOfferingResult(harness: Harness) {
+    const result = await toResult(harness, unevenListener);
+    expect(offeredFloors(result).length).toBeGreaterThanOrEqual(2);
+    return {
+      result,
+      logCopy: structuredClone(result.visitLog),
+      summaryCopy: structuredClone(result.summary),
+    };
+  }
+
+  /** The result holds the same log and summary objects as before the stage, deep-equal to their copies (R8.8). */
+  function expectSameLogAndSummary(
+    harness: Harness,
+    before: Awaited<ReturnType<typeof toOfferingResult>>,
+  ): ResultSnapshot {
+    const after = resultOf(harness);
+    expect(after.visitLog).toBe(before.result.visitLog);
+    expect(after.summary).toBe(before.result.summary);
+    expect(after.visitLog).toEqual(before.logCopy);
+    expect(after.summary).toEqual(before.summaryCopy);
+    return after;
+  }
+
+  /** Enters the stage for a floor and confirms the swap: the phase `check`. */
+  function toCheck(harness: Harness, floor: number): void {
+    harness.flow.chooseSwappedRepeat(floor);
+    expect(phaseOf(harness)).toBe("instruction");
+    harness.flow.confirmSwap();
+    expect(phaseOf(harness)).toBe("check");
+  }
+
+  /** Waits for the last sound to end, plays the swap check, waits out the hiss and answers. */
+  async function playAndAnswerCheck(
+    harness: Harness,
+    answer: "left" | "right" | "bothSides" | "nothingHeard",
+  ): Promise<void> {
+    harness.advance(quietMs);
+    harness.flow.playSwapCheck();
+    await harness.settle();
+    harness.advance(quietMs);
+    harness.flow.answerSwapCheck(answer);
+  }
+
+  /** From the result to the phase `ready` of a floor. */
+  async function toReady(harness: Harness, floor: number): Promise<void> {
+    toCheck(harness, floor);
+    await playAndAnswerCheck(harness, "right");
+    expect(phaseOf(harness)).toBe("ready");
+  }
+
+  /** From the result to the phase `room` of a floor. */
+  async function toRepeatRoom(harness: Harness, floor: number): Promise<void> {
+    await toReady(harness, floor);
+    harness.flow.startSwappedRoom();
+    await harness.settle();
+    expect(phaseOf(harness)).toBe("room");
+  }
+
+  /**
+   * Answers each presented trial of the repeat as `listener` says, by the visitor's own ear, until
+   * the phase is no longer `room`, a pause holds, or `until` says to stop.
+   */
+  function playRepeatRoom(
+    harness: Harness,
+    listener: Listener,
+    until: () => boolean = () => false,
+  ): void {
+    let handled = harness.presented.length;
+    for (let turn = 0; turn < 100_000; turn += 1) {
+      const snapshot = harness.flow.snapshot();
+      if (
+        snapshot.stage !== "swappedRepeat" ||
+        snapshot.repeat.phase !== "room" ||
+        snapshot.pause !== null ||
+        until()
+      ) {
+        return;
+      }
+      if (harness.presented.length > handled) {
+        handled = harness.presented.length;
+        const trial = harness.presented[handled - 1]!;
+        const side = listener(trial, handled - 1);
+        if (side !== null) {
+          harness.advanceTo(trial.windowStartMs + answerDelayMs);
+          harness.flow.answer(side, harness.timer.now());
+          continue;
+        }
+      }
+      harness.advance(100);
+    }
+    throw new Error("The repeat's room did not end.");
+  }
+
+  /** Runs the repeat of a floor to the end of its room: the phase `finished` with its record. */
+  async function finishRepeat(
+    harness: Harness,
+    floor: number,
+  ): Promise<SwappedRepeatRun> {
+    await toRepeatRoom(harness, floor);
+    playRepeatRoom(harness, unevenListener);
+    const view = viewOf(harness);
+    expect(view).toMatchObject({ phase: "finished", ending: "finished" });
+    if (view.phase !== "finished" || view.comparison === null) {
+      throw new Error("Expected a finished repeat with its comparison.");
+    }
     harness.flow.proceed();
+    const run = resultOf(harness).swappedRepeats.at(-1);
+    if (run === undefined) {
+      throw new Error("Expected a record of the repeat.");
+    }
+    return run;
+  }
+
+  /** Plays a quick visit whose audio device changes in the second room, so that the first floor used an earlier calibration. */
+  async function toResultWithChangedCalibration(
+    harness: Harness,
+  ): Promise<ResultSnapshot> {
+    await toRoom(harness);
+    playRoom(harness, unevenListener);
+    expect(stageOf(harness)).toBe("betweenRooms");
+    harness.flow.proceed();
+    await harness.settle();
+    playRoom(harness, unevenListener, () => harness.presented.length >= 3);
+    harness.backend.fire("deviceChanged");
+    harness.flow.resume();
+    await harness.settle();
+    await calibrate(harness, calibrationSettingKeepMinDb + 3);
+    await checkHeadphones(harness);
+    harness.flow.proceed();
+    await harness.settle();
+    for (let room = 0; room < 10; room += 1) {
+      playRoom(harness, unevenListener);
+      if (stageOf(harness) !== "betweenRooms") {
+        break;
+      }
+      harness.flow.proceed();
+      await harness.settle();
+    }
+    expect(stageOf(harness)).toBe("missedSoundReplay");
+    harness.flow.proceed();
+    return resultOf(harness);
+  }
+
+  /** Every action of the contract, called once, with how many output calls and schedules it made. */
+  async function expectIgnored(
+    harness: Harness,
+    names: readonly ActionName[],
+  ): Promise<void> {
+    const before = harness.flow.snapshot();
+    for (const name of names) {
+      const callCount = harness.calls.length;
+      const scheduleCount = harness.backend.scheduled().length;
+      actions[name](harness.flow);
+      await harness.settle();
+      expect(harness.flow.snapshot(), name).toEqual(before);
+      expect(harness.calls.length, name).toBe(callCount);
+      expect(harness.backend.scheduled().length, name).toBe(scheduleCount);
+    }
+  }
+
+  /** Ten minutes on, nothing more is asked of the shell, scheduled or handed out, and no timer waits. */
+  async function expectNothingMore(harness: Harness): Promise<void> {
+    const callCount = harness.calls.length;
+    const scheduleCount = harness.backend.scheduled().length;
+    const eventCount = harness.events.length;
+    harness.advance(afterwardsMs);
+    await harness.settle();
+    expect(harness.calls.length).toBe(callCount);
+    expect(harness.backend.scheduled().length).toBe(scheduleCount);
+    expect(harness.events.length).toBe(eventCount);
+    expect(harness.timer.pendingCount()).toBe(0);
+  }
+
+  const pressesOfTheStage: readonly ActionName[] = [
+    "confirmSwap",
+    "playSwapCheck",
+    "answerSwapCheck",
+    "startSwappedRoom",
+    "answer",
+    "pause",
+    "resume",
+  ];
+
+  describe("unavailable", () => {
+    it("without a calibration: calibrationGone, plays nothing, ignores every press and every stop report but a left page; proceed shows the result (R3.3, R3.6, R3.7; Q6, PROPOSED, NOT APPROVED)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      const floor = offeredFloors(before.result)[0]!;
+      const callCount = harness.calls.length;
+      harness.hideCalibration(true);
+      harness.flow.chooseSwappedRepeat(floor);
+      harness.hideCalibration(false);
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationGone",
+        line: swappedRepeatCopy.unavailableLines.calibrationGone,
+        earpieces: "asMarked",
+      });
+      expect(harness.calls.length).toBe(callCount);
+      await expectIgnored(harness, pressesOfTheStage);
+      const unchanged = harness.flow.snapshot();
+      harness.backend.fire("hidden");
+      harness.backend.fire("interrupted");
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+      harness.flow.proceed();
+      // The instruction was never shown, so the house still knows how the headphones sit.
+      expect(expectSameLogAndSummary(harness, before).turnBackLine).toBeNull();
+    }, 60_000);
+
+    it("with an earlier calibration: calibrationChanged; stop silences and shows the result, a left page shows it too (R3.4, R3.6; Q6, PROPOSED, NOT APPROVED)", async () => {
+      const harness = createHarness();
+      const result = await toResultWithChangedCalibration(harness);
+      expect(result.summary.rooms[0]!.swappedRepeatOffered).toBe(true);
+      expect(result.visitLog.roomAttempts[0]!.calibrationIndex).toBe(0);
+      harness.flow.chooseSwappedRepeat(0);
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationChanged",
+        line: swappedRepeatCopy.unavailableLines.calibrationChanged,
+      });
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationChanged",
+      });
+      harness.flow.stop();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expect(stageOf(harness)).toBe("result");
+      harness.flow.chooseSwappedRepeat(0);
+      harness.backend.fire("pageLeft");
+      expect(stageOf(harness)).toBe("result");
+    }, 60_000);
+  });
+
+  describe("instruction", () => {
+    it("confirmSwap shows the check and plays nothing; a hidden page begins no pause; a device change gives calibrationGone (R4.2, R4.4, R14.6, R14.8)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      harness.flow.chooseSwappedRepeat(offeredFloors(before.result)[0]!);
+      expect(phaseOf(harness)).toBe("instruction");
+      const unchanged = harness.flow.snapshot();
+      harness.backend.fire("hidden");
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+      const callCount = harness.calls.length;
+      harness.flow.confirmSwap();
+      expect(viewOf(harness)).toMatchObject({
+        phase: "check",
+        awaitingAnswer: false,
+      });
+      expect(harness.calls.length).toBe(callCount);
+      harness.flow.proceed();
+      harness.flow.chooseSwappedRepeat(offeredFloors(before.result)[0]!);
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationGone",
+      });
+    }, 60_000);
+
+    it("a left page shows the result with the turn-back line (R9.1, R9.2, R14.7)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      harness.flow.chooseSwappedRepeat(offeredFloors(before.result)[0]!);
+      harness.backend.fire("pageLeft");
+      expect(expectSameLogAndSummary(harness, before).turnBackLine).toBe(
+        swappedRepeatCopy.turnBackLine,
+      );
+    }, 60_000);
+  });
+
+  describe("check", () => {
+    it("ignores an answer before a check; plays the hiss in the left earpiece only, on a press; judges each answer (R5.1, R5.3, R5.5)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      toCheck(harness, offeredFloors(before.result)[0]!);
+      const unchanged = harness.flow.snapshot();
+      harness.flow.answerSwapCheck("right");
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+
+      harness.advance(quietMs);
+      const scheduleCount = harness.backend.scheduled().length;
+      harness.flow.playSwapCheck();
+      expect(harness.calls.at(-1)?.name).toBe("playHeadphoneCheck");
+      const hiss = harness.backend.scheduled()[scheduleCount]!;
+      expect(hiss.left.some((sample) => sample !== 0)).toBe(true);
+      expect(hiss.right.every((sample) => Object.is(sample, 0))).toBe(true);
+      expect(viewOf(harness)).toMatchObject({ awaitingAnswer: true });
+      harness.advance(quietMs);
+
+      harness.flow.answerSwapCheck("bothSides");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "check",
+        awaitingAnswer: false,
+        judgement: "bothSides",
+        judgementLine: swappedRepeatCopy.judgementLines.bothSides,
+      });
+      expect(repeatSnapshotOf(harness).repeat.earpieces).toBe("unknown");
+      await playAndAnswerCheck(harness, "left");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "instruction",
+        againLine: swappedRepeatCopy.againLine,
+        earpieces: "unknown",
+      });
+      harness.flow.confirmSwap();
+      await playAndAnswerCheck(harness, "right");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "ready",
+        earpieces: "swapped",
+        judgementLine: swappedRepeatCopy.judgementLines.confirmed,
+      });
+    }, 60_000);
+
+    it("a hidden page while a check waits sets it back with the cut line, and its answer is ignored (R5.6, D13)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      toCheck(harness, offeredFloors(before.result)[0]!);
+      harness.advance(quietMs);
+      harness.flow.playSwapCheck();
+      harness.backend.fire("hidden");
+      expect(harness.flow.snapshot().pause).toBeNull();
+      expect(viewOf(harness)).toMatchObject({
+        phase: "check",
+        awaitingAnswer: false,
+        cutLine: swappedRepeatCopy.cutLine,
+      });
+      const unchanged = harness.flow.snapshot();
+      harness.flow.answerSwapCheck("right");
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+    }, 60_000);
+
+    it("sets activationRefused when the browser saw no press, with the phase unchanged; the next press plays (R5.1)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      toCheck(harness, offeredFloors(before.result)[0]!);
+      harness.backend.fire("hidden");
+      harness.advance(quietMs);
+      harness.backend.setUserActivationActive(false);
+      const scheduleCount = harness.backend.scheduled().length;
+      harness.flow.playSwapCheck();
+      expect(harness.calls.at(-1)?.name).toBe("activate");
+      await harness.settle();
+      expect(harness.flow.snapshot()).toMatchObject({
+        stage: "swappedRepeat",
+        activationRefused: true,
+        repeat: { phase: "check", awaitingAnswer: false },
+      });
+      expect(harness.backend.scheduled().length).toBe(scheduleCount);
+      harness.backend.setUserActivationActive(true);
+      harness.flow.playSwapCheck();
+      await harness.settle();
+      expect(harness.flow.snapshot()).toMatchObject({
+        activationRefused: false,
+        repeat: { phase: "check", awaitingAnswer: true },
+      });
+      expect(harness.backend.scheduled().length).toBe(scheduleCount + 1);
+    }, 60_000);
+
+    it("proceed during the hiss silences and shows the result; a device change gives calibrationGone (R11.3, R14.6)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      const floor = offeredFloors(before.result)[0]!;
+      toCheck(harness, floor);
+      harness.advance(quietMs);
+      harness.flow.playSwapCheck();
+      harness.advance(200);
+      harness.flow.proceed();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expectSameLogAndSummary(harness, before);
+      await expectNothingMore(harness);
+      toCheck(harness, floor);
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationGone",
+      });
+    }, 60_000);
+  });
+
+  describe("ready", () => {
+    it("startSwappedRoom calls beginRoom after the last check and before the first trial, which plays in the other earpiece (R6.2, R8.1, R17.4)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      await toReady(harness, offeredFloors(before.result)[0]!);
+      const unchanged = harness.flow.snapshot();
+      harness.backend.fire("hidden");
+      // A hidden page in `ready` begins no pause; the shell is started again by the press.
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+      const callCount = harness.calls.length;
+      harness.flow.startSwappedRoom();
+      await harness.settle();
+      expect(phaseOf(harness)).toBe("room");
+      let firstPlay = -1;
+      for (let wait = 0; wait < 100 && firstPlay < 0; wait += 1) {
+        harness.advance(100);
+        firstPlay = harness.calls.findIndex(
+          (call, index) => index >= callCount && call.name === "play",
+        );
+      }
+      const names = harness.calls.slice(callCount).map((call) => call.name);
+      const lastCheck = harness.calls.reduce(
+        (last, call, index) =>
+          call.name === "playHeadphoneCheck" ? index : last,
+        -1,
+      );
+      const beginRoom = harness.calls.findIndex(
+        (call, index) => index > lastCheck && call.name === "beginRoom",
+      );
+      expect(names).toContain("activate");
+      expect(lastCheck).toBeLessThan(beginRoom);
+      expect(beginRoom).toBeLessThan(firstPlay);
+      const trial = harness.presented.at(-1)!;
+      const play = harness.plays.at(-1)!;
+      expect(trial.swappedRepeatRunNumber).toBe(1);
+      expect(play.request.purpose).toBe("trial");
+      expect(play.request.ear).toBe(trial.ear === "left" ? "right" : "left");
+      expect(trial.earpiece).toBe(play.request.ear);
+    }, 60_000);
+
+    it("a device change gives calibrationGone, and proceed shows the result without silencing (R14.6, R11.3)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      const floor = offeredFloors(before.result)[0]!;
+      await toReady(harness, floor);
+      harness.advance(quietMs);
+      const callCount = harness.calls.length;
+      harness.flow.proceed();
+      expect(harness.calls.length).toBe(callCount);
+      expectSameLogAndSummary(harness, before);
+      await toReady(harness, floor);
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "unavailable",
+        reason: "calibrationGone",
+      });
+      expect(repeatSnapshotOf(harness).repeat.earpieces).toBe("swapped");
+      harness.flow.proceed();
+      expect(resultOf(harness).turnBackLine).toBe(
+        swappedRepeatCopy.turnBackLine,
+      );
+    }, 60_000);
+  });
+
+  describe("room, no pause", () => {
+    it("scores answers by ear with the swappedTrialScored event and both earpieces; pause begins a pause visitor and silences; resume presents the waiting trial; nothing reaches the log's pauses (R8.2, R8.6, R14.3, R14.5, R14.10, R16.3)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      await toRepeatRoom(harness, offeredFloors(before.result)[0]!);
+      playRepeatRoom(harness, unevenListener, () =>
+        repeatEvents(harness).some((event) => event.reaction === "ripple"),
+      );
+      const ripple = repeatEvents(harness).find(
+        (event) => event.reaction === "ripple",
+      )!;
+      expect(ripple.runNumber).toBe(1);
+      expect(ripple.trial.earpiece).toBe(
+        ripple.trial.ear === "left" ? "right" : "left",
+      );
+      expect(ripple.trial.responseEarpiece).toBe(ripple.trial.earpiece);
+      expect(ripple.line).not.toBeNull();
+
+      const presentedCount = harness.presented.length;
+      harness.flow.pause();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expect(harness.flow.snapshot()).toMatchObject({
+        pause: { reason: "visitor" },
+        canProceed: false,
+        repeat: {
+          phase: "room",
+          pauseLine: swappedRepeatCopy.pauseLines.visitor,
+        },
+      });
+      harness.flow.resume();
+      await harness.settle();
+      expect(harness.flow.snapshot().pause).toBeNull();
+      for (let wait = 0; wait < 100; wait += 1) {
+        if (harness.presented.length > presentedCount) {
+          break;
+        }
+        harness.advance(100);
+      }
+      expect(harness.presented.length).toBeGreaterThan(presentedCount);
+      playRepeatRoom(harness, unevenListener);
+      expect(viewOf(harness)).toMatchObject({
+        phase: "finished",
+        ending: "finished",
+      });
+      harness.flow.proceed();
+      const after = expectSameLogAndSummary(harness, before);
+      expect(after.visitLog.pauses).toEqual([]);
+      expect(after.swappedRepeats).toHaveLength(1);
+      expect(after.swappedRepeats[0]!.pauses).toMatchObject([
+        { reason: "visitor", stage: "swappedRepeat" },
+      ]);
+    }, 60_000);
+
+    it("a hidden page pauses with its reason; a device change ends the run with deviceChanged and no record (R14.4, R14.6, R11.5)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      await toRepeatRoom(harness, offeredFloors(before.result)[0]!);
+      harness.advance(quietMs);
+      harness.backend.fire("hidden");
+      expect(harness.flow.snapshot()).toMatchObject({
+        pause: { reason: "hidden" },
+        repeat: { pauseLine: swappedRepeatCopy.pauseLines.hidden },
+      });
+      harness.flow.resume();
+      await harness.settle();
+      expect(harness.flow.snapshot().pause).toBeNull();
+      harness.backend.fire("deviceChanged");
+      expect(viewOf(harness)).toMatchObject({
+        phase: "finished",
+        ending: "deviceChanged",
+        comparison: null,
+        turnBackLine: swappedRepeatCopy.turnBackLine,
+      });
+      await expectIgnored(harness, pressesOfTheStage);
+      harness.flow.proceed();
+      const after = expectSameLogAndSummary(harness, before);
+      expect(after.swappedRepeats).toEqual([]);
+      expect(after.turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+      await expectNothingMore(harness);
+    }, 60_000);
+
+    it.each(["proceed", "stop", "pageLeft"] as const)(
+      "%s silences when needed, ends the run without a record, shows the result, and the floor is still offered (R11.3, R14.2, R14.7, D11)",
+      async (ending) => {
+        const harness = createHarness();
+        const before = await toOfferingResult(harness);
+        const floor = offeredFloors(before.result)[0]!;
+        await toRepeatRoom(harness, floor);
+        harness.advance(quietMs);
+        if (ending === "pageLeft") {
+          harness.backend.fire("pageLeft");
+        } else {
+          harness.flow[ending]();
+          expect(harness.calls.at(-1)?.name).toBe("stopAll");
+        }
+        const after = expectSameLogAndSummary(harness, before);
+        expect(after.swappedRepeats).toEqual([]);
+        expect(after.turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+        await expectNothingMore(harness);
+        harness.flow.chooseSwappedRepeat(floor);
+        expect(phaseOf(harness)).toBe("instruction");
+      },
+      60_000,
+    );
+  });
+
+  describe("room, a pause holds", () => {
+    it("accepts only resume and stop; a hidden page keeps it paused; a device change ends the pause and the run (R14.6, R14.9)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      await toRepeatRoom(harness, offeredFloors(before.result)[0]!);
+      harness.advance(quietMs);
+      harness.flow.pause();
+      await expectIgnored(
+        harness,
+        (Object.keys(actions) as ActionName[]).filter(
+          (name) => name !== "resume" && name !== "stop",
+        ),
+      );
+      const paused = harness.flow.snapshot();
+      harness.backend.fire("hidden");
+      expect(harness.flow.snapshot()).toEqual(paused);
+      harness.backend.fire("deviceChanged");
+      expect(harness.flow.snapshot()).toMatchObject({
+        pause: null,
+        repeat: { phase: "finished", ending: "deviceChanged" },
+      });
+      harness.flow.proceed();
+      expect(expectSameLogAndSummary(harness, before).swappedRepeats).toEqual(
+        [],
+      );
+    }, 60_000);
+
+    it("stop silences and shows the result; a left page ends the pause and shows it too (R14.2, R14.7)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      const floor = offeredFloors(before.result)[0]!;
+      await toRepeatRoom(harness, floor);
+      harness.advance(quietMs);
+      harness.flow.pause();
+      harness.flow.stop();
+      expect(harness.calls.at(-1)?.name).toBe("stopAll");
+      expect(expectSameLogAndSummary(harness, before).pause).toBeNull();
+      await toRepeatRoom(harness, floor);
+      harness.advance(quietMs);
+      harness.flow.pause();
+      harness.backend.fire("pageLeft");
+      expect(expectSameLogAndSummary(harness, before).pause).toBeNull();
+      await expectNothingMore(harness);
+    }, 60_000);
+  });
+
+  describe("finished", () => {
+    it("gives the comparison and the turn-back line, ignores every press, and proceed shows the result with the record (R11.1, R11.4, R9.3)", async () => {
+      const harness = createHarness();
+      const before = await toOfferingResult(harness);
+      const floor = offeredFloors(before.result)[0]!;
+      await toRepeatRoom(harness, floor);
+      playRepeatRoom(harness, unevenListener);
+      const view = viewOf(harness);
+      expect(view).toMatchObject({
+        phase: "finished",
+        ending: "finished",
+        endLine: swappedRepeatCopy.endLines.finished,
+        turnBackLine: swappedRepeatCopy.turnBackLine,
+        comparison: { roomIndex: floor, runNumber: 1, outcome: "followsEar" },
+      });
+      await expectIgnored(harness, pressesOfTheStage);
+      const unchanged = harness.flow.snapshot();
+      harness.backend.fire("hidden");
+      harness.backend.fire("deviceChanged");
+      expect(harness.flow.snapshot()).toEqual(unchanged);
+      harness.flow.proceed();
+      const after = expectSameLogAndSummary(harness, before);
+      expect(after.swappedRepeats).toHaveLength(1);
+      expect(after.swappedRepeats[0]).toMatchObject({
+        roomIndex: floor,
+        runNumber: 1,
+        outcome: "followsEar",
+        earpieceOnEar: { left: "right", right: "left" },
+      });
+      expect(isDeeplyFrozen(after.swappedRepeats)).toBe(true);
+      expect(after.turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+      await expectNothingMore(harness);
+    }, 60_000);
+  });
+
+  it("ignores a floor with a record and still enters another offered floor (Q4, decided by the owner on 2026-11-15)", async () => {
+    const harness = createHarness();
+    const before = await toOfferingResult(harness);
+    const [first, second] = offeredFloors(before.result);
+    await finishRepeat(harness, first!);
+    const result = resultOf(harness);
+    harness.flow.chooseSwappedRepeat(first!);
     expect(harness.flow.snapshot()).toEqual(result);
-    expect(harness.flow.snapshot()).toMatchObject({
-      swappedRepeats: [],
-      turnBackLine: null,
+    harness.flow.chooseSwappedRepeat(second!);
+    expect(phaseOf(harness)).toBe("instruction");
+  }, 60_000);
+
+  it("draws each run's engine seed as swappedRepeatEngineSeed(log, runNumber), for a second repeat after a run that did not end and for a third (R7.3, R11.5)", async () => {
+    const harness = createHarness();
+    const before = await toOfferingResult(harness);
+    const [first, second] = offeredFloors(before.result);
+    const log = before.result.visitLog;
+    await toRepeatRoom(harness, first!);
+    harness.advance(quietMs);
+    harness.flow.proceed();
+    expect(resultOf(harness).swappedRepeats).toEqual([]);
+    const run2 = await finishRepeat(harness, first!);
+    expect(run2.runNumber).toBe(2);
+    expect(run2.attempt.engineSeed).toBe(swappedRepeatEngineSeed(log, 2));
+    const run3 = await finishRepeat(harness, second!);
+    expect(run3.runNumber).toBe(3);
+    expect(run3.attempt.engineSeed).toBe(swappedRepeatEngineSeed(log, 3));
+    expect(
+      new Set([run2, run3].map((run) => run.attempt.engineSeed)).size,
+    ).toBe(2);
+  }, 60_000);
+
+  it("counts a run only when its engine seed is drawn: a start that finds no calibration counts nothing, and the next run is run 1 with its seed (R7.3, R11.5)", async () => {
+    const harness = createHarness();
+    const before = await toOfferingResult(harness);
+    const floor = offeredFloors(before.result)[0]!;
+    await toReady(harness, floor);
+    const callCount = harness.calls.length;
+    harness.hideCalibration(true);
+    harness.flow.startSwappedRoom();
+    harness.hideCalibration(false);
+    await harness.settle();
+    expect(viewOf(harness)).toMatchObject({
+      phase: "unavailable",
+      reason: "calibrationGone",
     });
+    expect(
+      harness.calls.slice(callCount).filter((call) => call.name === "play"),
+    ).toEqual([]);
+    harness.flow.proceed();
+    // The first run whose seed is drawn is run 1, with the first repeat's seed.
+    const run = await finishRepeat(harness, floor);
+    expect(run.runNumber).toBe(1);
+    expect(run.attempt.engineSeed).toBe(
+      swappedRepeatEngineSeed(before.result.visitLog, 1),
+    );
+  }, 60_000);
+
+  it("gives the hook each trial's earpiece: its own in the rooms of the visit, the other in a repeat, with the run number (R8.7)", async () => {
+    const harness = createHarness();
+    const before = await toOfferingResult(harness);
+    const visitTrials = [...harness.presented];
+    expect(visitTrials.length).toBeGreaterThan(0);
+    for (const trial of visitTrials) {
+      expect(trial.earpiece).toBe(trial.ear);
+      expect(trial.swappedRepeatRunNumber).toBeNull();
+      expect(Object.isFrozen(trial)).toBe(true);
+    }
+    await finishRepeat(harness, offeredFloors(before.result)[0]!);
+    const repeatTrials = harness.presented.slice(visitTrials.length);
+    expect(repeatTrials.length).toBeGreaterThan(0);
+    for (const trial of repeatTrials) {
+      expect(trial.earpiece).toBe(
+        trial.ear === null ? null : trial.ear === "left" ? "right" : "left",
+      );
+      expect(trial.swappedRepeatRunNumber).toBe(1);
+    }
+  }, 60_000);
+
+  it("gives no turn-back line before the stage and the Turn_Back_Line after it, until the next visit (R9.2, R9.5)", async () => {
+    const harness = createHarness();
+    const before = await toOfferingResult(harness);
+    expect(before.result.turnBackLine).toBeNull();
+    await finishRepeat(harness, offeredFloors(before.result)[0]!);
+    expect(resultOf(harness).turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+    harness.flow.backToFrontDoor();
+    const next = await toResult(harness, unevenListener);
+    expect(next.turnBackLine).toBeNull();
+    expect(next.swappedRepeats).toEqual([]);
   }, 60_000);
 });
 

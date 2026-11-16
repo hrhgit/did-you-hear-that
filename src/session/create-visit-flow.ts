@@ -8,8 +8,6 @@ import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
-import { differenceLabel } from "../copy/result-lines";
-import { pitchLabel, roomNames } from "../copy/room-copy";
 import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
@@ -30,6 +28,11 @@ import { createCalibrationController } from "./calibration-controller";
 import type { MissedSoundReplayController } from "./create-missed-sound-replay";
 import { createMissedSoundReplay } from "./create-missed-sound-replay";
 import type {
+  FlowPresentedTrial,
+  SwappedRepeatController,
+} from "./create-swapped-repeat";
+import { createSwappedRepeat } from "./create-swapped-repeat";
+import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
@@ -39,6 +42,7 @@ import { createRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
 import { summarizeVisit } from "./summarize-visit";
 import type {
+  EarpieceState,
   EntrySnapshot,
   ExitReason,
   LoggedCalibration,
@@ -46,8 +50,9 @@ import type {
   PauseReason,
   ScoredVisitTrial,
   SnapshotBase,
-  SwappedRepeat,
+  SwappedRepeatPauseReason,
   SwappedRepeatRun,
+  SwappedRepeatUnavailableReason,
   TrialReaction,
   VisitEvent,
   VisitFlow,
@@ -72,8 +77,12 @@ export type { PresentedTrial } from "./room-runner";
 export type VisitFlowTestOptions = {
   readonly timer: Timer;
   readonly seed: number;
-  /** Called when a trial's window is set, with what a listener needs to answer it. */
-  readonly onTrialPresented?: (trial: PresentedTrial) => void;
+  /**
+   * Called when a trial's window is set, with what a listener needs to answer it: in the rooms of
+   * the visit and in a swapped repeat, with the earpiece of the sound (swapped-repeat R8.7). A
+   * listener typed for `PresentedTrial` still fits it.
+   */
+  readonly onTrialPresented?: (trial: FlowPresentedTrial) => void;
 } & ({ readonly backend: AudioBackend } | { readonly output: AudioOutput });
 
 /** Seeds are drawn as `floor(u × 2³²)`, every whole number a seed may be (D19). */
@@ -83,9 +92,6 @@ const drawSeed = (source: RandomSource): number =>
   Math.floor(source.next() * seedRangeCount);
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
-
-/** Until task 11 of the swapped-repeat spec, the result holds no swapped repeat. */
-const noSwappedRepeats: readonly SwappedRepeatRun[] = Object.freeze([]);
 
 const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
 
@@ -185,6 +191,16 @@ interface Visit {
   replay: MissedSoundReplayController | null;
   summary: VisitSummary | null;
   swappedRoom: VisitRoom | null;
+  /** The timer's time when the visit began: the zero of the visit log's clock. */
+  readonly startedAtMs: number;
+  /** What the house knows of how the headphones sit (swapped-repeat D5). */
+  earpieces: EarpieceState;
+  /** Every swapped repeat of the visit that ran to its end, in the order they ended. */
+  readonly swappedRepeats: SwappedRepeatRun[];
+  /** The swapped repeat runs begun: counted when a run's engine seed is drawn (swapped-repeat R11.5). */
+  repeatRunCount: number;
+  /** The Repeat_Controller of the swapped repeat stage, or null outside it. */
+  repeat: SwappedRepeatController | null;
 }
 
 /**
@@ -385,8 +401,12 @@ export function createVisitFlow(
           ...base("result"),
           visitLog: logOf(current),
           summary: summaryOf(current),
-          swappedRepeats: noSwappedRepeats,
-          turnBackLine: null,
+          swappedRepeats: Object.freeze([...current.swappedRepeats]),
+          // Once a repeat has begun, the house no longer knows how the headphones sit (R9.2, Q7).
+          turnBackLine:
+            current.earpieces === "asMarked"
+              ? null
+              : swappedRepeatCopy.turnBackLine,
         });
       case "swappedRepeat": {
         const room = current.swappedRoom ?? roomAt(current, 0);
@@ -395,34 +415,30 @@ export function createVisitFlow(
           room,
           visitLog: logOf(current),
           summary: summaryOf(current),
-          repeat: standInRepeatView(current, room),
+          repeat: repeatOf(current).view({
+            earpieces: current.earpieces,
+            pauseReason: repeatPauseReason(),
+          }),
         });
       }
     }
   };
 
-  /**
-   * The stand-in view of the swapped repeat: the phase `instruction`, the phase the stage enters
-   * (swapped-repeat R3.5). Nothing plays and no press of the stage acts yet (R1.6). Task 11 of the
-   * swapped-repeat spec replaces it with the Repeat_Controller's view.
-   */
-  function standInRepeatView(current: Visit, room: VisitRoom): SwappedRepeat {
-    const roomSummary = summaryOf(current).rooms[room.roomIndex];
-    return Object.freeze({
-      phase: "instruction",
-      heading: swappedRepeatCopy.heading,
-      roomName: roomNames[room.roomId],
-      pitchLabel: pitchLabel(room.frequencyHz),
-      firstDifferenceLabel: differenceLabel(
-        roomSummary?.rightMinusLeftDb ?? null,
-      ),
-      earpieces: "unknown",
-      stopLabel: swappedRepeatCopy.stopButton,
-      backLabel: swappedRepeatCopy.backButton,
-      lines: swappedRepeatCopy.instructionLines,
-      againLine: null,
-      confirmLabel: swappedRepeatCopy.confirmButton,
-    });
+  function repeatOf(current: Visit): SwappedRepeatController {
+    if (current.repeat === null) {
+      throw new Error("The swapped repeat is made when its stage is entered.");
+    }
+    return current.repeat;
+  }
+
+  /** The reason of the pause that holds in the swapped repeat, which only its room can pause. */
+  function repeatPauseReason(): SwappedRepeatPauseReason | null {
+    const reason = pause?.reason ?? null;
+    return reason === "visitor" ||
+      reason === "hidden" ||
+      reason === "interrupted"
+      ? reason
+      : null;
   }
 
   function logOf(current: Visit): VisitLog {
@@ -560,6 +576,9 @@ export function createVisitFlow(
     current.timerHandles.clear();
     current.runner?.abandon();
     current.runner = null;
+    // A swapped repeat under way plays nothing more and gives no record (visit-flow D35).
+    current.repeat?.leave();
+    current.repeat = null;
     calibration.close();
     pause = null;
   };
@@ -693,6 +712,13 @@ export function createVisitFlow(
     if (current === null || holding === null) {
       return;
     }
+    if (stage === "swappedRepeat") {
+      // A pause of the swapped repeat is written to its own run's record, never to the visit log
+      // (swapped-repeat R14.10, D2).
+      pause = null;
+      repeatOf(current).resume();
+      return;
+    }
     if (stage === "missedSoundReplay") {
       // A pause of the replay is not written to the log, which was assembled when the rooms
       // ended (missed-sound-replay R11.3, D18).
@@ -766,8 +792,67 @@ export function createVisitFlow(
     }
   }
 
+  /**
+   * Leaves the swapped repeat for the result (swapped-repeat R9.1, R11.3, R14.2, R14.7, D5, D15):
+   * the controller cancels its timers and ends a run under way without a record, the pause ends,
+   * and the earpieces are unknown again once the instruction was shown. The instruction was shown
+   * exactly when the earpiece state is not what it was before the stage: entering `instruction`
+   * makes it `unknown`, a check makes it `swapped` or `unknown`, and an `unavailable` stage leaves
+   * it alone. So `swapped` becomes `unknown`, and every other state stays.
+   */
+  function leaveRepeat(current: Visit): void {
+    current.repeat?.leave();
+    current.repeat = null;
+    pause = null;
+    if (current.earpieces === "swapped") {
+      current.earpieces = "unknown";
+    }
+    current.swappedRoom = null;
+    summaryOf(current);
+    enterStage("result");
+  }
+
+  /**
+   * What a stop report of the output shell does in the swapped repeat (swapped-repeat design.md,
+   * "What the flow does", R5.6, R14.3 to R14.8). A pause here sets the snapshot's pause field and
+   * is written to the run's own record, never to the visit log (D2).
+   */
+  function repeatStopped(reason: StopReason): void {
+    const current = visit;
+    if (current === null || stage !== "swappedRepeat") {
+      return;
+    }
+    const repeat = repeatOf(current);
+    switch (reason) {
+      case "control":
+        // The flow caused it (stop, pause, back).
+        return;
+      case "pageLeft":
+        leaveRepeat(current);
+        return;
+      case "deviceChanged":
+        pause = null;
+        repeat.calibrationGone();
+        return;
+      case "hidden":
+      case "interrupted":
+        if (repeat.phase() === "room") {
+          if (pause === null && repeat.pause(reason)) {
+            pause = Object.freeze({ reason });
+          }
+        } else if (repeat.phase() === "check") {
+          repeat.checkCut();
+        }
+        return;
+    }
+  }
+
   /** What a stop report of the output shell does (design.md, "Pauses"). */
   function onOutputStopped(reason: StopReason): void {
+    if (stage === "swappedRepeat") {
+      repeatStopped(reason);
+      return;
+    }
     if (stage === "missedSoundReplay") {
       replayStopped(reason);
       return;
@@ -895,7 +980,19 @@ export function createVisitFlow(
           output.stopAll();
           leave("soundRefused");
         },
-        ...(onTrialPresented === undefined ? {} : { onTrialPresented }),
+        ...(onTrialPresented === undefined
+          ? {}
+          : {
+              // In the rooms of the visit each ear wears its own earpiece (swapped-repeat R8.7).
+              onTrialPresented: (trial: PresentedTrial) =>
+                onTrialPresented(
+                  Object.freeze({
+                    ...trial,
+                    earpiece: trial.ear,
+                    swappedRepeatRunNumber: null,
+                  }),
+                ),
+            }),
       });
       current.runner = runner;
       enterStage("room");
@@ -969,6 +1066,11 @@ export function createVisitFlow(
           replay: null,
           summary: null,
           swappedRoom: null,
+          startedAtMs: timer.now(),
+          earpieces: "unknown",
+          swappedRepeats: [],
+          repeatRunCount: 0,
+          repeat: null,
         };
         visit = current;
         activationRefused = false;
@@ -1083,6 +1185,8 @@ export function createVisitFlow(
         });
         current.judgement = judgement;
         current.awaitingAnswer = false;
+        // The rooms run only after a check answered correct (swapped-repeat D5).
+        current.earpieces = judgement === "correct" ? "asMarked" : "unknown";
       });
     },
 
@@ -1112,8 +1216,11 @@ export function createVisitFlow(
             enterStage("result");
             return;
           case "swappedRepeat":
-            current.swappedRoom = null;
-            enterStage("result");
+            // Back to the picture, silencing a sound that may be under way (swapped-repeat R11.3, D15).
+            if (repeatOf(current).mayBeSounding()) {
+              output.stopAll();
+            }
+            leaveRepeat(current);
             return;
           default:
             return;
@@ -1123,20 +1230,40 @@ export function createVisitFlow(
 
     answer(side, pressedAtMs) {
       step(() => {
-        const current = inVisit("room");
-        if (current === null || (side !== "left" && side !== "right")) {
+        if (side !== "left" && side !== "right") {
           return;
         }
-        current.runner?.answer(side, pressedAtMs);
+        const current = inVisit("room");
+        if (current !== null) {
+          current.runner?.answer(side, pressedAtMs);
+          return;
+        }
+        // The room of the swapped repeat: the side is the visitor's own ear.
+        const repeating = inVisit("swappedRepeat");
+        if (repeating !== null && repeatOf(repeating).phase() === "room") {
+          repeatOf(repeating).answer(side, pressedAtMs);
+        }
       });
     },
 
     pause() {
       step(() => {
-        if (inVisit("room") === null) {
+        if (inVisit("room") !== null) {
+          beginPause("visitor");
+          output.stopAll();
           return;
         }
-        beginPause("visitor");
+        // The room of the swapped repeat: not through beginPause, which writes to the visit's
+        // recorder (swapped-repeat R14.3, R14.10, D2).
+        const repeating = inVisit("swappedRepeat");
+        if (repeating === null) {
+          return;
+        }
+        const repeat = repeatOf(repeating);
+        if (repeat.phase() !== "room" || !repeat.pause("visitor")) {
+          return;
+        }
+        pause = Object.freeze({ reason: "visitor" });
         output.stopAll();
       });
     },
@@ -1170,9 +1297,8 @@ export function createVisitFlow(
             enterStage("result");
             return;
           case "swappedRepeat":
-            summaryOf(current);
-            current.swappedRoom = null;
-            enterStage("result");
+            // Silenced above; a run under way ends without a record (swapped-repeat R14.2).
+            leaveRepeat(current);
             return;
           default:
             return;
@@ -1186,11 +1312,67 @@ export function createVisitFlow(
         if (current === null || !Number.isInteger(roomIndex)) {
           return;
         }
-        const roomSummary = summaryOf(current).rooms[roomIndex];
-        if (roomSummary === undefined || !roomSummary.swappedRepeatOffered) {
+        const summary = summaryOf(current);
+        const roomSummary = summary.rooms[roomIndex];
+        if (
+          roomSummary === undefined ||
+          !roomSummary.swappedRepeatOffered ||
+          // A floor may be repeated until one run of it ends with a record (swapped-repeat Q4,
+          // decided by the owner on 2026-11-15).
+          current.swappedRepeats.some((run) => run.roomIndex === roomIndex)
+        ) {
           return;
         }
+        const log = logOf(current);
+        const firstRun = log.roomAttempts
+          .filter(
+            (attempt) =>
+              attempt.roomIndex === roomIndex && attempt.ending === "finished",
+          )
+          .at(-1);
+        if (firstRun === undefined) {
+          return;
+        }
+        // The repeat runs on the first run's calibration or not at all (swapped-repeat D8; Q6,
+        // PROPOSED, NOT APPROVED).
+        const unavailable: SwappedRepeatUnavailableReason | null =
+          output.rangeReport() === null
+            ? "calibrationGone"
+            : current.lastCalibration?.calibrationIndex !==
+                firstRun.calibrationIndex
+              ? "calibrationChanged"
+              : null;
+        const repeat = createSwappedRepeat({
+          output,
+          timer: current.timer,
+          log,
+          summary,
+          roomIndex,
+          runNumber: current.repeatRunCount + 1,
+          visitStartedAtMs: current.startedAtMs,
+          unavailable,
+          soundRandom: current.soundRandom,
+          // The run is counted when its engine seed is drawn, so a start that finds no calibration
+          // counts nothing, and every seed equals swappedRepeatEngineSeed(log, runNumber) (R7.3).
+          drawEngineSeed: () => {
+            const engineSeed = drawSeed(current.source);
+            current.repeatRunCount += 1;
+            return engineSeed;
+          },
+          latestOffset: current.latestOffset,
+          emit,
+          notRunning: (reason) => repeatStopped(reason),
+          recorded: (run) => {
+            current.swappedRepeats.push(run);
+          },
+          ...(onTrialPresented === undefined ? {} : { onTrialPresented }),
+        });
+        current.repeat = repeat;
         current.swappedRoom = roomSummary.room;
+        if (repeat.phase() === "instruction") {
+          // The visitor is asked to swap; nothing has checked it (D5).
+          current.earpieces = "unknown";
+        }
         enterStage("swappedRepeat");
       });
     },
@@ -1216,15 +1398,80 @@ export function createVisitFlow(
       });
     },
 
-    // The presses of the swapped repeat do nothing until task 11 of the swapped-repeat spec, so the
-    // stage plays nothing before the repeat's properties exist (swapped-repeat R1.6).
-    confirmSwap() {},
+    confirmSwap() {
+      step(() => {
+        const current = inVisit("swappedRepeat");
+        if (current !== null) {
+          // Plays nothing (swapped-repeat R4.2).
+          repeatOf(current).confirmSwap();
+        }
+      });
+    },
 
-    playSwapCheck() {},
+    playSwapCheck() {
+      step(() => {
+        const current = inVisit("swappedRepeat");
+        if (current === null) {
+          return;
+        }
+        const repeat = repeatOf(current);
+        if (repeat.phase() !== "check") {
+          return;
+        }
+        // A press: it may start sound, so activate is called within the call (R5.1).
+        withSound(() => {
+          if (
+            visit === current &&
+            stage === "swappedRepeat" &&
+            pause === null &&
+            current.repeat === repeat &&
+            repeat.phase() === "check"
+          ) {
+            repeat.playCheck();
+          }
+        });
+      });
+    },
 
-    answerSwapCheck() {},
+    answerSwapCheck(answer: HeadphoneCheckAnswer) {
+      step(() => {
+        const current = inVisit("swappedRepeat");
+        if (current === null) {
+          return;
+        }
+        const judgement = repeatOf(current).answerCheck(answer);
+        if (judgement !== null) {
+          current.earpieces = judgement === "confirmed" ? "swapped" : "unknown";
+        }
+      });
+    },
 
-    startSwappedRoom() {},
+    startSwappedRoom() {
+      step(() => {
+        const current = inVisit("swappedRepeat");
+        if (current === null) {
+          return;
+        }
+        const repeat = repeatOf(current);
+        // No run starts unless a confirmed check found the earpieces swapped (R6.2, R9.4).
+        if (repeat.phase() !== "ready" || current.earpieces !== "swapped") {
+          return;
+        }
+        // A press: it starts sound, so activate is called within the call (R6.2).
+        withSound(() => {
+          if (
+            visit === current &&
+            stage === "swappedRepeat" &&
+            pause === null &&
+            current.repeat === repeat &&
+            repeat.phase() === "ready" &&
+            current.earpieces === "swapped"
+          ) {
+            repeat.startRoom();
+          }
+        });
+      });
+    },
 
     backToFrontDoor() {
       step(() => {
