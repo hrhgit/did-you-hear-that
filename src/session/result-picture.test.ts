@@ -10,12 +10,16 @@ import type {
 } from "./result-page-types";
 import { resultPicture } from "./result-picture";
 import { summarizeVisit } from "./summarize-visit";
+import { swappedRepeatComparison } from "./swapped-repeat-comparison";
+import { swappedRepeatRunOf } from "./swapped-repeat-run";
 import type {
   LoggedEarResult,
   LoggedRoomAttempt,
+  SwappedRepeatRun,
   VisitLog,
   VisitTrial,
 } from "./visit-flow-types";
+import { createVisitLogRecorder } from "./visit-log-recorder";
 import { visitRooms } from "./visit-rooms";
 
 // Summaries made with summarizeVisit from hand-built visit logs. Only the fields the summary reads
@@ -400,7 +404,7 @@ describe("resultPicture", () => {
       );
     });
 
-    it("draws no repeat beside any floor, live or saved, until the records are read (swapped-repeat task 1)", () => {
+    it("draws no repeat beside any floor, live or saved, for a visit without records", () => {
       const full = visitOf("full", [
         ...mixedQuick,
         { left: found(-20), right: found(-45) },
@@ -415,6 +419,177 @@ describe("resultPicture", () => {
           );
         }
       }
+    });
+  });
+
+  describe("a swapped repeat beside its floor (swapped-repeat R12)", () => {
+    // Floors 0 and 2 offer the repeat; floor 1 does not.
+    const twoOffered: readonly RoomPlan[] = [
+      { left: found(-40), right: found(-25) },
+      { left: found(-30), right: found(-30) },
+      { left: found(-20), right: found(-45) },
+    ];
+    const visit = visitOf("quick", twoOffered);
+
+    /** A finished repeat of one floor whose ears gave these results, made as the controller makes it. */
+    function recordOf(
+      roomIndex: number,
+      left: LoggedEarResult,
+      right: LoggedEarResult,
+    ): SwappedRepeatRun {
+      const firstRun = visit.summary.rooms[roomIndex]!;
+      const recorder = createVisitLogRecorder({
+        visitType: visit.visitLog.visitType,
+        visitSeed: visit.visitLog.visitSeed,
+        rooms: visit.visitLog.rooms,
+        startedAtMs: 0,
+      });
+      const attemptNumber = recorder.attemptStarted({
+        roomIndex,
+        engineSeed: 77,
+        calibrationIndex: 0,
+        searchCapDb: firstRun.searchCapDb,
+        startedAtMs: 400000,
+      });
+      recorder.attemptEnded({
+        roomIndex,
+        attempt: attemptNumber,
+        endedAtMs: 490000,
+        ending: "finished",
+        result: {
+          left,
+          right,
+          noSoundTrialCount: 6,
+          falseAlarmCount: 0,
+          falseAlarmRateFraction: 0,
+          falseAlarmRateAboveLimit: false,
+        },
+      });
+      return swappedRepeatRunOf({
+        runNumber: 1,
+        runLog: recorder.log(),
+        swapChecks: [
+          {
+            answer: "right",
+            judgement: "confirmed",
+            earpiece: "left",
+            answeredAtMs: 395000,
+          },
+        ],
+        firstRun,
+      });
+    }
+
+    const record = recordOf(0, found(-40), found(-25));
+    const withRecord: VisitToSave = { ...visit, swappedRepeats: [record] };
+
+    /** A picture with its floors' `repeat` and `swappedRepeat` left out, for comparing the rest. */
+    function withoutRepeats(picture: ResultPicture) {
+      return {
+        ...picture,
+        floors: picture.floors.map((floor) =>
+          Object.fromEntries(
+            Object.entries(floor).filter(
+              ([key]) => key !== "repeat" && key !== "swappedRepeat",
+            ),
+          ),
+        ),
+      };
+    }
+
+    it("gives a live floor with a record its Comparison and no offer; the other offered floor keeps its offer", () => {
+      const without = live(visit);
+      const picture = live(withRecord);
+      expect(record.outcome).toBe("followsEar");
+      expect(picture.floors[0]?.repeat).toEqual(
+        swappedRepeatComparison(
+          visit.summary.rooms[0]!,
+          record,
+          hearingMethodConfig.floorDb,
+        ),
+      );
+      expect(picture.floors[0]?.swappedRepeat).toBeNull();
+      expect(picture.floors[1]?.repeat).toBeNull();
+      expect(picture.floors[1]?.swappedRepeat).toBeNull();
+      expect(picture.floors[2]?.repeat).toBeNull();
+      expect(picture.floors[2]?.swappedRepeat).toEqual(
+        without.floors[2]?.swappedRepeat,
+      );
+      expect(picture.floors[2]?.swappedRepeat).not.toBeNull();
+      expect(withoutRepeats(picture)).toEqual(withoutRepeats(without));
+      expect(isDeepFrozen(picture)).toBe(true);
+    });
+
+    it("gives a saved floor with a record its Comparison on the saved visit's own quietest level, and changes nothing else", () => {
+      const floorDb = -60;
+      const savedWithout = savedVisitOf(visit, { floorDb });
+      const savedWith = savedVisitOf(visit, {
+        floorDb,
+        swappedRepeats: [record],
+      });
+      const without = saved(savedWithout);
+      const picture = saved(savedWith);
+      expect(picture.floors[0]?.repeat).toEqual(
+        swappedRepeatComparison(visit.summary.rooms[0]!, record, floorDb),
+      );
+      expect(picture.floors.map((floor) => floor.swappedRepeat)).toEqual([
+        null,
+        null,
+        null,
+      ]);
+      expect(picture.floors.slice(1).map((floor) => floor.repeat)).toEqual([
+        null,
+        null,
+      ]);
+      expect(withoutRepeats(picture)).toEqual(withoutRepeats(without));
+      expect(picture.floors.map((floor) => floor.swappedRepeat)).toEqual(
+        without.floors.map((floor) => floor.swappedRepeat),
+      );
+    });
+
+    it("draws a record of each floor beside its own floor, whatever its outcome", () => {
+      const unclear = recordOf(2, found(-30), found(-30));
+      const picture = live({ ...visit, swappedRepeats: [record, unclear] });
+      expect(picture.floors[0]?.repeat?.runs[1].left.thresholdDb).toBe(-40);
+      expect(picture.floors[2]?.repeat).toMatchObject({
+        roomIndex: 2,
+        outcome: "unclear",
+        unclearReason: "differenceShrank",
+      });
+      expect(picture.floors.map((floor) => floor.swappedRepeat)).toEqual([
+        null,
+        null,
+        null,
+      ]);
+    });
+
+    it("draws a VisitToSave without the field, and one with an empty list, as a visit without records", () => {
+      const missing: VisitToSave = {
+        visitLog: visit.visitLog,
+        summary: visit.summary,
+      };
+      expect("swappedRepeats" in missing).toBe(false);
+      expect(live(missing)).toEqual(live({ ...visit, swappedRepeats: [] }));
+      expect(live(missing).floors.map((floor) => floor.repeat)).toEqual([
+        null,
+        null,
+        null,
+      ]);
+      const savedMissing = {
+        ...savedVisitOf(visit),
+        swappedRepeats: undefined,
+      } as unknown as SavedVisit;
+      expect(saved(savedMissing)).toEqual(saved(savedVisitOf(visit)));
+    });
+
+    it("neither changes nor freezes the records it draws", () => {
+      const thawed: SwappedRepeatRun = JSON.parse(JSON.stringify(record));
+      const before = JSON.stringify(thawed);
+      live({ ...visit, swappedRepeats: [thawed] });
+      saved(savedVisitOf(visit, { swappedRepeats: [thawed] }));
+      expect(JSON.stringify(thawed)).toBe(before);
+      expect(Object.isFrozen(thawed)).toBe(false);
+      expect(Object.isFrozen(thawed.left)).toBe(false);
     });
   });
 

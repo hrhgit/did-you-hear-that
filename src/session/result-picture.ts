@@ -27,6 +27,7 @@ import {
 } from "../copy/saved-visit-lines";
 import type { FloorScale } from "./light-depth-fraction";
 import { lightDepthFraction } from "./light-depth-fraction";
+import { swappedRepeatComparison } from "./swapped-repeat-comparison";
 import type {
   Ear,
   EarlierWing,
@@ -37,6 +38,7 @@ import type {
   ResultPicture,
   ResultPictureInput,
   SavedVisit,
+  SwappedRepeatRun,
   VisitEarResult,
   VisitSummary,
   VisitType,
@@ -50,7 +52,11 @@ interface PictureSource {
   readonly visitType: VisitType;
   readonly floorDb: number;
   readonly localDate: LocalDate;
+  /** The swapped repeats that ran to their end, in the order they ended (swapped-repeat R12.2). */
+  readonly swappedRepeats: readonly SwappedRepeatRun[];
 }
+
+const noSwappedRepeats: readonly SwappedRepeatRun[] = Object.freeze([]);
 
 /** Freezes a value and every object reachable from it that is not frozen yet. */
 function deepFreeze<T>(value: T): T {
@@ -71,6 +77,8 @@ function sourceOf(input: ResultPictureInput): PictureSource {
       visitType: input.visit.visitLog.visitType,
       floorDb: hearingMethodConfig.floorDb,
       localDate: input.localDate,
+      // A missing list means none (swapped-repeat R12.2).
+      swappedRepeats: input.visit.swappedRepeats ?? noSwappedRepeats,
     };
   }
   return {
@@ -79,6 +87,7 @@ function sourceOf(input: ResultPictureInput): PictureSource {
     visitType: input.savedVisit.visitType,
     floorDb: input.savedVisit.floorDb,
     localDate: input.savedVisit.savedOnLocalDate,
+    swappedRepeats: input.savedVisit.swappedRepeats ?? noSwappedRepeats,
   };
 }
 
@@ -126,14 +135,18 @@ function wing(
 }
 
 /**
- * One floor, from its own room summary and the visit's quietest level alone (D16), and the
- * earlier visit's summary of the same room, or null when there is none.
+ * One floor, from its own room summary and the visit's quietest level alone (D16), the earlier
+ * visit's summary of the same room, or null when there is none, and the floor's swapped repeat,
+ * or null. The repeat is drawn beside the floor and changes nothing else of it; a floor with one
+ * offers no other (swapped-repeat R12.1, R12.3, R12.4, D16; Q4, decided by the owner on
+ * 2026-11-15).
  */
 function floor(
   roomSummary: RoomSummary,
   floorDb: number,
   live: boolean,
   earlierRoom: RoomSummary | null,
+  repeatRun: SwappedRepeatRun | null,
 ): PictureFloor {
   const { room, rightMinusLeftDb } = roomSummary;
   const scale: FloorScale = { searchCapDb: roomSummary.searchCapDb, floorDb };
@@ -151,14 +164,20 @@ function floor(
     differenceLabel: differenceLabel(rightMinusLeftDb),
     differenceLine: differenceLine(rightMinusLeftDb),
     swappedRepeat:
-      live && roomSummary.swappedRepeatOffered && rightMinusLeftDb !== null
+      live &&
+      roomSummary.swappedRepeatOffered &&
+      rightMinusLeftDb !== null &&
+      repeatRun === null
         ? {
             roomIndex: room.roomIndex,
             line: swappedRepeatLine(rightMinusLeftDb),
             buttonLabel: resultPageCopy.swappedRepeatButton,
           }
         : null,
-    repeat: null,
+    repeat:
+      repeatRun === null
+        ? null
+        : swappedRepeatComparison(roomSummary, repeatRun, floorDb),
     description: floorDescription(
       room.roomId,
       room.frequencyHz,
@@ -167,6 +186,21 @@ function floor(
       rightMinusLeftDb,
     ),
   };
+}
+
+/**
+ * The swapped repeat of this floor, or null. A visit holds at most one (Q4); should a list hold
+ * more, the last to end is drawn.
+ */
+function repeatRunOf(
+  swappedRepeats: readonly SwappedRepeatRun[],
+  roomSummary: RoomSummary,
+): SwappedRepeatRun | null {
+  return (
+    swappedRepeats
+      .filter((run) => run.roomIndex === roomSummary.room.roomIndex)
+      .at(-1) ?? null
+  );
 }
 
 /** The earlier visit's room summary of the same room, or null when it did not enter that room. */
@@ -206,8 +240,10 @@ function comparisonOf(
  * offers the swapped repeat (D20). With an earlier visit, each wing of a floor whose room the
  * earlier visit also entered has its earlier state and an outline on this floor's own scale, and
  * `comparison` names the earlier visit's date; without one, every `earlier` and `comparison` is
- * null (D25). A pure function: the same input gives an equal, deeply frozen picture, and the input
- * is neither changed nor frozen.
+ * null (D25). Each floor with a swapped repeat in `visit.swappedRepeats` or
+ * `savedVisit.swappedRepeats` gives its Comparison in `repeat` and offers no repeat; every other
+ * field is what it is without repeats (swapped-repeat R12). A pure function: the same input gives
+ * an equal, deeply frozen picture, and the input is neither changed nor frozen.
  */
 export function resultPicture(input: ResultPictureInput): ResultPicture {
   const source = sourceOf(input);
@@ -219,6 +255,7 @@ export function resultPicture(input: ResultPictureInput): ResultPicture {
       source.floorDb,
       source.kind === "live",
       earlierRoomOf(input.earlierVisit, roomSummary),
+      repeatRunOf(source.swappedRepeats, roomSummary),
     ),
   );
   const visitedRoomIds = new Set<GhostSoundId>(

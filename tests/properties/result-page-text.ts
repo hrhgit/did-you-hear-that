@@ -9,6 +9,7 @@ import type {
   ResultPicture,
   SavedVisitList,
   SaveOutcome,
+  SwappedRepeatComparison,
 } from "../../src/session/result-page-types";
 
 // The generated text of the result page and the word lists of CP1 and CP2 (result-page design.md,
@@ -41,6 +42,46 @@ function placed(
     inLimitsStatement: false,
     limitsSentence: false,
   };
+}
+
+/**
+ * The generated text of a floor's swapped repeat (swapped-repeat design.md, "The Comparison"):
+ * its heading, each run's label and difference label, each wing's earpiece label, line and reason
+ * line, the outcome's label and lines, and the description. Each belongs to its floor.
+ */
+function repeatTexts(
+  repeat: SwappedRepeatComparison,
+  at: string,
+  floorIndex: number,
+): PlacedText[] {
+  const texts: PlacedText[] = [
+    placed(`${at}.heading`, repeat.heading, floorIndex),
+  ];
+  repeat.runs.forEach((run, runIndex) => {
+    const runAt = `${at}.runs[${String(runIndex)}]`;
+    texts.push(placed(`${runAt}.label`, run.label, floorIndex));
+    texts.push(
+      placed(`${runAt}.differenceLabel`, run.differenceLabel, floorIndex),
+    );
+    for (const wing of [run.left, run.right]) {
+      const wingAt = `${runAt}.${wing.ear}`;
+      texts.push(
+        placed(`${wingAt}.earpieceLabel`, wing.earpieceLabel, floorIndex),
+      );
+      texts.push(placed(`${wingAt}.line`, wing.line, floorIndex));
+      if (wing.reasonLine !== null) {
+        texts.push(placed(`${wingAt}.reasonLine`, wing.reasonLine, floorIndex));
+      }
+    }
+  });
+  texts.push(placed(`${at}.outcomeLabel`, repeat.outcomeLabel, floorIndex));
+  repeat.outcomeLines.forEach((line, lineIndex) => {
+    texts.push(
+      placed(`${at}.outcomeLines[${String(lineIndex)}]`, line, floorIndex),
+    );
+  });
+  texts.push(placed(`${at}.description`, repeat.description, floorIndex));
+  return texts;
 }
 
 /** The generated text of a picture, floor by floor and then outside the floors. */
@@ -76,6 +117,9 @@ export function pictureTexts(
       );
     }
     texts.push(placed(`${at}.description`, floor.description, index));
+    if (floor.repeat !== null) {
+      texts.push(...repeatTexts(floor.repeat, `${at}.repeat`, index));
+    }
   });
   texts.push(placed(`${prefix}.heading`, picture.heading));
   texts.push(placed(`${prefix}.dateLabel`, picture.dateLabel));
