@@ -634,7 +634,10 @@ export interface VisitSummary {
   readonly pooledFalseAlarmCount: number;
   /** `pooledFalseAlarmCount / pooledNoSoundTrialCount`, or 0 without no-sound trials. */
   readonly pooledFalseAlarmRateFraction: number;
-  /** The visit limit the rate was judged against (proposed, Q1). */
+  /**
+   * The visit limit the rate was judged against (Q1, decided by the owner's coordinator on
+   * 2026-11-16, at the owner's request).
+   */
   readonly visitFalseAlarmRateLimitFraction: number;
   /** Whether the rate is above it. Then every ear is unreliable and the visit should be repeated. */
   readonly visitFalseAlarmRateAboveLimit: boolean;

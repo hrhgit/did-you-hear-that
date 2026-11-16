@@ -1782,7 +1782,7 @@ describe('createVisitFlow: the swapped repeat (swapped-repeat design.md, "What e
   ];
 
   describe("unavailable", () => {
-    it("without a calibration: calibrationGone, plays nothing, ignores every press and every stop report but a left page; proceed shows the result (R3.3, R3.6, R3.7; Q6, PROPOSED, NOT APPROVED)", async () => {
+    it("without a calibration: calibrationGone, plays nothing, ignores every press and every stop report but a left page; proceed shows the result (R3.3, R3.6, R3.7; Q6, decided by the owner's coordinator on 2026-11-16, at the owner's request)", async () => {
       const harness = createHarness();
       const before = await toOfferingResult(harness);
       const floor = offeredFloors(before.result)[0]!;
@@ -1807,7 +1807,7 @@ describe('createVisitFlow: the swapped repeat (swapped-repeat design.md, "What e
       expect(expectSameLogAndSummary(harness, before).turnBackLine).toBeNull();
     }, 60_000);
 
-    it("with an earlier calibration: calibrationChanged; stop silences and shows the result, a left page shows it too (R3.4, R3.6; Q6, PROPOSED, NOT APPROVED)", async () => {
+    it("with an earlier calibration: calibrationChanged; stop silences and shows the result, a left page shows it too (R3.4, R3.6; Q6, decided by the owner's coordinator on 2026-11-16, at the owner's request)", async () => {
       const harness = createHarness();
       const result = await toResultWithChangedCalibration(harness);
       expect(result.summary.rooms[0]!.swappedRepeatOffered).toBe(true);

@@ -43,11 +43,11 @@ describe("missedSoundReplayConfig", () => {
     expect(missedSoundReplayConfig.replayGapMs).toBeGreaterThan(0);
   });
 
-  it("Q1 and Q2: keeps the most sounds at 20 and the gap at 400 ms, as proposed", () => {
+  it("Q1 and Q2: keeps the most sounds at 20 and the gap at 400 ms, as decided", () => {
     const message =
-      "replaySoundsMaxCount 20 (Q1) and replayGapMs 400 (Q2) are PROPOSED, NOT APPROVED. They " +
-      "await the project owner's choice in Q1 and Q2 of " +
-      ".kiro/specs/missed-sound-replay/design.md.";
+      "replaySoundsMaxCount 20 (Q1) and replayGapMs 400 (Q2) were decided by the owner's " +
+      "coordinator on 2026-11-16, at the owner's request, in Q1 and Q2 of " +
+      ".kiro/specs/missed-sound-replay/design.md. The owner may reverse them.";
     expect(missedSoundReplayConfig.replaySoundsMaxCount, message).toBe(20);
     expect(missedSoundReplayConfig.replayGapMs, message).toBe(400);
   });

@@ -14,7 +14,7 @@ Simulated listeners used by the property tests. A listener is a function from "a
   npx tsx tests/listeners/print-visit-rule-measurement.ts
   ```
 
-  The tables are what the project owner chooses the visit limit from. The limit in config, 0.2, is a proposal that awaits that choice (Q1 in `.kiro/specs/visit-flow/design.md`). Neither file is a test file, so Vitest does not collect them. The statistical property CP11 calls the same function.
+  The tables are what the project owner chooses the visit limit from. The limit in config, 0.2, was decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q1 in `.kiro/specs/visit-flow/design.md`). Neither file is a test file, so Vitest does not collect them. The statistical property CP11 calls the same function.
 - **The measurement of the replay's length.** `replay-length-measurement.ts` (`measureReplayLength`) plays rooms through the shipped engine with `playPopulationRooms`, takes them as many at a time as a visit has rooms, and counts each visit's missed sounds and answers on the wrong side. For each most count (20, 30, 45, 60 and no limit) and each gap (300, 400 and 600 ms) it gives how often the replay is a selection and how long it lasts. The most counts and gaps are parameters of the measurement; it changes no config value and chooses nothing. `print-replay-length-measurement.ts` runs it with the ranges, seeds and visit counts of "Measurements" in `.kiro/specs/missed-sound-replay/design.md` and prints the tables as Markdown. It writes no file and has no `package.json` script:
 
   ```
@@ -28,4 +28,4 @@ Simulated listeners used by the property tests. A listener is a function from "a
   npx tsx tests/listeners/print-attribution-measurement.ts
   ```
 
-  The tables bear on how "Correct attribution" is stated (Q1, decided by the owner on 2026-11-15) and on which listeners it uses (Q2, PROPOSED, NOT APPROVED). Their figures come from the engine alone and say nothing about real visitors. Neither file is a test file, so Vitest does not collect them.
+  The tables bear on how "Correct attribution" is stated (Q1, decided by the owner on 2026-11-15) and on which listeners it uses (Q2, decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it). Their figures come from the engine alone and say nothing about real visitors. Neither file is a test file, so Vitest does not collect them.

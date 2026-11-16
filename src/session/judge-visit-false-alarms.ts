@@ -18,7 +18,8 @@ export interface VisitFalseAlarmJudgement {
  * the room results it is given and judges the pooled rate against `limitFraction` with the
  * engine's `atMostFraction`, as the engine judges its per-room limit. Without no-sound trials the
  * rate is 0 and not above the limit. A pure function, called by the visit summary and by the
- * measurement of the rule. The limit the flow passes is a proposed value (Q1).
+ * measurement of the rule. The limit the flow passes was decided by the owner's coordinator on
+ * 2026-11-16, at the owner's request (Q1).
  */
 export function judgeVisitFalseAlarms(
   roomResults: readonly Pick<

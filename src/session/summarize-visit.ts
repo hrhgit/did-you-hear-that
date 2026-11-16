@@ -114,7 +114,8 @@ export function visitEarResult(
  * attempts is above the visit limit. Reasons are only added, after the search's own. Abandoned
  * attempts are left out. No room is compared with another. A pure function; the summary is frozen.
  *
- * The shipped visit limit is a proposed value (Q1).
+ * The shipped visit limit was decided by the owner's coordinator on 2026-11-16, at the owner's
+ * request (Q1).
  */
 export function summarizeVisit(
   log: VisitLog,

@@ -21,7 +21,7 @@ These values shape what is drawn. They change no sound and no decision about an 
 
 ## The missed-sound replay
 
-- `missed-sound-replay-config.ts`: `missedSoundReplayConfig`, the numbers the replay adds, deeply frozen by the file's own `deepFreeze`. `replayRaiseDb` (20) is how much louder each sound is played than when it was missed, from brief 07. `replaySoundsMaxCount` (20) is the most sounds one replay plays, PROPOSED, NOT APPROVED (question Q1 of `.kiro/specs/missed-sound-replay/design.md`). `replayGapMs` (400) is the wait from the end of one replayed sound to the request for the next, PROPOSED, NOT APPROVED (Q2). The file comments say so beside each value. The most refusals in a row of one replayed sound are not here: the replay reads `visitFlowConfig.refusedPlaysInARowMaxCount`.
+- `missed-sound-replay-config.ts`: `missedSoundReplayConfig`, the numbers the replay adds, deeply frozen by the file's own `deepFreeze`. `replayRaiseDb` (20) is how much louder each sound is played than when it was missed, from brief 07. `replaySoundsMaxCount` (20) is the most sounds one replay plays, decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (question Q1 of `.kiro/specs/missed-sound-replay/design.md`). `replayGapMs` (400) is the wait from the end of one replayed sound to the request for the next, decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q2). The file comments say so beside each value. The most refusals in a row of one replayed sound are not here: the replay reads `visitFlowConfig.refusedPlaysInARowMaxCount`.
 
 ## The swapped repeat
 

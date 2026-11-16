@@ -10,13 +10,14 @@ import {
 } from "../listeners/visit-rule-measurement";
 
 // CP11. What the visit rule removes and costs (Statistical; R23.4; visit-flow design.md, CP11 and
-// "Measurements"). The limits below describe the visit limit in visitFlowConfig, which is a
-// proposal awaiting the project owner's choice (Q1). If the owner chooses another value, these
-// limits are restated from the table in "Measurements" in the same commit.
+// "Measurements"). The limits below describe the visit limit in visitFlowConfig, which was
+// decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1). If the owner
+// chooses another value, these limits are restated from the table in "Measurements" in the same
+// commit.
 
 const timeoutMs = 120_000;
 
-/** The shipped visit limit: proposed, not approved (Q1). */
+/** The shipped visit limit (Q1, decided by the owner's coordinator on 2026-11-16). */
 const visitLimitFraction =
   visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction;
 

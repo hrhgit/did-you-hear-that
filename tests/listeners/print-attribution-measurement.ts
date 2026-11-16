@@ -6,8 +6,9 @@
 // Plays the grid of ear differences and imbalances through the shipped engine with the listeners,
 // seeds and run counts of "Measurements", and prints its tables as Markdown, with the method. It
 // writes no file and needs no package.json script. The numbers bear on Q1 (decided by the owner on
-// 2026-11-15) and Q2 (PROPOSED, NOT APPROVED). The script chooses nothing and changes no config
-// value. The figures come from the engine alone and say nothing about real visitors.
+// 2026-11-15) and Q2 (decided by the owner's coordinator on 2026-11-16, at the owner's request).
+// The script chooses nothing and changes no config value. The figures come from the engine alone
+// and say nothing about real visitors.
 
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { swappedRepeatConfig } from "../../src/config/swapped-repeat-config";

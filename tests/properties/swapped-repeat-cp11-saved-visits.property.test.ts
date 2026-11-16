@@ -56,7 +56,10 @@ import {
 //   changed stored values (its sub-question as the owner's coordinator chose it on 2026-11-15; the
 //   owner may reverse it).
 
-/** Runs (design.md, "Run counts and time"; Q9, PROPOSED, NOT APPROVED). */
+/**
+ * Runs (design.md, "Run counts and time"; Q9, decided by the owner's coordinator on 2026-11-16,
+ * at the owner's request).
+ */
 const runs = 300;
 const timeoutMs = 120_000;
 

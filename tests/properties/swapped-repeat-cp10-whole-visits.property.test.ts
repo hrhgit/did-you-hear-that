@@ -47,7 +47,8 @@ import {
 // (audio-output D43).
 //
 // The listener is a Step_Listener so that each estimate lies within one step of the truth
-// (threshold-search CP1), which is what the oracle's tolerance needs (Q2, PROPOSED, NOT APPROVED).
+// (threshold-search CP1), which is what the oracle's tolerance needs (Q2, decided by the owner's
+// coordinator on 2026-11-16, at the owner's request).
 // So that its answers stay those of a Step_Listener in a whole visit, every answer comes within
 // the first half of its window with the time stamp of its press, and the script has no extra
 // presses; its disturbances and the behaviour's events stay as drawn.
@@ -92,7 +93,10 @@ vi.mock("../../src/session/create-swapped-repeat", async (importOriginal) => {
   };
 });
 
-/** Runs (design.md, "Run counts and time": PROPOSED, NOT APPROVED, Q9). */
+/**
+ * Runs (design.md, "Run counts and time"; Q9, decided by the owner's coordinator on 2026-11-16,
+ * at the owner's request).
+ */
 const runs = 30;
 const timeoutMs = 120_000;
 

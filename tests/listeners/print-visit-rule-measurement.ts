@@ -393,7 +393,7 @@ function printListenerSets(): void {
 const startedAtMs = performance.now();
 console.log("# Measurement of the visit-level false alarm rule\n");
 console.log(
-  `Candidate visit limits: ${candidateLimits.map((limitFraction) => limitFraction.toFixed(2)).join(", ")}, and none. The value in visitFlowConfig is ${visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction.toFixed(2)}, a proposal awaiting the project owner's choice (Q1). With a visit limit, every ear of a marked visit counts as Flagged.\n`,
+  `Candidate visit limits: ${candidateLimits.map((limitFraction) => limitFraction.toFixed(2)).join(", ")}, and none. The value in visitFlowConfig is ${visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction.toFixed(2)}, decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1). With a visit limit, every ear of a marked visit counts as Flagged.\n`,
 );
 printFixedListeners();
 printRanges();

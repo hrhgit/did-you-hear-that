@@ -32,7 +32,10 @@ vi.mock("../../src/audio/synth/sound-renderers", async () => {
   return { soundRenderers: worstCaseRenderers };
 });
 
-/** Runs (design.md, "Run counts and time"; Q9, PROPOSED, NOT APPROVED). */
+/**
+ * Runs (design.md, "Run counts and time"; Q9, decided by the owner's coordinator on 2026-11-16,
+ * at the owner's request).
+ */
 const runs = 300;
 const timeoutMs = 120_000;
 /** Times are sums of whole and fractional milliseconds on the timer's clock; equal up to rounding. */

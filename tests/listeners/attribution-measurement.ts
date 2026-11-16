@@ -6,8 +6,9 @@
 // ("literal") and against the rule applied to the true differences D1 = E + H and D2 = E − H
 // ("rule oracle"), with one and with two upward steps of tolerance. It decides nothing: the
 // property's statement is the owner's (Q1, decided by the owner on 2026-11-15) and the choice of
-// listeners is Q2, PROPOSED, NOT APPROVED. It changes no config value. The figures come from the
-// engine alone and say nothing about real visitors.
+// listeners is Q2, decided by the owner's coordinator on 2026-11-16, at the owner's request. It
+// changes no config value. The figures come from the engine alone and say nothing about real
+// visitors.
 
 import type { HearingMethodConfig } from "../../src/config/hearing-method-config";
 import { createSeededRandom } from "../../src/config/seeded-random";

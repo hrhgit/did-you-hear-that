@@ -37,9 +37,13 @@ import {
 // summarizeVisit, the offer as the summary gives it, the repeat's ears as a room's, and the
 // outcome by swappedRepeatOutcome. The answer is in the oracle's accepted set for D1 = E + H and
 // D2 = E − H, and where one of E and H is zero it is the brief's own sentence (Q1, decided by the
-// owner on 2026-11-15). The listeners are Step_Listeners (Q2, PROPOSED, NOT APPROVED).
+// owner on 2026-11-15). The listeners are Step_Listeners (Q2, decided by the owner's coordinator
+// on 2026-11-16, at the owner's request).
 
-/** Runs (design.md, "Run counts and time"; Q9, PROPOSED, NOT APPROVED). */
+/**
+ * Runs (design.md, "Run counts and time"; Q9, decided by the owner's coordinator on 2026-11-16,
+ * at the owner's request).
+ */
 const runs = 1000;
 const timeoutMs = 120_000;
 

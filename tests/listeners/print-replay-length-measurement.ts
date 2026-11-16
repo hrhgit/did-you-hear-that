@@ -50,11 +50,17 @@ const maxCounts: readonly (number | null)[] = Object.freeze([
   null,
 ]);
 const gapsMs: readonly number[] = Object.freeze([300, 400, 600]);
-/** The gap the length table is printed for: the proposed `replayGapMs` (Q2, PROPOSED, NOT APPROVED). */
+/**
+ * The gap the length table is printed for: the proposed `replayGapMs` (Q2, decided by the owner's
+ * coordinator on 2026-11-16, at the owner's request).
+ */
 const lengthTableGapMs = 400;
 /** The most counts of the gap table's first two columns. */
 const gapTableMaxCounts: readonly number[] = Object.freeze([20, 30]);
-/** The most count marked as proposed: `replaySoundsMaxCount` (Q1, PROPOSED, NOT APPROVED). */
+/**
+ * The most count marked as proposed: `replaySoundsMaxCount` (Q1, decided by the owner's
+ * coordinator on 2026-11-16, at the owner's request).
+ */
 const proposedMaxCount = 20;
 
 const ranges: readonly ListenerParameterRange[] = Object.freeze([
@@ -259,7 +265,7 @@ function main(): void {
     }
   }
   console.log(
-    `Method: playPopulationRooms with specSearchUnderTest and hearingMethodConfig, ${String(visitCount)} visits per column, one listener per room, seed ${String(visitSeed.quick)} for quick visits and ${String(visitSeed.full)} for full ones. The proposed most count (${String(proposedMaxCount)}) and gap (${String(lengthTableGapMs)} ms) are PROPOSED, NOT APPROVED (Q1, Q2).`,
+    `Method: playPopulationRooms with specSearchUnderTest and hearingMethodConfig, ${String(visitCount)} visits per column, one listener per room, seed ${String(visitSeed.quick)} for quick visits and ${String(visitSeed.full)} for full ones. The proposed most count (${String(proposedMaxCount)}) and gap (${String(lengthTableGapMs)} ms) were decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1, Q2).`,
   );
   console.log("");
   printCounts(measurements);

@@ -17,7 +17,10 @@ import type {
 // settings with 0 < unclearBelowDb ≤ differenceLimitDb. Levels and settings lie on a 0.5 dB grid,
 // so every difference is exact.
 
-/** Runs (design.md, "Run counts and time"; Q9, PROPOSED, NOT APPROVED). */
+/**
+ * Runs (design.md, "Run counts and time"; Q9, decided by the owner's coordinator on 2026-11-16,
+ * at the owner's request).
+ */
 const runs = 1000;
 const timeoutMs = 120_000;
 

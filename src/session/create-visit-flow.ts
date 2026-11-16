@@ -1334,7 +1334,7 @@ export function createVisitFlow(
           return;
         }
         // The repeat runs on the first run's calibration or not at all (swapped-repeat D8; Q6,
-        // PROPOSED, NOT APPROVED).
+        // decided by the owner's coordinator on 2026-11-16, at the owner's request).
         const unavailable: SwappedRepeatUnavailableReason | null =
           output.rangeReport() === null
             ? "calibrationGone"

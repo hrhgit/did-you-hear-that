@@ -43,12 +43,12 @@ describe("visitFlowConfig", () => {
     expect(visitFlowConfig.refusedPlaysInARowMaxCount).toBeGreaterThan(0);
   });
 
-  it("Q1: keeps the visit limit at its proposed value 0.2", () => {
+  it("Q1: keeps the visit limit at its decided value 0.2", () => {
     expect(
       visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction,
-      "0.2 is a proposal of the visit-flow spec, not an approved value. Changing it is the " +
-        "project owner's choice, recorded in Q1 of .kiro/specs/visit-flow/design.md, and then " +
-        "the limits of CP11 are restated from its Measurements table.",
+      "0.2 was proposed by the visit-flow spec and decided by the owner's coordinator on " +
+        "2026-11-16, at the owner's request, in Q1 of .kiro/specs/visit-flow/design.md. The " +
+        "owner may reverse it; then the limits of CP11 are restated from its Measurements table.",
     ).toBe(0.2);
   });
 });

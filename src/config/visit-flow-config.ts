@@ -5,9 +5,10 @@
  */
 export interface VisitFlowConfig {
   /**
-   * PROPOSED, NOT APPROVED (visit-flow design.md, D17 and Q1). A visit whose false alarm rate over
-   * the no-sound trials of all its rooms is above this is marked unreliable as a whole. A strict
-   * limit: a rate exactly at it is not above it.
+   * Decided by the owner's coordinator on 2026-11-16, at the owner's request (visit-flow
+   * design.md, D17 and Q1). A visit whose false alarm rate over the no-sound trials of all its
+   * rooms is above this is marked unreliable as a whole. A strict limit: a rate exactly at it is
+   * not above it.
    */
   readonly visitFalseAlarmRateUnreliableAboveFraction: number;
   /** After this many refusals in a row of one trial's sound, the visit ends (D25). */
@@ -26,7 +27,8 @@ function deepFreeze<T>(value: T): T {
 }
 
 export const visitFlowConfig: VisitFlowConfig = deepFreeze({
-  // D17, Q1: proposed by this spec from the measurement in design.md. Awaits the owner's choice.
+  // D17, Q1: proposed by this spec from the measurement in design.md; decided by the owner's
+  // coordinator on 2026-11-16, at the owner's request.
   visitFalseAlarmRateUnreliableAboveFraction: 0.2,
   // D25
   refusedPlaysInARowMaxCount: 3,
