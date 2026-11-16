@@ -77,7 +77,8 @@ Every number below lives in `src/config` and is expected to change after listeni
 | Response window after a sound starts | 2.0 s |
 | Gap between trials | random, 1.5 to 4.0 s |
 | Share of no-sound trials | 15 to 25 percent |
-| False alarm rate that marks a visit unreliable | above 30 percent |
+| False alarm rate that marks a visit unreliable, applied to each room | above 30 percent |
+| False alarm rate over a whole visit that marks the visit unreliable | above 20 percent |
 | Trial limit per ear per room | 20 |
 | Left and right difference that triggers the swapped repeat | 15 dB |
 | Rooms, full visit | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz |

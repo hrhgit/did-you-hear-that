@@ -14,13 +14,13 @@ People who wear headphones for hours a day and have never had their hearing chec
 
 ## What the visitor does
 
-1. Enters the house. Chooses the 3 minute visit, the 7 minute visit, or a 60 second replay that needs no headphones.
+1. Enters the house. Chooses the visit of about 7 minutes, the visit of about 12 minutes, or a 60 second replay that needs no headphones.
 2. Calibrates. Rubs their hands next to one ear and matches a noise in the headphones to that sound. Confirms left and right are not swapped.
 3. Walks through rooms. Each room uses one pitch. Left ear and right ear trials are mixed in random order. On some trials the house makes no sound at all.
-4. Opens the last door (7 minute visit only). A voice says three digits in noise and the visitor types them.
+4. Opens the last door (the visit of about 12 minutes only). A voice says three digits in noise and the visitor types them.
 5. Hears the replay. Every sound they missed is played again, louder, from where it was.
 6. Sees the result. A cross-section of a five-storey house with a left wing and a right wing. Light reaches as deep into each wing as that ear could hear on that floor.
-7. Swaps the headphones and repeats one room, if left and right differed a lot on that floor.
+7. Swaps the headphones and repeats a floor where left and right differed a lot. Each such floor can be repeated until one run of it ends with a record.
 
 ## What the result may claim
 
