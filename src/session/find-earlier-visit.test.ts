@@ -10,8 +10,9 @@ import { summarizeVisit } from "./summarize-visit";
 import type { VisitLog } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
 
-// Lists written by hand. findEarlierVisit reads only each visit's id and headphone name, so every
-// visit here shares one summary and one log.
+// Lists written by hand. findEarlierVisit reads only each visit's id, headphone name and the
+// anchor of its calibration, so every visit here shares one summary and, but for that anchor, one
+// log.
 
 const counts = {
   presentationCount: 12,
@@ -25,7 +26,21 @@ const visitLog: VisitLog = {
   visitType: "quick",
   visitSeed: 42,
   rooms,
-  calibrations: [],
+  calibrations: [
+    {
+      calibrationIndex: 0,
+      settingDb: -20,
+      roomTopLevelDb: {
+        cellar: 5,
+        corridor: 5,
+        nursery: 5,
+        stairs: 5,
+        attic: 5,
+      },
+      keptAtMs: 500,
+      anchor: "music",
+    },
+  ],
   headphoneChecks: [],
   roomAttempts: rooms.map((room) => ({
     roomIndex: room.roomIndex,
@@ -52,9 +67,24 @@ const visitLog: VisitLog = {
 };
 const summary = summarizeVisit(visitLog);
 
+/** The log anchored another way: with the hiss, or matched to the hands before audible-start. */
+function logAnchoredWith(anchor: "music" | "hiss" | "hands"): VisitLog {
+  return {
+    ...visitLog,
+    calibrations: visitLog.calibrations.map((calibration) => ({
+      calibrationIndex: calibration.calibrationIndex,
+      settingDb: calibration.settingDb,
+      roomTopLevelDb: calibration.roomTopLevelDb,
+      keptAtMs: calibration.keptAtMs,
+      ...(anchor === "hands" ? {} : { anchor }),
+    })),
+  };
+}
+
 function savedVisit(
   savedVisitId: string,
   headphoneName: string | null,
+  anchor: "music" | "hiss" | "hands" = "music",
 ): SavedVisit {
   return {
     savedVisitId,
@@ -63,7 +93,7 @@ function savedVisit(
     visitType: "quick",
     headphoneName,
     summary,
-    visitLog,
+    visitLog: logAnchoredWith(anchor),
     floorDb: hearingMethodConfig.floorDb,
     swappedRepeatDifferenceDb: hearingMethodConfig.swappedRepeatDifferenceDb,
     swappedRepeats: [],
@@ -164,6 +194,71 @@ describe("findEarlierVisit", () => {
     expect(
       findEarlierVisit(listOf(d, longVisit), "White earbuds", d.savedVisitId),
     ).toBe(longVisit);
+  });
+
+  describe("anchors (audible-start R11.4, D26)", () => {
+    const handsOld = savedVisit("000000a1", "White earbuds", "hands");
+    const handsOlder = savedVisit("000000a0", "White earbuds", "hands");
+    const music = savedVisit("000000b1", "White earbuds", "music");
+    const hiss = savedVisit("000000c1", "White earbuds", "hiss");
+
+    it("skips a visit anchored to the hands for a visit not saved, which is never anchored so", () => {
+      expect(
+        findEarlierVisit(listOf(handsOld, music), "White earbuds", null),
+      ).toBe(music);
+      expect(
+        findEarlierVisit(listOf(handsOld, handsOlder), "White earbuds", null),
+      ).toBeNull();
+      expect(
+        findEarlierVisit(
+          listOf(handsOld, handsOlder),
+          "White earbuds",
+          "ffffffff",
+        ),
+      ).toBeNull();
+    });
+
+    it("skips a visit anchored to the hands for a shown visit anchored with the music or the hiss", () => {
+      for (const shown of [
+        savedVisit("000000d1", "White earbuds", "music"),
+        savedVisit("000000d2", "White earbuds", "hiss"),
+      ]) {
+        expect(
+          findEarlierVisit(
+            listOf(shown, handsOld, hiss, handsOlder),
+            "White earbuds",
+            shown.savedVisitId,
+          ),
+        ).toBe(hiss);
+        expect(
+          findEarlierVisit(
+            listOf(shown, handsOld),
+            "White earbuds",
+            shown.savedVisitId,
+          ),
+        ).toBeNull();
+      }
+    });
+
+    it("finds a visit anchored to the hands for a shown visit anchored the same way", () => {
+      expect(
+        findEarlierVisit(
+          listOf(handsOld, handsOlder),
+          "White earbuds",
+          handsOld.savedVisitId,
+        ),
+      ).toBe(handsOlder);
+    });
+
+    it("leaves a visit anchored with the hiss for one anchored with the music to the picture, which draws nothing of it", () => {
+      expect(
+        findEarlierVisit(
+          listOf(music, hiss),
+          "White earbuds",
+          music.savedVisitId,
+        ),
+      ).toBe(hiss);
+    });
   });
 
   it("gives null for a list that is not ready, which lists no visits", () => {

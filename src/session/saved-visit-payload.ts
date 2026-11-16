@@ -139,6 +139,22 @@ function roomsEqual(first: unknown, second: unknown): boolean {
   );
 }
 
+/**
+ * The anchors a calibration may be saved with (audible-start design.md, "Checking a payload"). A
+ * saved `hands` is unreadable, because no calibration is logged so: a calibration recorded before
+ * the audible-start spec has no `anchor` at all.
+ */
+const savedAnchors: readonly unknown[] = Object.freeze(["music", "hiss"]);
+
+/** Whether a calibration's `anchor`, when it has one, is one a calibration may be saved with. */
+function calibrationAnchorHolds(calibration: unknown): boolean {
+  return (
+    !isJsonObject(calibration) ||
+    !Object.hasOwn(calibration, "anchor") ||
+    savedAnchors.includes(calibration.anchor)
+  );
+}
+
 /** Rule 2: the light check of the log. */
 function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
   if (
@@ -150,7 +166,8 @@ function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
     log.visitSeed > largestSeed ||
     !Array.isArray(log.rooms) ||
     log.rooms.length === 0 ||
-    !logListFields.every((field) => Array.isArray(log[field]))
+    !logListFields.every((field) => Array.isArray(log[field])) ||
+    !(log.calibrations as readonly unknown[]).every(calibrationAnchorHolds)
   ) {
     return false;
   }
@@ -325,7 +342,9 @@ export function savedVisitPayloadJson(
  * invariant `summarizeVisit` gives. The summary is never computed again (D9), and the log is not
  * checked against the engine, which is the no-headphone replay's to do. A payload without the key
  * `swappedRepeats` reads with an empty list; a payload with it reads only when its records meet
- * `swappedRepeatRunsHold` (swapped-repeat R13.3, R13.4). Never throws.
+ * `swappedRepeatRunsHold` (swapped-repeat R13.3, R13.4). A calibration's `anchor`, when present,
+ * is `music` or `hiss`; a payload written before the audible-start spec has none and reads as
+ * before (audible-start R11.1, R11.5). Never throws.
  */
 export function parseSavedVisitPayload(
   payloadJson: string,

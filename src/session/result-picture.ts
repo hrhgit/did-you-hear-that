@@ -25,6 +25,7 @@ import {
   visitDateLabel,
   visitTypeLabel,
 } from "../copy/saved-visit-lines";
+import { floorAnchorKind, sameAnchorKind } from "./calibration-anchor";
 import type { FloorScale } from "./light-depth-fraction";
 import { lightDepthFraction } from "./light-depth-fraction";
 import { swappedRepeatComparison } from "./swapped-repeat-comparison";
@@ -43,12 +44,14 @@ import type {
   VisitSummary,
   VisitType,
 } from "./result-page-types";
-import type { RoomSummary } from "./visit-flow-types";
+import type { RoomSummary, VisitLog } from "./visit-flow-types";
 
 /** What the picture is drawn from, for a live result or a saved visit alike. */
 interface PictureSource {
   readonly kind: "live" | "saved";
   readonly summary: VisitSummary;
+  /** The log the summary was made from, which says how each floor's anchor was set. */
+  readonly visitLog: VisitLog;
   readonly visitType: VisitType;
   readonly floorDb: number;
   readonly localDate: LocalDate;
@@ -74,6 +77,7 @@ function sourceOf(input: ResultPictureInput): PictureSource {
     return {
       kind: "live",
       summary: input.visit.summary,
+      visitLog: input.visit.visitLog,
       visitType: input.visit.visitLog.visitType,
       floorDb: hearingMethodConfig.floorDb,
       localDate: input.localDate,
@@ -84,6 +88,7 @@ function sourceOf(input: ResultPictureInput): PictureSource {
   return {
     kind: "saved",
     summary: input.savedVisit.summary,
+    visitLog: input.savedVisit.visitLog,
     visitType: input.savedVisit.visitType,
     floorDb: input.savedVisit.floorDb,
     localDate: input.savedVisit.savedOnLocalDate,
@@ -203,16 +208,31 @@ function repeatRunOf(
   );
 }
 
-/** The earlier visit's room summary of the same room, or null when it did not enter that room. */
+/**
+ * The earlier visit's room summary of the same room, or null when it did not enter that room, or
+ * when the two floors' anchors were set in different ways, which are never compared
+ * (audible-start R11.3, D26).
+ */
 function earlierRoomOf(
   earlierVisit: SavedVisit | null,
+  shownLog: VisitLog,
   roomSummary: RoomSummary,
 ): RoomSummary | null {
-  return (
-    earlierVisit?.summary.rooms.find(
-      (earlierRoom) => earlierRoom.room.roomId === roomSummary.room.roomId,
-    ) ?? null
+  if (earlierVisit === null) {
+    return null;
+  }
+  const earlierRoom = earlierVisit.summary.rooms.find(
+    (room) => room.room.roomId === roomSummary.room.roomId,
   );
+  if (earlierRoom === undefined) {
+    return null;
+  }
+  return sameAnchorKind(
+    floorAnchorKind(shownLog, roomSummary.room.roomIndex),
+    floorAnchorKind(earlierVisit.visitLog, earlierRoom.room.roomIndex),
+  )
+    ? earlierRoom
+    : null;
 }
 
 /** The line naming the earlier visit (D25), or null without one. */
@@ -238,8 +258,9 @@ function comparisonOf(
  * more than one floor are the pooled false alarm line and the visit notice (D17). Every string
  * comes from `src/copy`, and the limits statement is the constant itself. Only a live result
  * offers the swapped repeat (D20). With an earlier visit, each wing of a floor whose room the
- * earlier visit also entered has its earlier state and an outline on this floor's own scale, and
- * `comparison` names the earlier visit's date; without one, every `earlier` and `comparison` is
+ * earlier visit also entered, with an anchor set the same way (audible-start R11.3, D26), has its
+ * earlier state and an outline on this floor's own scale, and `comparison` names the earlier
+ * visit's date when at least one floor has; without one, every `earlier` and `comparison` is
  * null (D25). Each floor with a swapped repeat in `visit.swappedRepeats` or
  * `savedVisit.swappedRepeats` gives its Comparison in `repeat` and offers no repeat; every other
  * field is what it is without repeats (swapped-repeat R12). A pure function: the same input gives
@@ -249,12 +270,15 @@ export function resultPicture(input: ResultPictureInput): ResultPicture {
   const source = sourceOf(input);
   const { summary, visitType, localDate } = source;
   const roomCount = summary.rooms.length;
-  const floors = summary.rooms.map((roomSummary) =>
+  const earlierRooms = summary.rooms.map((roomSummary) =>
+    earlierRoomOf(input.earlierVisit, source.visitLog, roomSummary),
+  );
+  const floors = summary.rooms.map((roomSummary, position) =>
     floor(
       roomSummary,
       source.floorDb,
       source.kind === "live",
-      earlierRoomOf(input.earlierVisit, roomSummary),
+      earlierRooms[position] ?? null,
       repeatRunOf(source.swappedRepeats, roomSummary),
     ),
   );
@@ -282,7 +306,10 @@ export function resultPicture(input: ResultPictureInput): ResultPicture {
         }
       : null,
     limitsStatement,
-    comparison: comparisonOf(input.earlierVisit),
+    // Named only when a floor draws it (audible-start R11.3).
+    comparison: earlierRooms.some((earlierRoom) => earlierRoom !== null)
+      ? comparisonOf(input.earlierVisit)
+      : null,
     imageCaption: imageCaption(localDate, visitType, roomCount),
     imageFileBaseName: imageFileBaseName(localDate),
   };

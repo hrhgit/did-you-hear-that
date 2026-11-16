@@ -32,7 +32,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
 
 **End of batch 1.**
 
-- [ ] 2. Add the music's config and its pure helpers
+- [x] 2. Add the music's config and its pure helpers
   - Change `src/config/audio-output-config.ts`: add `calibrationSettingSpanMinDb` 10, `calibrationMusicRisePeriodMs` 2000, `calibrationMusicGainStepMs` 100 and `calibrationMusicLoadMaxMs` 10000 with the comments of "Config". In its test: the values, the unit endings, the guard that refuses `calibrationMusicRisePeriodMs` below 2000 with the loosening message, and that the step divides the period.
   - Create `src/config/calibration-music-config.ts` (`calibrationMusicConfig.filePath` `"audio/calibration-waltz.m4a"`, deeply frozen) and its test: the only field; a relative path without `..`; ends `.m4a`.
   - Create, in `src/audio/output/`: `measure-calibration-music.ts` (`measureCalibrationMusic(samples)`: `{ rmsFraction, peakFraction, crestDb }`, or null for an empty, silent or not finite buffer), `calibration-music-top.ts` (`calibrationMusicTopDb(crestDb)`: the highest grid setting at which the music's peak at Music_Level_Gain is at most the ceiling, and `calibrationControlTopDb(crestDb)`: the lower of that and `calibrationSettingTopDb()`), `next-calibration-music-setting.ts` (`nextCalibrationMusicSettingDb(playedDb, targetDb, topDb)` as "Playing" says), each with its test: a crest of 18.40 and of 18.44 dB gives −5; the measured case of 44 100 Hz (peak 0.92182, RMS 0.11088) gives a peak of 0.2338 at −5; a rise never above 0.25 dB a step; a fall in one step; never above the top. None imports Web Audio.
@@ -44,7 +44,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
   - _Files: creates `src/config/calibration-music-config.ts`, `src/config/calibration-music-config.test.ts`, `src/audio/output/measure-calibration-music.ts`, `src/audio/output/measure-calibration-music.test.ts`, `src/audio/output/calibration-music-top.ts`, `src/audio/output/calibration-music-top.test.ts`, `src/audio/output/next-calibration-music-setting.ts`, `src/audio/output/next-calibration-music-setting.test.ts`, `tools/measure-calibration-music.ts`; changes `src/config/audio-output-config.ts`, `src/config/audio-output-config.test.ts`, `tools/README.md`_
   - _Commit: `Add the calibration music's config and the pure functions that measure and step it`_
 
-- [ ] 3. Play the calibration music in the output stage
+- [x] 3. Play the calibration music in the output stage
   - Change `src/audio/output/audio-backend.ts` by `loadCalibrationMusic(path)`, `startLoop(channels, startMs, levelGain, fadeInMs)`, `rampLoopLevel(levelGain, startMs, endMs)` and `stopLoop(fadeOutMs)`, with comments; `fadeToSilence` also stops the loop.
   - Change `src/audio/output/output-graph.ts` and `web-audio-backend.ts`: the loop's source of two equal channels, its level gain (exponential ramps) and its fade gain (the raised-cosine curve of `apply-output-fade.ts`), behind the stop gain; the fetch from `document.baseURI`, `decodeAudioData`, a copy of the first channel. Change `fake-audio-backend.ts`: a scripted `loadCalibrationMusic` (resolve, reject, pending) and a record of every loop call with its audio clock time.
   - Change `src/audio/output/create-audio-output.ts` by the shell's music calls of "Playing" in `design.md`: loading in the first `activate` that creates the context, once; measuring; the Music_Top; the fallback rules and the time-out (`hiss` for the life of the shell); start at the bottom with the fade in; steps by the injected timer that never overlap on the audio clock; the ceiling on the measured peak, logged if it ever acts; `busy` for every other sound while the music plays and during its stop fade; stop on `stopCalibrationMusic` and on every stop; `keepCalibration` with the music keeps the Played_Setting rounded down to the grid. The hiss repeats are unchanged. In its test: each row of the error table that concerns the music; loading once; the time-out; a result after the time-out dropped; `busy`; keep while rising.
@@ -57,7 +57,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
   - _Files: creates `tests/properties/calibration-music-fixture.ts`, `tests/properties/audible-start-cp6-music-is-safe.property.test.ts`; changes `src/audio/output/audio-backend.ts`, `src/audio/output/output-graph.ts`, `src/audio/output/web-audio-backend.ts`, `src/audio/output/fake-audio-backend.ts`, `src/audio/output/create-audio-output.ts`, `src/audio/output/create-audio-output.test.ts`, `src/audio/output/README.md`, `tests/properties/output-shell-harness.ts`, `.kiro/specs/audible-start/design.md` (times)_
   - _Commit: `Load, measure and loop the calibration music in the output stage`_
 
-- [ ] 4. Calibrate with the music, and write its copy
+- [x] 4. Calibrate with the music, and write its copy
   - Change `src/copy/calibration-copy.ts` and `src/copy/visit-copy.ts` word for word from "The calibration copy" in `design.md`; `src/copy/leaving-copy.ts` (`pauseLines.deviceChanged`) and `src/copy/output-state-copy.ts` (device changed) as "Every place that names the hiss"; `src/copy/output-copy.test.ts` (`/calibrate again/i`) and the copy tests for every new string, free of banned terms and of "hand".
   - Change `src/session/calibration-controller.ts`: it plays the music while the shell's Calibration_Sound is `music`, the repeats while it is `hiss`, and while `loading` it remembers `open()` and starts the sound when loading ends, if still open; the target goes to the shell with `setCalibrationMusicTarget`; the played setting follows the shell's steps; `close()` and `keep()` stop the music; its top is the shell's `calibrationControlTopDb()`; its snapshot gives the sound and its line from the copy of that sound. In its test, with the Fake_Backend and the manual timer: the music path, loading then music, loading then fallback, the lines of each.
   - Change `src/session/visit-flow-types.ts` by `CalibrationSound`, `CalibrationAnchor`, the optional `CalibrationSnapshot.calibrationSound`, `heading` and `introLines`, the optional `LoggedCalibration.anchor`, and the rewritten comments of `startCalibration`, `louder`, `CalibrationSnapshot` and `playing`, word for word; type checks in `visit-flow-types.test.ts`.
@@ -71,7 +71,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
   - _Files: changes `src/copy/calibration-copy.ts`, `src/copy/visit-copy.ts`, `src/copy/leaving-copy.ts`, `src/copy/output-state-copy.ts`, `src/copy/output-copy.test.ts`, `src/copy/house-copy.test.ts`, `src/copy/README.md`, `src/session/calibration-controller.ts`, `src/session/calibration-controller.test.ts`, `src/session/visit-flow-types.ts`, `src/session/visit-flow-types.test.ts`, `src/session/create-visit-flow.ts`, `src/session/create-visit-flow.test.ts`, `src/session/visit-log-recorder.ts`, `src/session/visit-log-recorder.test.ts`, `src/session/listening-page-session.ts`, `src/session/listening-page-session.test.ts`, `src/session/README.md`, `src/config/audio-output-config.ts`, `src/config/README.md`, `src/audio/output/README.md`, `tests/listeners/simulated-visitor.ts`, `tests/listeners/simulated-visitor.test.ts`, `tests/listeners/README.md`, `tests/properties/visit-flow-harness.ts`_
   - _Commit: `Calibrate with the music at a comfortable volume and rewrite the calibration copy`_
 
-- [ ] 5. Write the anchor and the exception to rule 6 into the steering
+- [x] 5. Write the anchor and the exception to rule 6 into the steering
   - Change `.kiro/steering/hearing-method.md`: "Level scale" becomes the two paragraphs of "The anchor" in `design.md`, word for word.
   - Change `.kiro/steering/product.md`: step 2 becomes the text of "The anchor", word for word.
   - Change `.kiro/steering/audio-safety.md`: the sentence of "The exception to rule 6", word for word, indented under item 6. Nothing else.
@@ -83,7 +83,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
   - _Files: changes `.kiro/steering/hearing-method.md`, `.kiro/steering/product.md`, `.kiro/steering/audio-safety.md`, `src/config/audio-safety-config.ts`, `docs/architecture.md`_
   - _Commit: `Make the comfortable music volume the anchor and record the owner's exception for the calibration music`_
 
-- [ ] 6. Lower the cap to 5 dB above the anchor
+- [x] 6. Lower the cap to 5 dB above the anchor
   - Change `src/config/hearing-method-config.ts`: `capRelativeToAnchorDb` 5, with the comment of "Config". In its test: the value, and the guard that refuses above 5 with the message of "Config".
   - Change `.kiro/steering/hearing-method.md`: the row "Loudest allowed level" as "Steering" gives it.
   - Update every test that writes 15 as the cap or as an expected top, as the table of "The cap" lists, to the values the config now gives; change no property's statement, run count or tolerance. If a test or property fails for a reason other than an expected value of 15, stop and report.
@@ -95,7 +95,7 @@ The order is the one the request fixes: the calibration target (task 1); the cal
   - _Files: changes `src/config/hearing-method-config.ts`, `src/config/hearing-method-config.test.ts`, `.kiro/steering/hearing-method.md`, and the tests listed in "The cap": `src/audio/output/room-top-level.test.ts`, `range-report.test.ts`, `prepare-playback.test.ts`, `create-audio-output.test.ts`, `src/session/room-search-cap.test.ts`, `listening-page-session.test.ts`, `room-runner.test.ts`, `create-visit-flow.test.ts`, `create-swapped-repeat.test.ts`, `missed-sound-replay-plan.test.ts`, `missed-sound-replay-view.test.ts`, `src/copy/swapped-repeat-copy.test.ts`, `tests/properties/swapped-repeat-arbitraries.ts`, and any other test whose expected value was the cap of 15_
   - _Commit: `Lower the cap to 5 dB above the anchor`_
 
-- [ ] 7. Keep saved visits from before and compare only like anchors
+- [x] 7. Keep saved visits from before and compare only like anchors
   - Create `src/session/calibration-anchor.ts` (`anchorKindOf(log, calibrationIndex)`, absent `anchor` giving `hands`; `floorAnchorKind(log, roomIndex)`; `sameAnchorKind`) and its test.
   - Change `src/session/result-picture.ts` and its test: an earlier mark only between floors of one Anchor_Kind, `comparison` null when no floor has one (R11.3). Change `src/session/find-earlier-visit.ts` and its test as R11.4.
   - Change `src/session/saved-visit-payload.ts` and its test: the rule for `calibrations[i].anchor` of "Checking a payload"; a payload of today reads unchanged.

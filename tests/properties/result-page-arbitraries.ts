@@ -213,16 +213,37 @@ export const roomPlanArbitrary: fc.Arbitrary<RoomPlan> = gridLevelArbitrary(
   ),
 );
 
-/** What a drawn visit holds: one room plan per room of its visit type. */
+/**
+ * How a drawn visit's calibration anchor was set (audible-start R11): with the music or the hiss,
+ * or `absent`, as every visit recorded before the audible-start spec, whose kind is `hands`.
+ */
+export type DrawnAnchor = "music" | "hiss" | "absent";
+
+/** Any of the three, for the properties of saved visits from before and of anchors (CP10). */
+export const drawnAnchorArbitrary: fc.Arbitrary<DrawnAnchor> = fc.constantFrom(
+  "music",
+  "hiss",
+  "absent",
+);
+
+/** What a drawn visit holds: one room plan per room of its visit type, and its calibration's anchor. */
 export interface VisitPlan {
   readonly visitType: VisitType;
   readonly visitSeed: number;
   readonly rooms: readonly RoomPlan[];
   readonly ignoredAnswerCount: number;
+  readonly anchor: DrawnAnchor;
 }
 
-export const visitPlanArbitrary: fc.Arbitrary<VisitPlan> =
-  visitTypeArbitrary.chain((visitType) =>
+/**
+ * A visit plan whose anchor is drawn from `anchor`: the music by default, as a visit recorded
+ * now, so that every property that compares visits draws visits that may be compared;
+ * `drawnAnchorArbitrary` draws saved visits with and without an anchor.
+ */
+export function visitPlanArbitraryWith(
+  anchor: fc.Arbitrary<DrawnAnchor> = fc.constant("music"),
+): fc.Arbitrary<VisitPlan> {
+  return visitTypeArbitrary.chain((visitType) =>
     fc.record({
       visitType: fc.constant(visitType),
       visitSeed: seedArbitrary,
@@ -231,8 +252,13 @@ export const visitPlanArbitrary: fc.Arbitrary<VisitPlan> =
         maxLength: visitRooms(visitType).length,
       }),
       ignoredAnswerCount: fc.integer({ min: 0, max: ignoredAnswerMaxCount }),
+      anchor,
     }),
   );
+}
+
+export const visitPlanArbitrary: fc.Arbitrary<VisitPlan> =
+  visitPlanArbitraryWith();
 
 const roomSpanMs = 200_000;
 
@@ -351,7 +377,13 @@ export function visitLogOf(plan: VisitPlan): VisitLog {
     visitSeed: plan.visitSeed,
     rooms,
     calibrations: [
-      { calibrationIndex: 0, settingDb: -22, roomTopLevelDb, keptAtMs: 500 },
+      {
+        calibrationIndex: 0,
+        settingDb: -22,
+        roomTopLevelDb,
+        keptAtMs: 500,
+        ...(plan.anchor === "absent" ? {} : { anchor: plan.anchor }),
+      },
     ],
     headphoneChecks: [
       {
@@ -403,7 +435,11 @@ export const visitLimitArbitrary: fc.Arbitrary<number> = fc.oneof(
  * otherwise the shipped difference, which is the one the archive saves (the storage properties).
  */
 export function drawnVisitArbitrary(
-  options: { readonly anyDifference?: boolean } = {},
+  options: {
+    readonly anyDifference?: boolean;
+    /** How the calibration's anchor is drawn; the music by default (audible-start R11). */
+    readonly anchor?: fc.Arbitrary<DrawnAnchor>;
+  } = {},
 ): fc.Arbitrary<DrawnVisit> {
   const differenceArbitrary =
     options.anyDifference === true
@@ -413,7 +449,11 @@ export function drawnVisitArbitrary(
         })
       : fc.constant(swappedRepeatDifferenceDb);
   return fc
-    .tuple(visitPlanArbitrary, visitLimitArbitrary, differenceArbitrary)
+    .tuple(
+      visitPlanArbitraryWith(options.anchor),
+      visitLimitArbitrary,
+      differenceArbitrary,
+    )
     .map(([plan, visitLimitFraction, differenceDb]) =>
       drawnVisitOf(plan, {
         swappedRepeatDifferenceDb: differenceDb,

@@ -1015,8 +1015,21 @@ Measured times:
 | 1 | 2026-11-16 | `audible-start-cp7-calibration-target.property.test.ts` (controller 1.18, 1.33, 1.42 s; visit flow 5.15, 5.23, 5.29 s) | 6.33 s | 6.56 s | 6.71 s |
 | 1 | 2026-11-16 | Sum of this spec's property files | 6.33 s | 6.56 s | 6.71 s |
 | 1 | 2026-11-16 | The whole of `npm test` | 74.4 s | 81.5 s | 82.4 s |
+| 3 | 2026-11-16 | `audible-start-cp6-music-is-safe.property.test.ts` | 17.08 s | 18.90 s | 18.55 s |
+| 3 | 2026-11-16 | `audible-start-cp7-calibration-target.property.test.ts` | 5.97 s | 6.41 s | 5.87 s |
+| 3 | 2026-11-16 | Sum of this spec's property files | 23.05 s | 25.32 s | 24.42 s |
+| 3 | 2026-11-16 | The whole of `npm test` | 78.0 s | 83.5 s | 85.1 s |
+| 7 | 2026-11-16 | `audible-start-cp6-music-is-safe.property.test.ts` | 15.83 s | 18.78 s | 19.02 s |
+| 7 | 2026-11-16 | `audible-start-cp7-calibration-target.property.test.ts` | 5.69 s | 5.58 s | 6.59 s |
+| 7 | 2026-11-16 | `audible-start-cp10-saved-visits-and-anchors.property.test.ts` (anchor and payload parts) | 0.44 s | 0.42 s | 0.43 s |
+| 7 | 2026-11-16 | Sum of this spec's property files | 21.97 s | 24.78 s | 26.03 s |
+| 7 | 2026-11-16 | The whole of `npm test` | 76.5 s | 82.7 s | 85.8 s |
 
 Task 1: the machine ran nothing else heavy; the load came from the three runs themselves (load average 10.4 on 8 cores after the third).
+
+Task 3: the machine ran nothing else heavy (load average 1.6 on 8 cores before the first run); the load came from the three runs themselves (8.6 after the third).
+
+Task 7: the machine ran nothing else heavy (load average 2.3 on 8 cores before the first run); the load came from the three runs themselves (9.7 after the third). From task 4 on, the whole-visit properties calibrate with the harness's music fixture.
 
 ### Counterexamples
 

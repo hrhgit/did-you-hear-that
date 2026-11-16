@@ -441,6 +441,84 @@ describe("parseSavedVisitPayload", () => {
     });
   });
 
+  describe('the calibration\'s anchor (audible-start design.md, "Checking a payload"; R11.1, R11.5)', () => {
+    const calibration = {
+      calibrationIndex: 0,
+      settingDb: -20,
+      roomTopLevelDb: {
+        cellar: 5,
+        corridor: 5,
+        nursery: 5,
+        stairs: 5,
+        attic: 5,
+      },
+      keptAtMs: 500,
+    };
+    const withCalibration = (entry: Record<string, unknown>): VisitToSave => ({
+      ...visit,
+      visitLog: {
+        ...visit.visitLog,
+        calibrations: [entry as unknown as VisitLog["calibrations"][number]],
+      },
+    });
+
+    it("reads a payload written before audible-start, whose calibration has no anchor, as it is", () => {
+      const before = withCalibration(calibration);
+      const parsed = parsedAfter(() => undefined, before);
+      expect(parsed?.visitLog).toEqual(
+        JSON.parse(JSON.stringify(before.visitLog)),
+      );
+      expect(
+        Object.hasOwn(parsed?.visitLog.calibrations[0] ?? {}, "anchor"),
+      ).toBe(false);
+    });
+
+    it.each(["music", "hiss"])(
+      "reads a calibration anchored with the %s and keeps the anchor",
+      (anchor) => {
+        const parsed = parsedAfter(
+          () => undefined,
+          withCalibration({ ...calibration, anchor }),
+        );
+        expect(parsed?.visitLog.calibrations[0]?.anchor).toBe(anchor);
+      },
+    );
+
+    it.each<[string, unknown]>([
+      ["hands, which no calibration is logged with", "hands"],
+      ["loading", "loading"],
+      ["Music in capitals", "Music"],
+      ["an empty name", ""],
+      ["null", null],
+      ["a number", 1],
+      ["an object", {}],
+    ])("gives null for an anchor of %s, and never throws", (_label, anchor) => {
+      expect(() =>
+        parsedAfter(
+          () => undefined,
+          withCalibration({ ...calibration, anchor }),
+        ),
+      ).not.toThrow();
+      expect(
+        parsedAfter(
+          () => undefined,
+          withCalibration({ ...calibration, anchor }),
+        ),
+      ).toBeNull();
+    });
+
+    it("gives null when any one of several calibrations breaks the rule", () => {
+      expect(
+        parsedAfter((p) => {
+          p.visitLog.calibrations = [
+            { ...calibration, anchor: "music" },
+            { ...calibration, calibrationIndex: 1, anchor: "hands" },
+          ];
+        }),
+      ).toBeNull();
+    });
+  });
+
   describe("rule 3: one room summary per room of the log", () => {
     it.each<[string, (payload: Json) => void]>([
       ["a room summary too few", (p) => p.summary.rooms.pop()],

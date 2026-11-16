@@ -17,6 +17,7 @@ import type {
   LoggedRoomAttempt,
   SwappedRepeatRun,
   VisitLog,
+  LoggedCalibration,
   VisitTrial,
 } from "./visit-flow-types";
 import { createVisitLogRecorder } from "./visit-log-recorder";
@@ -105,17 +106,38 @@ function clampedTrial(roomIndex: number): VisitTrial {
   };
 }
 
+/**
+ * The calibration of every hand-built log: anchored with the music, as a visit recorded now is, or
+ * with the hiss, or without an anchor (`hands`), as every visit recorded before audible-start.
+ */
+function calibrationOf(anchor: "music" | "hiss" | "hands"): LoggedCalibration {
+  return {
+    calibrationIndex: 0,
+    settingDb: -20,
+    roomTopLevelDb: {
+      cellar: 5,
+      corridor: 5,
+      nursery: 5,
+      stairs: 5,
+      attic: 5,
+    },
+    keptAtMs: 500,
+    ...(anchor === "hands" ? {} : { anchor }),
+  };
+}
+
 function makeLog(
   visitType: "quick" | "full",
   plans: readonly RoomPlan[],
   trials: readonly VisitTrial[] = [],
+  anchor: "music" | "hiss" | "hands" = "music",
 ): VisitLog {
   return {
     formatVersion: 1,
     visitType,
     visitSeed: 42,
     rooms: visitRooms(visitType),
-    calibrations: [],
+    calibrations: [calibrationOf(anchor)],
     headphoneChecks: [],
     roomAttempts: plans.map((plan, roomIndex) => attempt(roomIndex, plan)),
     trials,
@@ -131,9 +153,10 @@ function visitOf(
   options: {
     readonly trials?: readonly VisitTrial[];
     readonly visitLimitFraction?: number;
+    readonly anchor?: "music" | "hiss" | "hands";
   } = {},
 ): VisitToSave {
-  const visitLog = makeLog(visitType, plans, options.trials);
+  const visitLog = makeLog(visitType, plans, options.trials, options.anchor);
   const summary =
     options.visitLimitFraction === undefined
       ? summarizeVisit(visitLog)
@@ -899,6 +922,83 @@ describe("resultPicture", () => {
       expect(withEarlier(shownFull, earlier).comparison).toEqual({
         earlierSavedVisitId: "0a1b2c3d",
         line: "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+      });
+    });
+
+    it("draws nothing of an earlier visit whose anchor was set another way, and names none (audible-start R11.3)", () => {
+      for (const [shownAnchor, earlierAnchor] of [
+        ["music", "hiss"],
+        ["hiss", "music"],
+        ["music", "hands"],
+        ["hiss", "hands"],
+      ] as const) {
+        const shown = visitOf("full", fivePlans, { anchor: shownAnchor });
+        const earlier = savedVisitOf(
+          visitOf("full", fivePlans, { anchor: earlierAnchor }),
+        );
+        const picture = withEarlier(shown, earlier);
+        expect(
+          picture.comparison,
+          `${shownAnchor} ${earlierAnchor}`,
+        ).toBeNull();
+        for (const floor of picture.floors) {
+          expect(floor.left.earlier).toBeNull();
+          expect(floor.right.earlier).toBeNull();
+        }
+        expect(picture).toEqual(withEarlier(shown, null));
+      }
+    });
+
+    it("compares two visits anchored the same way, the hands among them", () => {
+      for (const anchor of ["music", "hiss", "hands"] as const) {
+        const shown = savedVisitOf(visitOf("full", fivePlans, { anchor }), {
+          savedVisitId: "11111111",
+        });
+        const earlier = savedVisitOf(visitOf("full", fivePlans, { anchor }), {
+          savedVisitId: "22222222",
+        });
+        const picture = resultPicture({
+          kind: "saved",
+          savedVisit: shown,
+          earlierVisit: earlier,
+        });
+        expect(picture.comparison?.earlierSavedVisitId, anchor).toBe(
+          "22222222",
+        );
+        for (const floor of picture.floors) {
+          expect(floor.left.earlier).not.toBeNull();
+          expect(floor.right.earlier).not.toBeNull();
+        }
+      }
+    });
+
+    it("compares floor by floor: a floor whose calibration was set another way gets no mark", () => {
+      const shown = visitOf("full", fivePlans);
+      // A second calibration with the hiss, from which the third floor's result comes.
+      const visitLog: VisitLog = {
+        ...shown.visitLog,
+        calibrations: [
+          calibrationOf("music"),
+          { ...calibrationOf("hiss"), calibrationIndex: 1 },
+        ],
+        roomAttempts: shown.visitLog.roomAttempts.map((roomAttempt) =>
+          roomAttempt.roomIndex === 2
+            ? { ...roomAttempt, calibrationIndex: 1 }
+            : roomAttempt,
+        ),
+      };
+      const earlier = savedVisitOf(visitOf("full", fivePlans));
+      const picture = withEarlier({ ...shown, visitLog }, earlier);
+      expect(picture.comparison?.earlierSavedVisitId).toBe(
+        earlier.savedVisitId,
+      );
+      picture.floors.forEach((floor, floorIndex) => {
+        expect(floor.left.earlier === null, String(floorIndex)).toBe(
+          floorIndex === 2,
+        );
+        expect(floor.right.earlier === null, String(floorIndex)).toBe(
+          floorIndex === 2,
+        );
       });
     });
 
