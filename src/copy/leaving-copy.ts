@@ -27,10 +27,4 @@ export const leavingCopy = Object.freeze({
       "The house could not play its sounds on this device, so the visit ended. Nothing from this visit was kept.",
   }),
   backButton: "Back to the front door",
-  /** A stand-in for a room visited again with left and right swapped, until that has been built. */
-  swappedRoomNotBuilt: Object.freeze({
-    heading: "This is not built yet",
-    line: "The house cannot yet take you through a room again with the headphones swapped. Your picture has not changed.",
-    button: "Back to the picture",
-  }),
 });
