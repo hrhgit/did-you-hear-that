@@ -6,11 +6,14 @@ import {
   savedVisitPayloadJson,
 } from "./saved-visit-payload";
 import { summarizeVisit } from "./summarize-visit";
+import { swappedRepeatRunOf } from "./swapped-repeat-run";
 import type {
   LoggedEarResult,
   LoggedRoomAttempt,
+  SwappedRepeatRun,
   VisitLog,
 } from "./visit-flow-types";
+import { createVisitLogRecorder } from "./visit-log-recorder";
 import { visitRooms } from "./visit-rooms";
 
 // Visits made with summarizeVisit from hand-built visit logs, and payloads changed by hand to
@@ -95,6 +98,80 @@ function visitOf(falseAlarmsPerRoom: number, visitLimitFraction?: number) {
 const visit = visitOf(1);
 const markedVisit = visitOf(2);
 
+/** A finished swapped repeat of floor 0 of `visit`, which offers it: one caught sound on each ear. */
+function repeatOfFloor0(runNumber = 1): SwappedRepeatRun {
+  const firstRun = visit.summary.rooms[0]!;
+  const recorder = createVisitLogRecorder({
+    visitType: "quick",
+    visitSeed: 42,
+    rooms: visitRooms("quick"),
+    startedAtMs: 0,
+  });
+  const attemptNumber = recorder.attemptStarted({
+    roomIndex: 0,
+    engineSeed: 77,
+    calibrationIndex: 0,
+    searchCapDb: firstRun.searchCapDb,
+    startedAtMs: 400_000,
+  });
+  for (const [trialNumber, ear] of [
+    [1, "left"],
+    [2, "right"],
+  ] as const) {
+    const windowStartMs = 400_050 + 4000 * trialNumber;
+    recorder.trialScored(
+      {
+        roomIndex: 0,
+        attempt: attemptNumber,
+        trialNumber,
+        gapBeforeMs: 2000,
+        presentedAtMs: windowStartMs - 50,
+        windowStartMs,
+        kind: "sound",
+        ear,
+        requestedLevelDb: -25,
+        playedLevelDb: -25,
+        clampLimit: null,
+      },
+      {
+        response: ear,
+        outcome: "caught",
+        answeredAtMs: windowStartMs + 600,
+        scoredAtMs: windowStartMs + 600,
+      },
+    );
+  }
+  recorder.attemptEnded({
+    roomIndex: 0,
+    attempt: attemptNumber,
+    endedAtMs: 490_000,
+    ending: "finished",
+    result: {
+      left: found(-40),
+      right: found(-20),
+      noSoundTrialCount: 0,
+      falseAlarmCount: 0,
+      falseAlarmRateFraction: 0,
+      falseAlarmRateAboveLimit: false,
+    },
+  });
+  return swappedRepeatRunOf({
+    runNumber,
+    runLog: recorder.log(),
+    swapChecks: [
+      {
+        answer: "right",
+        judgement: "confirmed",
+        earpiece: "left",
+        answeredAtMs: 395_000,
+      },
+    ],
+    firstRun,
+  });
+}
+
+const repeated: VisitToSave = { ...visit, swappedRepeats: [repeatOfFloor0()] };
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payloads are changed by hand here
 type Json = any;
 
@@ -130,6 +207,41 @@ describe("savedVisitPayloadJson", () => {
     });
   });
 
+  it("writes a visit without swapped repeats byte for byte as before the swapped-repeat spec, with no key for them (swapped-repeat R13.1)", () => {
+    const before = JSON.stringify({
+      formatVersion: 1,
+      floorDb: hearingMethodConfig.floorDb,
+      swappedRepeatDifferenceDb: hearingMethodConfig.swappedRepeatDifferenceDb,
+      summary: visit.summary,
+      visitLog: visit.visitLog,
+    });
+    expect(savedVisitPayloadJson(visit)).toBe(before);
+    expect(savedVisitPayloadJson({ ...visit, swappedRepeats: [] })).toBe(
+      before,
+    );
+    expect(Object.keys(payloadOf())).not.toContain("swappedRepeats");
+  });
+
+  it("writes the swapped repeats unchanged under their own key after the log, with format version 1 (swapped-repeat R13.1, R13.2)", () => {
+    const text = savedVisitPayloadJson(repeated);
+    const payload = JSON.parse(text);
+    expect(Object.keys(payload)).toEqual([
+      "formatVersion",
+      "floorDb",
+      "swappedRepeatDifferenceDb",
+      "summary",
+      "visitLog",
+      "swappedRepeats",
+    ]);
+    expect(payload.formatVersion).toBe(1);
+    expect(payload.swappedRepeats).toEqual(
+      JSON.parse(JSON.stringify(repeated.swappedRepeats)),
+    );
+    expect(text.startsWith(savedVisitPayloadJson(visit).slice(0, -1))).toBe(
+      true,
+    );
+  });
+
   it("takes other settings when given", () => {
     const payload = JSON.parse(
       savedVisitPayloadJson(visit, {
@@ -154,6 +266,7 @@ describe("parseSavedVisitPayload", () => {
       swappedRepeatDifferenceDb: hearingMethodConfig.swappedRepeatDifferenceDb,
       summary: JSON.parse(JSON.stringify(visit.summary)),
       visitLog: JSON.parse(JSON.stringify(visit.visitLog)),
+      swappedRepeats: [],
     });
     expect(isDeepFrozen(parsed)).toBe(true);
   });
@@ -185,6 +298,72 @@ describe("parseSavedVisitPayload", () => {
     });
     expect((parsed?.visitLog as unknown as Json).laterField).toEqual({
       kept: true,
+    });
+  });
+
+  describe("swapped repeats (swapped-repeat R13.3, R13.4, D17)", () => {
+    it("reads a visit with records back deep-equal to their JSON round trip, deeply frozen", () => {
+      const parsed = parseSavedVisitPayload(
+        savedVisitPayloadJson(repeated),
+        "quick",
+      );
+      expect(parsed?.swappedRepeats).toEqual(
+        JSON.parse(JSON.stringify(repeated.swappedRepeats)),
+      );
+      expect(parsed?.swappedRepeats).toEqual(repeated.swappedRepeats);
+      expect(parsed?.summary).toEqual(
+        JSON.parse(JSON.stringify(visit.summary)),
+      );
+      expect(isDeepFrozen(parsed)).toBe(true);
+    });
+
+    it("reads a payload without the key with an empty list, and every other field as before", () => {
+      const parsed = parseSavedVisitPayload(
+        savedVisitPayloadJson(visit),
+        "quick",
+      );
+      expect(parsed?.swappedRepeats).toEqual([]);
+      expect(Object.isFrozen(parsed?.swappedRepeats)).toBe(true);
+      expect(
+        parsedAfter((payload) => {
+          payload.swappedRepeats = [];
+        })?.swappedRepeats,
+      ).toEqual([]);
+    });
+
+    it.each<[string, (payload: Json) => void]>([
+      [
+        "a list that is not an array",
+        (payload) => (payload.swappedRepeats = {}),
+      ],
+      ["a list that is null", (payload) => (payload.swappedRepeats = null)],
+      [
+        "a record of another format",
+        (payload) => (payload.swappedRepeats[0].formatVersion = 2),
+      ],
+      [
+        "a record of a floor that offers no repeat",
+        (payload) => (payload.swappedRepeats[0].roomIndex = 1),
+      ],
+      [
+        "two records of one floor",
+        (payload) =>
+          payload.swappedRepeats.push({
+            ...payload.swappedRepeats[0],
+            runNumber: 2,
+          }),
+      ],
+      [
+        "a sound trial on its own ear's earpiece",
+        (payload) => (payload.swappedRepeats[0].trials[0].earpiece = "left"),
+      ],
+      [
+        "an outcome that does not follow from the record",
+        (payload) => (payload.swappedRepeats[0].outcome = "followsEarpiece"),
+      ],
+    ])("gives null for %s", (_label, change) => {
+      expect(parsedAfter(() => undefined, repeated)).not.toBeNull();
+      expect(parsedAfter(change, repeated)).toBeNull();
     });
   });
 

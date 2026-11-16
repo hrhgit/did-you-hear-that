@@ -1,8 +1,17 @@
 import fc from "fast-check";
 import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
+import type { VisitToSave } from "../../src/session/result-page-types";
 import { roomSearchCapDb } from "../../src/session/room-search-cap";
-import type { Ear, VisitLog } from "../../src/session/visit-flow-types";
+import { savedVisitPayloadJson } from "../../src/session/saved-visit-payload";
+import { swappedRepeatRunOf } from "../../src/session/swapped-repeat-run";
+import type {
+  Ear,
+  LoggedEarResult,
+  SwappedRepeatRun,
+  VisitLog,
+} from "../../src/session/visit-flow-types";
+import { createVisitLogRecorder } from "../../src/session/visit-log-recorder";
 import {
   attentiveListenerParameters,
   plausibleListenerParameters,
@@ -14,6 +23,11 @@ import {
   refusalScriptArbitrary,
   visitLogArbitrary,
 } from "./missed-sound-replay-arbitraries";
+import type { DrawnVisit } from "./result-page-arbitraries";
+import {
+  drawnVisitArbitrary,
+  loggedEarResultArbitrary,
+} from "./result-page-arbitraries";
 
 // The arbitraries of the swapped repeat's properties (swapped-repeat design.md, "Correctness
 // properties"). Task 6 added the first: an ear difference and a headphone imbalance with a base
@@ -682,3 +696,261 @@ export const finishingRepeatScriptArbitrary: fc.Arbitrary<RepeatScript> = fc
       },
     ],
   }));
+
+// ─── Saved visits with repeats (CP11) ──────────────────────────────────────────────────────
+
+/** A saved visit holds zero to three records, on its offered floors (design.md, "Correctness properties"). */
+export const savedRecordMaxCount = 3;
+/** The most trials and ignored answers a drawn record holds: enough for every rule of its earpieces. */
+const recordTrialMaxCount = 4;
+const recordIgnoredAnswerMaxCount = 2;
+/** Runs that did not end lie between two records: run numbers rise by 1 to 1 + this. */
+const runNumberGapMaxCount = 2;
+
+/** One trial of a drawn record: a sound on an ear, caught or missed, or a no-sound trial. */
+interface RecordTrialPlan {
+  readonly ear: Ear | null;
+  readonly caught: boolean;
+}
+
+/** What one drawn record holds before it is made. */
+interface RecordPlan {
+  readonly roomIndex: number;
+  readonly runGap: number;
+  readonly left: LoggedEarResult;
+  readonly right: LoggedEarResult;
+  readonly trials: readonly RecordTrialPlan[];
+  readonly ignoredSides: readonly Ear[];
+  readonly notSwappedFirst: boolean;
+}
+
+/**
+ * A finished swapped repeat of one floor of a visit, made as the Repeat_Controller makes it: a run
+ * on its own recorder, on the calibration of the floor's last finished attempt, turned into a
+ * record by `swappedRepeatRunOf` with the shipped outcome settings.
+ */
+export function savedRecordOf(
+  visit: VisitToSave,
+  plan: RecordPlan,
+  runNumber: number,
+): SwappedRepeatRun {
+  const { visitLog, summary } = visit;
+  const { roomIndex } = plan;
+  const firstRun = summary.rooms[roomIndex]!;
+  const calibrationIndex = visitLog.roomAttempts
+    .filter(
+      (attempt) =>
+        attempt.roomIndex === roomIndex && attempt.ending === "finished",
+    )
+    .at(-1)!.calibrationIndex;
+  const startedAtMs = 2_000_000 + 200_000 * runNumber;
+  const recorder = createVisitLogRecorder({
+    visitType: visitLog.visitType,
+    visitSeed: visitLog.visitSeed,
+    rooms: visitLog.rooms,
+    startedAtMs: 0,
+  });
+  const attempt = recorder.attemptStarted({
+    roomIndex,
+    engineSeed: runNumber,
+    calibrationIndex,
+    searchCapDb: firstRun.searchCapDb,
+    startedAtMs,
+  });
+  plan.trials.forEach((trialPlan, index) => {
+    const trialNumber = index + 1;
+    const presentedAtMs = startedAtMs + 4000 * trialNumber;
+    const common = {
+      roomIndex,
+      attempt,
+      trialNumber,
+      gapBeforeMs: 2000,
+      presentedAtMs,
+      windowStartMs: presentedAtMs + 50,
+    };
+    const answered = trialPlan.ear !== null && trialPlan.caught;
+    recorder.trialScored(
+      trialPlan.ear === null
+        ? { ...common, kind: "noSound" }
+        : {
+            ...common,
+            kind: "sound",
+            ear: trialPlan.ear,
+            requestedLevelDb: firstRun.searchCapDb,
+            playedLevelDb: firstRun.searchCapDb,
+            clampLimit: null,
+          },
+      {
+        response: answered && trialPlan.ear !== null ? trialPlan.ear : "none",
+        outcome:
+          trialPlan.ear === null
+            ? "noResponse"
+            : trialPlan.caught
+              ? "caught"
+              : "missed",
+        answeredAtMs: answered ? presentedAtMs + 650 : null,
+        scoredAtMs: presentedAtMs + (answered ? 650 : 2050),
+      },
+    );
+  });
+  plan.ignoredSides.forEach((side, index) =>
+    recorder.answerIgnored({
+      atMs: startedAtMs + 1000 + index,
+      side,
+      roomIndex,
+      attempt,
+    }),
+  );
+  recorder.attemptEnded({
+    roomIndex,
+    attempt,
+    endedAtMs: startedAtMs + 150_000,
+    ending: "finished",
+    result: {
+      left: plan.left,
+      right: plan.right,
+      noSoundTrialCount: 0,
+      falseAlarmCount: 0,
+      falseAlarmRateFraction: 0,
+      falseAlarmRateAboveLimit: false,
+    },
+  });
+  const confirmed = {
+    answer: "right",
+    judgement: "confirmed",
+    earpiece: "left",
+    answeredAtMs: startedAtMs - 5000,
+  } as const;
+  return swappedRepeatRunOf({
+    runNumber,
+    runLog: recorder.log(),
+    swapChecks: plan.notSwappedFirst
+      ? [
+          {
+            answer: "left",
+            judgement: "notSwapped",
+            earpiece: "left",
+            answeredAtMs: startedAtMs - 20_000,
+          },
+          confirmed,
+        ]
+      : [confirmed],
+    firstRun,
+  });
+}
+
+/** A visit of the result page's arbitraries and its records, on distinct offered floors, in any floor order. */
+export interface SavedRepeatVisit {
+  readonly drawn: DrawnVisit;
+  /** Zero to three, with rising run numbers. */
+  readonly records: readonly SwappedRepeatRun[];
+  /**
+   * Whether the payload is written with the key `swappedRepeats`. With records and no key, it is
+   * written as a page of before this spec writes it, and reads with none; with no record and the
+   * key, the key holds an empty list.
+   */
+  readonly withKey: boolean;
+}
+
+const recordTrialPlanArbitrary: fc.Arbitrary<RecordTrialPlan> = fc.record({
+  ear: fc.constantFrom<Ear | null>("left", "right", null),
+  caught: fc.boolean(),
+});
+
+function recordPlanArbitrary(
+  visit: VisitToSave,
+  roomIndex: number,
+): fc.Arbitrary<RecordPlan> {
+  const { searchCapDb } = visit.summary.rooms[roomIndex]!;
+  return fc.record({
+    roomIndex: fc.constant(roomIndex),
+    runGap: fc.integer({ min: 0, max: runNumberGapMaxCount }),
+    left: loggedEarResultArbitrary(searchCapDb),
+    right: loggedEarResultArbitrary(searchCapDb),
+    trials: fc.array(recordTrialPlanArbitrary, {
+      maxLength: recordTrialMaxCount,
+    }),
+    ignoredSides: fc.array(fc.constantFrom<Ear>("left", "right"), {
+      maxLength: recordIgnoredAnswerMaxCount,
+    }),
+    notSwappedFirst: fc.boolean(),
+  });
+}
+
+/** The records of these plans, in their order, with run numbers rising from 1 by their gaps. */
+function recordsOf(
+  visit: VisitToSave,
+  plans: readonly RecordPlan[],
+): SwappedRepeatRun[] {
+  let runNumber = 0;
+  return plans.map((plan) => {
+    runNumber += 1 + plan.runGap;
+    return savedRecordOf(visit, plan, runNumber);
+  });
+}
+
+/** The offered floors of a visit's summary. */
+export function offeredFloorsOf(visit: VisitToSave): number[] {
+  return visit.summary.rooms
+    .filter((room) => room.swappedRepeatOffered)
+    .map((room) => room.room.roomIndex);
+}
+
+/**
+ * A visit of the result page's arbitraries with the shipped settings, three times in four one that
+ * offers the repeat on at least one floor: about one drawn visit in nine does, and the records
+ * need one.
+ */
+const savedRepeatDrawnVisitArbitrary: fc.Arbitrary<DrawnVisit> = fc.oneof(
+  { arbitrary: drawnVisitArbitrary(), weight: 1 },
+  {
+    arbitrary: drawnVisitArbitrary().filter(
+      (drawn) => offeredFloorsOf(drawn.visit).length > 0,
+    ),
+    weight: 3,
+  },
+);
+
+/** A visit of the result page's arbitraries, saved with the shipped settings, and its records (CP11). */
+export const savedRepeatVisitArbitrary: fc.Arbitrary<SavedRepeatVisit> =
+  savedRepeatDrawnVisitArbitrary.chain((drawn) => {
+    const offered = offeredFloorsOf(drawn.visit);
+    return fc
+      .shuffledSubarray(offered, {
+        maxLength: Math.min(savedRecordMaxCount, offered.length),
+      })
+      .chain((floors) =>
+        fc.record({
+          drawn: fc.constant(drawn),
+          plans: fc.tuple(
+            ...floors.map((roomIndex) =>
+              recordPlanArbitrary(drawn.visit, roomIndex),
+            ),
+          ),
+          withKey: fc.oneof(
+            { arbitrary: fc.constant(true), weight: 3 },
+            { arbitrary: fc.constant(false), weight: 1 },
+          ),
+        }),
+      )
+      .map(({ drawn: visitDrawn, plans, withKey }) => ({
+        drawn: visitDrawn,
+        records: recordsOf(visitDrawn.visit, plans),
+        withKey,
+      }));
+  });
+
+/** The payload text of a saved visit with repeats, with or without the key, with the shipped settings. */
+export function savedRepeatPayloadJson(saved: SavedRepeatVisit): string {
+  const { visit } = saved.drawn;
+  if (!saved.withKey) {
+    return savedVisitPayloadJson(visit);
+  }
+  if (saved.records.length > 0) {
+    return savedVisitPayloadJson({ ...visit, swappedRepeats: saved.records });
+  }
+  return JSON.stringify({
+    ...JSON.parse(savedVisitPayloadJson(visit)),
+    swappedRepeats: [],
+  });
+}

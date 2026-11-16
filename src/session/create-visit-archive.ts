@@ -1,6 +1,7 @@
 import { resultPageConfig } from "../config/result-page-config";
 import { createSeededRandom } from "../config/seeded-random";
 import { resultPageCopy } from "../copy/result-page-copy";
+import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import {
   deleteRefusedLine,
   deleteVisitLabel,
@@ -26,7 +27,6 @@ import type {
   SavedVisitListing,
   SaveOutcome,
   SaveRefusal,
-  SwappedRepeatRun,
   VisitArchive,
   VisitArchiveOptions,
   VisitLog,
@@ -37,9 +37,6 @@ import {
   parseSavedVisitPayload,
   savedVisitPayloadJson,
 } from "./saved-visit-payload";
-
-/** A saved visit's swapped repeats until task 13 of the swapped-repeat spec reads them from the payload. */
-const noSwappedRepeats: readonly SwappedRepeatRun[] = Object.freeze([]);
 
 /** Saved visit ids are eight hexadecimal digits: a whole number below 2³². A format, not a tunable number. */
 const savedVisitIdRange = 0x100000000;
@@ -65,7 +62,10 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** A saved visit from its envelope fields and its payload, frozen. The payload is frozen already. */
+/**
+ * A saved visit from its envelope fields and its payload, frozen. The payload is frozen already,
+ * with its swapped repeats, an empty list for a payload without them (swapped-repeat R13.3).
+ */
 function savedVisitOf(
   fields: StoreEntryFields,
   payload: SavedVisitPayload,
@@ -80,8 +80,23 @@ function savedVisitOf(
     visitLog: payload.visitLog,
     floorDb: payload.floorDb,
     swappedRepeatDifferenceDb: payload.swappedRepeatDifferenceDb,
-    swappedRepeats: noSwappedRepeats,
+    swappedRepeats: payload.swappedRepeats,
   });
+}
+
+/**
+ * Whether the visit holds a swapped repeat that its saved copy lacks: one whose run number no
+ * record of the saved copy has (swapped-repeat design.md, "A visit saved before its repeat"). Run
+ * numbers are unique within a visit, so they name a record. `save` and `savedCopyLacksRepeats`
+ * both ask this, so the control the page shows and what a press does cannot disagree.
+ */
+function lacksRepeats(visit: VisitToSave, savedCopy: SavedVisit): boolean {
+  const savedRunNumbers = new Set(
+    savedCopy.swappedRepeats.map((run) => run.runNumber),
+  );
+  return (visit.swappedRepeats ?? []).some(
+    (run) => !savedRunNumbers.has(run.runNumber),
+  );
 }
 
 function listingOf(visit: SavedVisit): SavedVisitListing {
@@ -241,16 +256,76 @@ export function createVisitArchive(options: VisitArchiveOptions): VisitArchive {
   }
 
   function listedVisit(savedVisitId: string): SavedVisit | undefined {
-    const current = read();
-    return current.state === "ready"
-      ? current.visits.find((visit) => visit.savedVisitId === savedVisitId)
-      : undefined;
+    return listedIn(read(), savedVisitId);
   }
 
   function drawSavedVisitId(): string {
     return Math.floor(random.next() * savedVisitIdRange)
       .toString(16)
       .padStart(savedVisitIdDigitCount, "0");
+  }
+
+  /** The listed saved visit with this id, from a read made now, or undefined. */
+  function listedIn(
+    current: ArchiveRead,
+    savedVisitId: string,
+  ): SavedVisit | undefined {
+    return current.state === "ready"
+      ? current.visits.find((visit) => visit.savedVisitId === savedVisitId)
+      : undefined;
+  }
+
+  /** The payload of a visit to save, checked as a saved visit is read; a visit that breaks a rule is a bug of the caller. */
+  function checkedPayload(visit: VisitToSave): {
+    readonly payloadJson: string;
+    readonly payload: SavedVisitPayload;
+  } {
+    const payloadJson = savedVisitPayloadJson(visit);
+    const payload = parseSavedVisitPayload(
+      payloadJson,
+      visit.visitLog.visitType,
+    );
+    if (payload === null) {
+      // The visit given breaks a rule of a saved visit, so it would never be listed: a bug of
+      // the caller, not a failure of storage.
+      throw new RangeError(
+        "A visit to save must have a visit log and a summary that meet every rule of a saved visit.",
+      );
+    }
+    return { payloadJson, payload };
+  }
+
+  /**
+   * Replaces the payload of a saved copy that lacks swapped repeats the visit now holds, under the
+   * same id, date and name (swapped-repeat Q5, decided by the owner on 2026-11-15), or gives null
+   * when the saved copy has gone, so that a new save follows.
+   */
+  function saveAgain(
+    listed: SavedVisit,
+    visit: VisitToSave,
+    activeStore: VisitStore,
+  ): SaveOutcome | null {
+    const { payloadJson, payload } = checkedPayload(visit);
+    const written = activeStore.changePayload(listed.savedVisitId, payloadJson);
+    if (!written.ok) {
+      return written.reason === "notFound"
+        ? null
+        : saveRefused(saveRefusalOf(written.reason));
+    }
+    return Object.freeze({
+      saved: true,
+      // As `list()` now gives it: the envelope kept, the payload new.
+      savedVisit: Object.freeze({
+        ...listed,
+        summary: payload.summary,
+        visitLog: payload.visitLog,
+        floorDb: payload.floorDb,
+        swappedRepeatDifferenceDb: payload.swappedRepeatDifferenceDb,
+        swappedRepeats: payload.swappedRepeats,
+      }),
+      renamed: false,
+      line: swappedRepeatCopy.savedAgainLine,
+    });
   }
 
   /** Changes the name of a visit saved before on this page, or gives null when it is no longer listed. */
@@ -317,22 +392,20 @@ export function createVisitArchive(options: VisitArchiveOptions): VisitArchive {
 
       const savedBefore = savedIds.get(visit.visitLog);
       if (savedBefore !== undefined) {
-        const renamed = rename(savedBefore, headphoneName, store);
-        if (renamed !== null) {
-          return renamed;
+        // A saved copy that lacks repeats gets them, and keeps its name this time; otherwise the
+        // second save renames, as before the swapped-repeat spec.
+        const listed = listedIn(read(), savedBefore);
+        const outcome =
+          listed !== undefined && lacksRepeats(visit, listed)
+            ? saveAgain(listed, visit, store)
+            : rename(savedBefore, headphoneName, store);
+        if (outcome !== null) {
+          return outcome;
         }
       }
 
-      const payloadJson = savedVisitPayloadJson(visit);
+      const { payloadJson, payload } = checkedPayload(visit);
       const visitType = visit.visitLog.visitType;
-      const payload = parseSavedVisitPayload(payloadJson, visitType);
-      if (payload === null) {
-        // The visit given breaks a rule of a saved visit, so it would never be listed: a bug of
-        // the caller, not a failure of storage.
-        throw new RangeError(
-          "A visit to save must have a visit log and a summary that meet every rule of a saved visit.",
-        );
-      }
 
       const current = listOf(read());
       if (current.state === "unavailable" || current.state === "unreadable") {
@@ -368,10 +441,18 @@ export function createVisitArchive(options: VisitArchiveOptions): VisitArchive {
       }
     },
 
-    // No saved copy holds a swapped repeat yet, so none lacks one. Task 15 of the swapped-repeat
-    // spec builds the answer (swapped-repeat R1.6, R13.9).
-    savedCopyLacksRepeats(): boolean {
-      return false;
+    // Whether `save` would now replace the saved copy's payload (swapped-repeat R13.9, Q5; its
+    // sub-question as the owner's coordinator chose it on 2026-11-15, which the owner may reverse).
+    savedCopyLacksRepeats(visit: VisitToSave): boolean {
+      if (store === null) {
+        return false;
+      }
+      const savedBefore = savedIds.get(visit.visitLog);
+      if (savedBefore === undefined) {
+        return false;
+      }
+      const listed = listedIn(read(), savedBefore);
+      return listed !== undefined && lacksRepeats(visit, listed);
     },
 
     deleteVisit(savedVisitId: string): DeleteOutcome {

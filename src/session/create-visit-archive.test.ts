@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { resultPageConfig } from "../config/result-page-config";
 import { resultPageCopy } from "../copy/result-page-copy";
+import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import {
   deleteRefusedLine,
   saveRefusedLine,
@@ -20,7 +21,13 @@ import type {
   WallTime,
 } from "./result-page-types";
 import { summarizeVisit } from "./summarize-visit";
-import type { LoggedEarResult, VisitLog } from "./visit-flow-types";
+import { swappedRepeatRunOf } from "./swapped-repeat-run";
+import type {
+  LoggedEarResult,
+  SwappedRepeatRun,
+  VisitLog,
+} from "./visit-flow-types";
+import { createVisitLogRecorder } from "./visit-log-recorder";
 import { visitRooms } from "./visit-rooms";
 
 // Archives on fake storage areas, with a wall clock written here. Visits are made with
@@ -76,6 +83,54 @@ function visitOf(
     refusedPlays: [],
   };
   return { visitLog, summary: summarizeVisit(visitLog) };
+}
+
+/**
+ * A finished swapped repeat of floor 0 of `visit`, which offers it (left −40, right −20), made as
+ * the Repeat_Controller makes it, with no trial.
+ */
+function repeatOf(visit: VisitToSave, runNumber = 1): SwappedRepeatRun {
+  const firstRun = visit.summary.rooms[0]!;
+  const recorder = createVisitLogRecorder({
+    visitType: visit.visitLog.visitType,
+    visitSeed: visit.visitLog.visitSeed,
+    rooms: visit.visitLog.rooms,
+    startedAtMs: 0,
+  });
+  const attempt = recorder.attemptStarted({
+    roomIndex: 0,
+    engineSeed: 77 + runNumber,
+    calibrationIndex: 0,
+    searchCapDb: firstRun.searchCapDb,
+    startedAtMs: 400_000 + 100_000 * runNumber,
+  });
+  recorder.attemptEnded({
+    roomIndex: 0,
+    attempt,
+    endedAtMs: 490_000 + 100_000 * runNumber,
+    ending: "finished",
+    result: {
+      left: found(-45),
+      right: found(-20),
+      noSoundTrialCount: 0,
+      falseAlarmCount: 0,
+      falseAlarmRateFraction: 0,
+      falseAlarmRateAboveLimit: false,
+    },
+  });
+  return swappedRepeatRunOf({
+    runNumber,
+    runLog: recorder.log(),
+    swapChecks: [
+      {
+        answer: "right",
+        judgement: "confirmed",
+        earpiece: "left",
+        answeredAtMs: 395_000 + 100_000 * runNumber,
+      },
+    ],
+    firstRun,
+  });
 }
 
 function roundTrip<T>(value: T): T {
@@ -772,21 +827,302 @@ describe("createVisitArchive", () => {
     });
   });
 
-  describe("savedCopyLacksRepeats", () => {
-    it("is false for a visit not saved, for a saved visit and in robot mode, until the records are saved (swapped-repeat task 1)", () => {
+  describe("swapped repeats in a saved visit (swapped-repeat R13.1, R13.3, D17)", () => {
+    it("lists a visit saved with a record with that record, and one saved without as before", () => {
+      const { archive, area } = setUp();
+      const plain = visitOf("quick", 1);
+      const visit = visitOf("quick", 2);
+      const record = repeatOf(visit);
+      expect(record.outcome).toBe("followsEar");
+      const repeated: VisitToSave = { ...visit, swappedRepeats: [record] };
+      const savedPlain = savedVisitOf(archive.save(plain, "A"));
+      const saved = savedVisitOf(archive.save(repeated, "B"));
+      expect(savedPlain.swappedRepeats).toEqual([]);
+      expect(saved.swappedRepeats).toEqual([record]);
+      const listed = archive.list().visits.map((listing) => listing.visit);
+      expect(listed.map((entry) => entry.swappedRepeats)).toEqual([
+        [record],
+        [],
+      ]);
+      expect(listed[0]).toEqual(saved);
+      expect(listed[0]?.summary).toEqual(roundTrip(visit.summary));
+      expect(listed[0]?.visitLog).toEqual(roundTrip(visit.visitLog));
+      const entries = storedValue(area).visits;
+      expect(JSON.parse(entries[0].payloadJson)).not.toHaveProperty(
+        "swappedRepeats",
+      );
+      expect(JSON.parse(entries[1].payloadJson).swappedRepeats).toEqual(
+        roundTrip([record]),
+      );
+    });
+  });
+
+  describe("savedCopyLacksRepeats and a second save (swapped-repeat Q5, decided by the owner on 2026-11-15; R13.6, R13.9)", () => {
+    // The sub-question of Q5, whether the archive or the page says that the saved copy lags, was
+    // chosen by the owner's coordinator on 2026-11-15: the archive. The owner may reverse it.
+
+    /** The visit of `setUp`'s first save, with the records of `runNumbers`. */
+    function withRecords(
+      visit: VisitToSave,
+      ...runNumbers: readonly number[]
+    ): VisitToSave {
+      return {
+        ...visit,
+        swappedRepeats: runNumbers.map((runNumber) =>
+          repeatOf(visit, runNumber),
+        ),
+      };
+    }
+
+    it("is false for a visit not saved, for a saved visit without records, and for a visit with another log; a saved visit lists no records", () => {
       const { archive } = setUp();
       const visit = visitOf("quick", 5);
       expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
+      expect(archive.savedCopyLacksRepeats(withRecords(visit, 1))).toBe(false);
       const saved = savedVisitOf(archive.save(visit, "Buds"));
       expect(saved.swappedRepeats).toEqual([]);
       expect(Object.isFrozen(saved.swappedRepeats)).toBe(true);
       expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
       expect(archive.savedCopyLacksRepeats(visitOf("full", 6))).toBe(false);
+      expect(
+        archive.savedCopyLacksRepeats(withRecords(visitOf("quick", 5), 1)),
+      ).toBe(false);
+    });
 
-      const robot = setUp({}, 7, "robot");
-      expect(robot.archive.savedCopyLacksRepeats(visit)).toBe(false);
-      expect(robot.getArea).not.toHaveBeenCalled();
-      expect(robot.area.calls).toEqual([]);
+    it("is true once the visit holds a record its saved copy lacks, and false again after the second save, which keeps the id, the date and the name and gives savedAgainLine", () => {
+      const { archive, area, time } = setUp();
+      const visit = visitOf("quick", 5);
+      const first = savedVisitOf(archive.save(visit, "Buds"));
+      const repeated = withRecords(visit, 1);
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(true);
+      time.set({ epochMs: 1795267200000, localDate: "2026-11-21" });
+      const outcome = archive.save(repeated, "Buds");
+      const again = savedVisitOf(outcome);
+      expect(outcome).toEqual({
+        saved: true,
+        savedVisit: again,
+        renamed: false,
+        line: swappedRepeatCopy.savedAgainLine,
+      });
+      expect(again).toEqual({
+        ...first,
+        swappedRepeats: roundTrip(repeated.swappedRepeats),
+      });
+      expect(archive.list().visits.map((listing) => listing.visit)).toEqual([
+        again,
+      ]);
+      expect(storedValue(area).visits).toHaveLength(1);
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+      expect(archive.save(repeated, "Buds")).toMatchObject({
+        saved: true,
+        renamed: false,
+        line: resultPageCopy.savedLine,
+      });
+
+      // A later run of the same floor, as a record the saved copy lacks (a floor holds one record,
+      // Q4, so it replaces the first in this visit to save).
+      const later = withRecords(visit, 3);
+      expect(archive.savedCopyLacksRepeats(later)).toBe(true);
+      expect(archive.save(later, "Buds")).toMatchObject({
+        saved: true,
+        savedVisit: { savedVisitId: first.savedVisitId },
+        line: swappedRepeatCopy.savedAgainLine,
+      });
+      expect(archive.list().visits[0]?.visit.swappedRepeats).toEqual(
+        roundTrip(later.swappedRepeats),
+      );
+      expect(archive.savedCopyLacksRepeats(later)).toBe(false);
+    });
+
+    it("does not apply a different name typed in the press that saves again, and applies it on the next press", () => {
+      const { archive } = setUp();
+      const visit = visitOf("quick", 5);
+      archive.save(visit, "Buds");
+      const repeated = withRecords(visit, 1);
+      expect(archive.save(repeated, "Big cans")).toMatchObject({
+        saved: true,
+        savedVisit: { headphoneName: "Buds" },
+        renamed: false,
+        line: swappedRepeatCopy.savedAgainLine,
+      });
+      expect(archive.save(repeated, "Big cans")).toMatchObject({
+        saved: true,
+        savedVisit: { headphoneName: "Big cans" },
+        renamed: true,
+        line: resultPageCopy.renamedLine,
+      });
+      expect(archive.list().visits[0]?.visit).toMatchObject({
+        headphoneName: "Big cans",
+        swappedRepeats: roundTrip(repeated.swappedRepeats),
+      });
+    });
+
+    it("is false once the saved copy has been deleted, and the next save adds the visit anew with its records", () => {
+      const { archive } = setUp();
+      const visit = visitOf("quick", 5);
+      const first = savedVisitOf(archive.save(visit, "Buds"));
+      archive.deleteVisit(first.savedVisitId);
+      const repeated = withRecords(visit, 1);
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+      const anew = savedVisitOf(archive.save(repeated, "Buds"));
+      expect(anew.savedVisitId).not.toBe(first.savedVisitId);
+      expect(anew.swappedRepeats).toEqual(roundTrip(repeated.swappedRepeats));
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+    });
+
+    it("is false in robot mode, where local storage is never called", () => {
+      const { archive, getArea, area } = setUp({}, 7, "robot");
+      const visit = visitOf("quick", 5);
+      archive.save(visit, "Buds");
+      expect(archive.savedCopyLacksRepeats(withRecords(visit, 1))).toBe(false);
+      expect(getArea).not.toHaveBeenCalled();
+      expect(area.calls).toEqual([]);
+    });
+
+    it.each<
+      [
+        string,
+        (area: ReturnType<typeof createFakeStorageArea>) => StorageArea | null,
+      ]
+    >([
+      ["missing", () => null],
+      [
+        "a getter that throws",
+        () => {
+          throw new DOMException("blocked", "SecurityError");
+        },
+      ],
+      [
+        "an area whose getItem throws",
+        () =>
+          createFakeStorageArea({
+            getItemThrows: true,
+          }),
+      ],
+      [
+        "an area holding a value that cannot be read",
+        () =>
+          createFakeStorageArea({
+            initialItems: { [savedVisitsKey]: "{not json" },
+          }),
+      ],
+    ])(
+      "is false, without throwing, when local storage is %s",
+      (_label, broken) => {
+        const area = createFakeStorageArea();
+        let current: () => StorageArea | null = () => area;
+        const archive = createVisitArchive({
+          localStorage: () => current(),
+          wallClock: handClock().clock,
+          seed: 7,
+          mode: "keep",
+        });
+        const visit = visitOf("quick", 5);
+        archive.save(visit, "Buds");
+        const repeated = withRecords(visit, 1);
+        expect(archive.savedCopyLacksRepeats(repeated)).toBe(true);
+        current = () => broken(area);
+        expect(() => archive.savedCopyLacksRepeats(repeated)).not.toThrow();
+        expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+        expect(archive.save(repeated, "Buds")).toMatchObject({ saved: false });
+      },
+    );
+
+    it("gives the refusal of a replacement the browser will not write, keeps the saved copy, and stays true", () => {
+      const area = createFakeStorageArea();
+      let refuseWrites = false;
+      const guarded: StorageArea = {
+        getItem: (key) => area.getItem(key),
+        setItem: (key, value) => {
+          if (refuseWrites) {
+            throw new DOMException("blocked", "SecurityError");
+          }
+          area.setItem(key, value);
+        },
+        removeItem: (key) => area.removeItem(key),
+      };
+      const archive = createVisitArchive({
+        localStorage: () => guarded,
+        wallClock: handClock().clock,
+        seed: 7,
+        mode: "keep",
+      });
+      const visit = visitOf("quick", 5);
+      archive.save(visit, "Buds");
+      const text = area.items()[savedVisitsKey];
+      const repeated = withRecords(visit, 1);
+      refuseWrites = true;
+      expect(archive.save(repeated, "Buds")).toEqual({
+        saved: false,
+        reason: "refused",
+        line: saveRefusedLine("refused"),
+      });
+      expect(area.items()[savedVisitsKey]).toBe(text);
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(true);
+      refuseWrites = false;
+      expect(archive.save(repeated, "Buds")).toMatchObject({
+        saved: true,
+        line: swappedRepeatCopy.savedAgainLine,
+      });
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+    });
+
+    it("adds the visit anew when its saved copy goes between the read and the replacement", () => {
+      const area = createFakeStorageArea();
+      let dropOnRead: number | null = null;
+      let reads = 0;
+      const racing: StorageArea = {
+        getItem: (key) => {
+          reads += 1;
+          const text = area.getItem(key);
+          if (reads === dropOnRead && text !== null) {
+            // Another page deleted the saved copy after this page's first read.
+            return JSON.stringify({ ...JSON.parse(text), visits: [] });
+          }
+          return text;
+        },
+        setItem: (key, value) => area.setItem(key, value),
+        removeItem: (key) => area.removeItem(key),
+      };
+      const archive = createVisitArchive({
+        localStorage: () => racing,
+        wallClock: handClock().clock,
+        seed: 7,
+        mode: "keep",
+      });
+      const visit = visitOf("quick", 5);
+      const first = savedVisitOf(archive.save(visit, "Buds"));
+      const repeated = withRecords(visit, 1);
+      dropOnRead = reads + 2;
+      const outcome = archive.save(repeated, "Buds");
+      const anew = savedVisitOf(outcome);
+      expect(outcome).toMatchObject({
+        renamed: false,
+        line: resultPageCopy.savedLine,
+      });
+      expect(anew.savedVisitId).not.toBe(first.savedVisitId);
+      expect(anew.swappedRepeats).toEqual(roundTrip(repeated.swappedRepeats));
+      expect(archive.savedCopyLacksRepeats(repeated)).toBe(false);
+    });
+
+    it("answers exactly whether save would now give savedAgainLine", () => {
+      const { archive } = setUp();
+      const visit = visitOf("quick", 5);
+      const cases: VisitToSave[] = [
+        visit,
+        withRecords(visit, 1),
+        withRecords(visit, 1),
+        withRecords(visit, 2),
+        withRecords(visit, 2),
+        visit,
+      ];
+      archive.save(visit, "Buds");
+      for (const shown of cases) {
+        const lacks = archive.savedCopyLacksRepeats(shown);
+        const outcome = archive.save(shown, "Buds");
+        expect(outcome.line === swappedRepeatCopy.savedAgainLine).toBe(lacks);
+        expect(archive.savedCopyLacksRepeats(shown)).toBe(false);
+      }
     });
   });
 

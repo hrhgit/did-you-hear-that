@@ -6,7 +6,9 @@ import { hearingMethodConfig } from "../config/hearing-method-config";
 import { ghostSoundIds } from "../config/sound-id";
 import { judgeVisitFalseAlarms } from "./judge-visit-false-alarms";
 import type { VisitToSave } from "./result-page-types";
+import { swappedRepeatRunsHold } from "./swapped-repeat-run-holds";
 import type {
+  SwappedRepeatRun,
   VisitLog,
   VisitSummary,
   VisitUnreliableReason,
@@ -23,6 +25,12 @@ export interface SavedVisitPayload {
   readonly summary: VisitSummary;
   /** Exactly the log the flow recorded. */
   readonly visitLog: VisitLog;
+  /**
+   * The swapped repeats saved with it, in the order they ended (swapped-repeat D17). Empty for a
+   * payload without the key `swappedRepeats`, which every visit saved without a repeat, and every
+   * visit saved before the swapped-repeat spec, is.
+   */
+  readonly swappedRepeats: readonly SwappedRepeatRun[];
 }
 
 /** The settings a payload is saved with. */
@@ -290,18 +298,23 @@ function summaryHolds(
 /**
  * The payload of a saved visit as JSON text (result-page design.md, D9): format version 1, the
  * settings it is drawn with, the summary as shown and the visit log as recorded, both unchanged.
- * `settings` defaults to the shipped `hearingMethodConfig`.
+ * A visit with at least one swapped repeat also gets the key `swappedRepeats` after `visitLog`,
+ * with its records unchanged; a visit without one is written byte for byte as before the
+ * swapped-repeat spec (swapped-repeat R13.1, R13.2, D17). `settings` defaults to the shipped
+ * `hearingMethodConfig`.
  */
 export function savedVisitPayloadJson(
   visit: VisitToSave,
   settings: SavedVisitPayloadSettings = hearingMethodConfig,
 ): string {
+  const swappedRepeats = visit.swappedRepeats ?? [];
   return JSON.stringify({
     formatVersion: payloadFormatVersion,
     floorDb: settings.floorDb,
     swappedRepeatDifferenceDb: settings.swappedRepeatDifferenceDb,
     summary: visit.summary,
     visitLog: visit.visitLog,
+    ...(swappedRepeats.length > 0 ? { swappedRepeats } : {}),
   });
 }
 
@@ -310,7 +323,9 @@ export function savedVisitPayloadJson(
  * deeply frozen payload when every rule holds, and null otherwise: JSON of the right shape and
  * version, a log of the envelope's visit type with valid rooms, and a summary that keeps every
  * invariant `summarizeVisit` gives. The summary is never computed again (D9), and the log is not
- * checked against the engine, which is the no-headphone replay's to do. Never throws.
+ * checked against the engine, which is the no-headphone replay's to do. A payload without the key
+ * `swappedRepeats` reads with an empty list; a payload with it reads only when its records meet
+ * `swappedRepeatRunsHold` (swapped-repeat R13.3, R13.4). Never throws.
  */
 export function parseSavedVisitPayload(
   payloadJson: string,
@@ -346,11 +361,20 @@ export function parseSavedVisitPayload(
   ) {
     return null;
   }
+  const summary = payload.summary as unknown as VisitSummary;
+  const visitLog = payload.visitLog as unknown as VisitLog;
+  const swappedRepeats: unknown = Object.hasOwn(payload, "swappedRepeats")
+    ? payload.swappedRepeats
+    : [];
+  if (!swappedRepeatRunsHold(swappedRepeats, summary, visitLog)) {
+    return null;
+  }
   return deepFreeze({
     formatVersion: payloadFormatVersion,
     floorDb: payload.floorDb,
     swappedRepeatDifferenceDb: payload.swappedRepeatDifferenceDb,
-    summary: payload.summary as unknown as VisitSummary,
-    visitLog: payload.visitLog as unknown as VisitLog,
+    summary,
+    visitLog,
+    swappedRepeats,
   });
 }

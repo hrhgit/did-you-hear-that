@@ -13,6 +13,7 @@ import type {
   SavedVisitList,
   SaveOutcome,
   StorageArea,
+  SwappedRepeatRun,
   VisitArchive,
   VisitToSave,
   WallClock,
@@ -543,7 +544,11 @@ export interface DrawnPictureInput {
   readonly localDate: string;
 }
 
-/** A saved visit made directly from a drawn visit, as the archive would list it. */
+/**
+ * A saved visit made directly from a drawn visit, as the archive would list it, with the swapped
+ * repeats given, none by default, so that every caller that gives none draws as before
+ * (swapped-repeat task 15).
+ */
 export function savedVisitOfDrawn(
   drawn: DrawnVisit,
   envelope: {
@@ -552,6 +557,7 @@ export function savedVisitOfDrawn(
     readonly typedName: string;
     readonly floorDb: number;
   },
+  swappedRepeats: readonly SwappedRepeatRun[] = [],
 ): SavedVisit {
   return {
     savedVisitId: envelope.savedVisitId,
@@ -563,7 +569,7 @@ export function savedVisitOfDrawn(
     visitLog: drawn.visit.visitLog,
     floorDb: envelope.floorDb,
     swappedRepeatDifferenceDb: drawn.settings.swappedRepeatDifferenceDb,
-    swappedRepeats: [],
+    swappedRepeats,
   };
 }
 
