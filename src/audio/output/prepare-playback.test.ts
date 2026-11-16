@@ -185,7 +185,7 @@ describe("preparePlayback", () => {
   });
 
   describe("the anchor cap (R7.3)", () => {
-    it("plays a request of +20 dB at +15 dB with the limit anchorCap", () => {
+    it("plays a request of +20 dB at the cap of +5 dB with the limit anchorCap", () => {
       const result = ready(
         preparePlayback(
           request({ requestedLevelDb: 20, calibrationGain: 0.01 }),
@@ -195,7 +195,9 @@ describe("preparePlayback", () => {
       expect(result.playedLevelDb).toBeLessThanOrEqual(capRelativeToAnchorDb);
       expect(result.playedLevelDb).toBeCloseTo(capRelativeToAnchorDb, 12);
       expect(result.clampLimit).toBe("anchorCap");
-      expect(result.appliedGain).toBe(0.01 * decibelsToGain(15));
+      expect(result.appliedGain).toBe(
+        0.01 * decibelsToGain(capRelativeToAnchorDb),
+      );
     });
   });
 
@@ -284,7 +286,11 @@ describe("preparePlayback", () => {
 
     it("does not clamp a rise of exactly one upward step through decibelsToGain", () => {
       for (const calibrationGain of [1e-6, 0.003, 0.1, 0.5, 0.8]) {
-        for (let fromDb = -70; fromDb <= 10; fromDb += 5) {
+        for (
+          let fromDb = -70;
+          fromDb <= capRelativeToAnchorDb - upwardStepDb;
+          fromDb += 5
+        ) {
           const toDb = fromDb + upwardStepDb;
           const result = ready(
             preparePlayback(
@@ -377,7 +383,7 @@ describe("preparePlayback", () => {
   });
 
   it("plays exactly the requested level when no limit applies (R8.1)", () => {
-    for (const levelDb of [-70, -25.5, -3.14159, 0, 7, 15]) {
+    for (const levelDb of [-70, -25.5, -3.14159, 0, 3, capRelativeToAnchorDb]) {
       const calibrationGain = decibelsToGain(-30);
       const result = ready(
         preparePlayback(

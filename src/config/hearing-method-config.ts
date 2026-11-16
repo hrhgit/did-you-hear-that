@@ -62,8 +62,11 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   upwardStepDb: 5,
   // "Starting level | 25 dB below the anchor"
   startingLevelDb: -25,
-  // "Loudest allowed level | 15 dB above the anchor"
-  capRelativeToAnchorDb: 15,
+  // "Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16 (brief 08b, a
+  // decision of the owner's coordinator at the owner's request): the music anchor is likely louder
+  // than rubbed hands, so the lower cap keeps the loudest sound no louder at the ear than before.
+  // Making it stricter is allowed; raising it needs the project owner's approval first."
+  capRelativeToAnchorDb: 5,
   // "Quietest playable level | 70 dB below the anchor"
   floorDb: -70,
   // "Response window after a sound starts | 2.0 s"

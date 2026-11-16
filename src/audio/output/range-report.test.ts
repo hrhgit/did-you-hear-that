@@ -9,29 +9,29 @@ import { roomTopLevelDb } from "./room-top-level";
 
 const { capRelativeToAnchorDb, floorDb } = hearingMethodConfig;
 
-/** The table of room tops in design.md, to two decimals, for the rooms below +15 dB. */
+/**
+ * The table of room tops in design.md, to two decimals, for the rooms below the cap of +5 dB
+ * (audible-start design.md, "The cap").
+ */
 const ceilingTopsDb: Readonly<
   Record<number, Partial<Record<SoundId, number>>>
 > = {
   [-40]: {},
   [-19]: {},
-  [-10]: { cellar: 10.48, nursery: 13.98, stairs: 6.98, calibration: 8.48 },
+  [-10]: {},
   [-4]: {
     cellar: 4.48,
-    corridor: 12.48,
-    nursery: 7.98,
     stairs: 0.98,
-    attic: 13.48,
     calibration: 2.48,
   },
 };
 
-/** The sounds whose top lies below +15 dB in the same table. */
+/** The sounds whose top lies below +5 dB in the same table. */
 const setByCeiling: Readonly<Record<number, readonly SoundId[]>> = {
   [-40]: [],
   [-19]: [],
-  [-10]: ["cellar", "nursery", "stairs", "calibration"],
-  [-4]: ["cellar", "corridor", "nursery", "stairs", "attic", "calibration"],
+  [-10]: [],
+  [-4]: ["cellar", "stairs", "calibration"],
 };
 
 describe("rangeReport", () => {
@@ -65,7 +65,7 @@ describe("rangeReport", () => {
     });
   }
 
-  it("counts the ghost rooms below +15 dB as the design table does", () => {
+  it("counts the ghost rooms below +5 dB as the design table does", () => {
     const counts = [-40, -19, -10, -4].map(
       (settingDb) =>
         ghostSoundIds.filter(
@@ -74,7 +74,7 @@ describe("rangeReport", () => {
             "ceiling",
         ).length,
     );
-    expect(counts).toEqual([0, 0, 3, 5]);
+    expect(counts).toEqual([0, 0, 0, 2]);
   });
 
   it("gives the RMS of a sound at the floor as a fraction of full scale (R9.5, D7)", () => {

@@ -419,7 +419,7 @@ const pitches: readonly number[] = [
   ...new Set(Object.values(hearingMethodConfig.roomFrequenciesHz).flat()),
 ];
 
-/** −70 to 15 dB in 5 dB steps, and −0.4, 0 and 0.4. */
+/** The floor to the cap, −70 to 5 dB, in 5 dB steps, and −0.4, 0 and 0.4. */
 const levels: readonly number[] = [
   ...Array.from(
     {

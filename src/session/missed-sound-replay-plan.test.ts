@@ -274,15 +274,15 @@ describe("planMissedSoundReplay: levels and the cap", () => {
   it("raises the missed level and holds it at the room's top in the last calibration (R4.1 to R4.3)", () => {
     const log = makeLog({
       calibrations: [
-        calibration(0, tops(15)),
-        calibration(1, tops(10, { corridor: 2 })),
+        calibration(0, tops(capRelativeToAnchorDb)),
+        calibration(1, tops(5, { corridor: 2 })),
       ],
       trials: [
         // The corridor, top 2 in the last calibration: -10 + 20 = 10, held at 2.
         sound({ order: 1, roomIndex: 0, playedLevelDb: -10 }),
-        // The stairs, top 10: -10 + 20 = 10, exactly at the cap and not held.
-        sound({ order: 2, roomIndex: 1, playedLevelDb: -10 }),
-        // The attic, top 10: -25 + 20 = -5, below the cap.
+        // The stairs, top 5: -15 + 20 = 5, exactly at the cap and not held.
+        sound({ order: 2, roomIndex: 1, playedLevelDb: -15 }),
+        // The attic, top 5: -25 + 20 = -5, below the cap.
         sound({ order: 3, roomIndex: 2, playedLevelDb: -25 }),
       ],
     });
@@ -317,16 +317,16 @@ describe("planMissedSoundReplay: levels and the cap", () => {
         heldByCap: true,
       },
       {
-        missedLevelDb: -10,
-        raisedLevelDb: -10 + replayRaiseDb,
-        replayCapDb: 10,
-        askedLevelDb: 10,
+        missedLevelDb: -15,
+        raisedLevelDb: -15 + replayRaiseDb,
+        replayCapDb: 5,
+        askedLevelDb: 5,
         heldByCap: false,
       },
       {
         missedLevelDb: -25,
         raisedLevelDb: -25 + replayRaiseDb,
-        replayCapDb: 10,
+        replayCapDb: 5,
         askedLevelDb: -25 + replayRaiseDb,
         heldByCap: false,
       },

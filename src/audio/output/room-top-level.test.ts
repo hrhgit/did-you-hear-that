@@ -10,43 +10,43 @@ import { gainToDecibels } from "./gain-to-decibels";
 import { roomTopLevelDb } from "./room-top-level";
 
 /**
- * The table of room tops in design.md ("What the visit flow does with it"), to two decimals. The
- * design rounds them to one decimal; with the shipped config each is
- * `13.98 − peakBoundDb − Calibration_Setting`, at most +15.
+ * The table of room tops in design.md ("What the visit flow does with it"), to two decimals, with
+ * the cap of 5 dB above the anchor (audible-start design.md, "The cap"). With the shipped config
+ * each is `13.98 − peakBoundDb − Calibration_Setting`, at most +5.
  */
 const roomTopTableDb: Readonly<
   Record<number, Readonly<Record<SoundId, number>>>
 > = {
   [-40]: {
-    cellar: 15,
-    corridor: 15,
-    nursery: 15,
-    stairs: 15,
-    attic: 15,
-    calibration: 15,
+    cellar: 5,
+    corridor: 5,
+    nursery: 5,
+    stairs: 5,
+    attic: 5,
+    calibration: 5,
   },
   [-19]: {
-    cellar: 15,
-    corridor: 15,
-    nursery: 15,
-    stairs: 15,
-    attic: 15,
-    calibration: 15,
+    cellar: 5,
+    corridor: 5,
+    nursery: 5,
+    stairs: 5,
+    attic: 5,
+    calibration: 5,
   },
   [-10]: {
-    cellar: 10.48,
-    corridor: 15,
-    nursery: 13.98,
-    stairs: 6.98,
-    attic: 15,
-    calibration: 8.48,
+    cellar: 5,
+    corridor: 5,
+    nursery: 5,
+    stairs: 5,
+    attic: 5,
+    calibration: 5,
   },
   [-4]: {
     cellar: 4.48,
-    corridor: 12.48,
-    nursery: 7.98,
+    corridor: 5,
+    nursery: 5,
     stairs: 0.98,
-    attic: 13.48,
+    attic: 5,
     calibration: 2.48,
   },
 };
@@ -85,7 +85,14 @@ describe("roomTopLevelDb", () => {
 
   it("puts a buffer at its Peak_Bound exactly at the ceiling when the ceiling sets the top", () => {
     const calibrationGain = decibelsToGain(-4);
-    for (const soundId of soundIds) {
+    const setByCeiling = soundIds.filter(
+      (soundId) =>
+        roomTopLevelDb(soundId, calibrationGain) <
+        hearingMethodConfig.capRelativeToAnchorDb,
+    );
+    // At −4 dB the ceiling sets the top of the cellar, the stairs and the calibration noise.
+    expect(setByCeiling).toEqual(["cellar", "stairs", "calibration"]);
+    for (const soundId of setByCeiling) {
       const topDb = roomTopLevelDb(soundId, calibrationGain);
       const peakFraction =
         soundRulesConfig.referenceRmsFraction *

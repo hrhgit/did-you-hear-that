@@ -25,38 +25,39 @@ function capAt(settingDb: number, soundId: SoundId): number {
 }
 
 describe("roomSearchCapDb", () => {
-  // The bracketed values of the room-top table in design.md.
+  // The bracketed values of the room-top table in design.md, with the cap of 5 dB above the
+  // anchor (audible-start design.md, "The cap").
   it.each([
     [
       -40,
       {
-        cellar: 15,
-        corridor: 15,
-        nursery: 15,
-        stairs: 15,
-        attic: 15,
-        calibration: 15,
+        cellar: 5,
+        corridor: 5,
+        nursery: 5,
+        stairs: 5,
+        attic: 5,
+        calibration: 5,
       },
     ],
     [
       -19,
       {
-        cellar: 15,
-        corridor: 15,
-        nursery: 15,
-        stairs: 15,
-        attic: 15,
-        calibration: 15,
+        cellar: 5,
+        corridor: 5,
+        nursery: 5,
+        stairs: 5,
+        attic: 5,
+        calibration: 5,
       },
     ],
     [
       -10,
       {
-        cellar: 10,
-        corridor: 15,
-        nursery: 10,
+        cellar: 5,
+        corridor: 5,
+        nursery: 5,
         stairs: 5,
-        attic: 15,
+        attic: 5,
         calibration: 5,
       },
     ],
@@ -64,10 +65,10 @@ describe("roomSearchCapDb", () => {
       -4,
       {
         cellar: 0,
-        corridor: 10,
+        corridor: 5,
         nursery: 5,
         stairs: 0,
-        attic: 10,
+        attic: 5,
         calibration: 0,
       },
     ],
@@ -81,7 +82,8 @@ describe("roomSearchCapDb", () => {
   );
 
   it("keeps a top that lies exactly on the grid, or a rounding error below it", () => {
-    for (const k of [-9, -1, 0, 1, 7]) {
+    // The highest, 6, is the cap of 5 dB itself.
+    for (const k of [-9, -1, 0, 1, 6]) {
       const gridDb = startingLevelDb + k * upwardStepDb;
       expect(roomSearchCapDb(gridDb, hearingMethodConfig)).toBe(gridDb);
       expect(roomSearchCapDb(gridDb - 1e-12, hearingMethodConfig)).toBe(gridDb);
@@ -93,7 +95,13 @@ describe("roomSearchCapDb", () => {
   });
 
   it("never goes above the anchor cap", () => {
-    for (const topDb of [15, 15.5, 20, 40, Number.POSITIVE_INFINITY]) {
+    for (const topDb of [
+      capRelativeToAnchorDb,
+      capRelativeToAnchorDb + 0.5,
+      20,
+      40,
+      Number.POSITIVE_INFINITY,
+    ]) {
       expect(roomSearchCapDb(topDb, hearingMethodConfig)).toBe(
         capRelativeToAnchorDb,
       );

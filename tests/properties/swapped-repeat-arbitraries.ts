@@ -118,7 +118,7 @@ const differencesArbitrary: fc.Arbitrary<{
   }),
 );
 
-/** A search cap on the level grid from the lowest room top to the anchor cap: 0, 5, 10 or 15 dB. */
+/** A search cap on the level grid from the lowest room top to the anchor cap: 0 or 5 dB. */
 const searchCapArbitrary = fc
   .integer({
     min: 0,
