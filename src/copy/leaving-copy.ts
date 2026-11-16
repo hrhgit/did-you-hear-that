@@ -27,12 +27,6 @@ export const leavingCopy = Object.freeze({
       "The house could not play its sounds on this device, so the visit ended. Nothing from this visit was kept.",
   }),
   backButton: "Back to the front door",
-  /** After the last room, on the way to the picture of the visit. */
-  lastRoom: Object.freeze({
-    heading: "That was the last room",
-    line: "You have been through every room of this visit. The picture of what you caught is ready.",
-    button: "See the picture",
-  }),
   /** A stand-in for a room visited again with left and right swapped, until that has been built. */
   swappedRoomNotBuilt: Object.freeze({
     heading: "This is not built yet",

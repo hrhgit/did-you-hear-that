@@ -2,12 +2,21 @@ import { describe, expect, it } from "vitest";
 import { calibrationCopy } from "../../copy/calibration-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
+import { replayCopy } from "../../copy/replay-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
   CalibrationSnapshot,
   HeadphoneCheckSnapshot,
+  MissedSoundReplay,
   MissedSoundReplaySnapshot,
   PauseReason,
+  ReplayAnnouncing,
+  ReplayCounts,
+  ReplayFinished,
+  ReplayNothingMissed,
+  ReplayPlaying,
+  ReplaySideCounts,
+  ReplaySound,
   SnapshotBase,
   VisitLog,
   VisitRoom,
@@ -35,6 +44,79 @@ function base<Stage extends VisitStage>(
     canProceed: false,
     pause: null,
     activationRefused: false,
+  };
+}
+
+const sideCounts: ReplaySideCounts = {
+  madeCount: 7,
+  caughtCount: 3,
+  wrongSideCount: 0,
+  missedCount: 4,
+};
+
+const counts: ReplayCounts = {
+  throughTrialOrder: 40,
+  left: sideCounts,
+  right: sideCounts,
+  leftLine: "On your left I made seven sounds. You caught three.",
+  rightLine: "On your right I made seven sounds. You caught three.",
+};
+
+const replaySound: ReplaySound = {
+  position: 3,
+  positionLabel: "Sound 3 of 8",
+  trialOrder: 40,
+  room: { roomIndex: 2, roomId: "stairs", frequencyHz: 4000 },
+  roomName: "Stairs",
+  pitchLabel: "4 kHz",
+  ear: "right",
+  missedLevelDb: -35,
+  raisedLevelDb: -15,
+  replayCapDb: -10,
+  askedLevelDb: -15,
+  playedLevelDb: -15,
+  clampLimit: null,
+  capChangedLevel: false,
+  rippleLabel:
+    "On your right, 4 kHz. When you did not catch it, it was 35 dB quieter than your calibration. Now it is louder.",
+};
+
+const viewBase = {
+  heading: replayCopy.heading,
+  missedSoundCount: 8,
+  replaySoundCount: 8,
+  selectionLine: "A line about the selection.",
+  stopLabel: replayCopy.stopButton,
+  canStart: true,
+  canSkip: true,
+  proceedLabel: replayCopy.skipButton,
+};
+
+const announcing: ReplayAnnouncing = {
+  ...viewBase,
+  phase: "announcing",
+  announcementLines: ["I will play them again.", "They are louder now."],
+  startLabel: replayCopy.startButton,
+};
+
+const playing: ReplayPlaying = {
+  ...viewBase,
+  phase: "playing",
+  canStart: false,
+  proceedLabel: replayCopy.skipRestButton,
+  current: replaySound,
+  counts,
+  pauseLine: null,
+  resumeLabel: replayCopy.resumeButton,
+};
+
+/** The replay stage after the three rooms of the quick visit, with a way on. */
+function replaySnapshot(replay: MissedSoundReplay): MissedSoundReplaySnapshot {
+  return {
+    ...base("missedSoundReplay", 3),
+    canProceed: true,
+    visitLog: {} as VisitLog,
+    replay,
   };
 }
 
@@ -234,17 +316,174 @@ describe("screenOfSnapshot", () => {
     },
   );
 
-  it("leads from the last room to the picture", () => {
-    const screen = screenOfSnapshot({
-      ...base("missedSoundReplay", 3),
-      visitLog: {} as VisitLog,
-    } as MissedSoundReplaySnapshot);
-    expect(screen.sheet).toBe("notice");
-    expect(screen.stopShown).toBe(false);
-    expect(screen.notice).toEqual({
-      heading: leavingCopy.lastRoom.heading,
-      line: leavingCopy.lastRoom.line,
-      button: { label: leavingCopy.lastRoom.button, action: "proceed" },
+  describe("in the replay of missed sounds", () => {
+    it("asks before the first sound, with the stop control and both ways on", () => {
+      const screen = screenOfSnapshot(replaySnapshot(announcing));
+      expect(screen.sheet).toBe("replay");
+      expect(screen.stopShown).toBe(true);
+      expect(screen.stopLabel).toBe(replayCopy.stopButton);
+      expect(screen.answersShown).toBe(false);
+      expect(screen.pauseShown).toBe(false);
+      expect(screen.litRoom).toBeNull();
+      expect(screen.replay).toEqual({
+        playing: false,
+        heading: replayCopy.heading,
+        lines: announcing.announcementLines,
+        selectionLine: announcing.selectionLine,
+        counts: null,
+        sound: null,
+        startLabel: replayCopy.startButton,
+        proceedLabel: replayCopy.skipButton,
+      });
+    });
+
+    it("offers no start when the view cannot start", () => {
+      const screen = screenOfSnapshot(
+        replaySnapshot({ ...announcing, canStart: false }),
+      );
+      expect(screen.replay?.startLabel).toBeNull();
+      expect(screen.replay?.proceedLabel).toBe(replayCopy.skipButton);
+    });
+
+    it("offers no way on while the flow would not proceed", () => {
+      const screen = screenOfSnapshot({
+        ...replaySnapshot(announcing),
+        canProceed: false,
+      });
+      expect(screen.replay?.proceedLabel).toBeNull();
+    });
+
+    it("says that the sound did not start when the browser refused it", () => {
+      const screen = screenOfSnapshot({
+        ...replaySnapshot(announcing),
+        activationRefused: true,
+      });
+      expect(screen.sheet).toBe("replay");
+      expect(screen.soundNotStartedLine).toBe(visitCopy.soundNotStartedLine);
+    });
+
+    it("shows the house with the room of the playing sound lit, its place and both counts", () => {
+      const screen = screenOfSnapshot(replaySnapshot(playing));
+      expect(screen.sheet).toBeNull();
+      expect(screen.stopShown).toBe(true);
+      expect(screen.stopLabel).toBe(replayCopy.stopButton);
+      expect(screen.answersShown).toBe(false);
+      expect(screen.pauseShown).toBe(false);
+      expect(screen.room).toEqual({
+        id: "stairs",
+        name: replaySound.roomName,
+        progress: replaySound.positionLabel,
+      });
+      expect(screen.litRoom).toBe("stairs");
+      expect(screen.roomStates).toEqual({
+        cellar: "closed",
+        corridor: "visited",
+        nursery: "visited",
+        stairs: "lit",
+        attic: "closed",
+      });
+      expect(screen.replay).toEqual({
+        playing: true,
+        heading: replayCopy.heading,
+        lines: [],
+        selectionLine: playing.selectionLine,
+        counts: { left: counts.leftLine, right: counts.rightLine },
+        sound: { side: "right", label: replaySound.rippleLabel },
+        startLabel: null,
+        proceedLabel: replayCopy.skipRestButton,
+      });
+    });
+
+    it("lights no room between the press and the first sound", () => {
+      const screen = screenOfSnapshot(
+        replaySnapshot({ ...playing, current: null, counts: null }),
+      );
+      expect(screen.sheet).toBeNull();
+      expect(screen.room).toBeNull();
+      expect(screen.litRoom).toBeNull();
+      expect(screen.replay?.sound).toBeNull();
+      expect(screen.replay?.counts).toBeNull();
+      expect(screen.stopShown).toBe(true);
+    });
+
+    it.each(["hidden", "interrupted"] as const)(
+      "covers a replay paused for the reason %s with the replay's own line",
+      (reason) => {
+        const screen = screenOfSnapshot({
+          ...replaySnapshot({
+            ...playing,
+            pauseLine: replayCopy.pauseLines[reason],
+          }),
+          canProceed: false,
+          pause: { reason },
+        });
+        expect(screen.sheet).toBe("notice");
+        expect(screen.stopShown).toBe(true);
+        expect(screen.stopLabel).toBe(replayCopy.stopButton);
+        expect(screen.replay).toBeNull();
+        expect(screen.litRoom).toBeNull();
+        expect(screen.notice).toEqual({
+          heading: leavingCopy.pauseHeading,
+          line: replayCopy.pauseLines[reason],
+          button: { label: replayCopy.resumeButton, action: "resume" },
+        });
+      },
+    );
+
+    it("ends with the end line, both counts and the way to the picture", () => {
+      const finished: ReplayFinished = {
+        ...viewBase,
+        phase: "finished",
+        canStart: false,
+        canSkip: false,
+        proceedLabel: replayCopy.goOnButton,
+        ending: "allPlayed",
+        endLine: "Those were all of them.",
+        counts,
+        last: replaySound,
+      };
+      const screen = screenOfSnapshot(replaySnapshot(finished));
+      expect(screen.sheet).toBe("replay");
+      expect(screen.stopShown).toBe(true);
+      expect(screen.litRoom).toBeNull();
+      expect(screen.replay).toEqual({
+        playing: false,
+        heading: replayCopy.heading,
+        lines: [finished.endLine],
+        selectionLine: null,
+        counts: { left: counts.leftLine, right: counts.rightLine },
+        sound: null,
+        startLabel: null,
+        proceedLabel: replayCopy.goOnButton,
+      });
+    });
+
+    it("says so when nothing was missed, and leads to the picture", () => {
+      const nothingMissed: ReplayNothingMissed = {
+        ...viewBase,
+        phase: "nothingMissed",
+        missedSoundCount: 0,
+        replaySoundCount: 0,
+        selectionLine: null,
+        canStart: false,
+        canSkip: false,
+        proceedLabel: replayCopy.goOnButton,
+        line: replayCopy.nothingMissedLine,
+        counts,
+      };
+      const screen = screenOfSnapshot(replaySnapshot(nothingMissed));
+      expect(screen.sheet).toBe("replay");
+      expect(screen.stopShown).toBe(true);
+      expect(screen.replay).toEqual({
+        playing: false,
+        heading: replayCopy.heading,
+        lines: [replayCopy.nothingMissedLine],
+        selectionLine: null,
+        counts: { left: counts.leftLine, right: counts.rightLine },
+        sound: null,
+        startLabel: null,
+        proceedLabel: replayCopy.goOnButton,
+      });
     });
   });
 

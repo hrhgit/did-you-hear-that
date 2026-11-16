@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { roomCopy } from "../../copy/room-copy";
 import type {
+  ReplaySound,
   ScoredVisitTrial,
   TrialScoredEvent,
   VisitRoom,
@@ -47,6 +48,34 @@ function scored(
 }
 
 describe("reactionOfEvent", () => {
+  it.each(["left", "right"] as const)(
+    "draws a ripple from the %s in the room of a sound that is played again, with no line",
+    (ear) => {
+      const sound: ReplaySound = {
+        position: 2,
+        positionLabel: "Sound 2 of 5",
+        trialOrder: 31,
+        room,
+        roomName: "Nursery",
+        pitchLabel: "2 kHz",
+        ear,
+        missedLevelDb: -40,
+        raisedLevelDb: -20,
+        replayCapDb: -10,
+        askedLevelDb: -20,
+        playedLevelDb: -20,
+        clampLimit: null,
+        capChangedLevel: false,
+        rippleLabel: "A label that the page shows beside the house.",
+      };
+      expect(reactionOfEvent({ kind: "replaySoundStarted", sound })).toEqual({
+        kind: "replayRipple",
+        side: ear,
+        roomId: "nursery",
+      });
+    },
+  );
+
   it.each(["left", "right"] as const)(
     "draws a ripple from the %s for a caught sound, with its pitch and level",
     (ear) => {

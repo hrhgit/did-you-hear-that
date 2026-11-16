@@ -2,6 +2,7 @@ import { calibrationCopy } from "../../copy/calibration-copy";
 import { frontDoorCopy } from "../../copy/front-door-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
+import { replayCopy } from "../../copy/replay-copy";
 import { roomCopy } from "../../copy/room-copy";
 import { rulesCopy } from "../../copy/rules-copy";
 import { siteTitle } from "../../copy/site-title";
@@ -67,6 +68,28 @@ export interface VisitPage {
     readonly line: HTMLElement;
     readonly statusLine: HTMLElement;
     readonly button: HTMLButtonElement;
+  };
+  /** The replay of missed sounds, before its sounds and after them. */
+  readonly replay: Sheet & {
+    /** Holds one paragraph for each line the house says. */
+    readonly lines: HTMLElement;
+    readonly counts: HTMLElement;
+    readonly countLines: Readonly<Record<"left" | "right", HTMLElement>>;
+    readonly selectionLine: HTMLElement;
+    readonly statusLine: HTMLElement;
+    readonly startButton: HTMLButtonElement;
+    readonly proceedButton: HTMLButtonElement;
+  };
+  /** The replay while its sounds play: words beside the house, which stays in full view. */
+  readonly replaying: {
+    readonly element: HTMLElement;
+    /** What is said of the sound that is playing. Its first sentence stands out. */
+    readonly sound: HTMLElement;
+    readonly soundLead: HTMLElement;
+    readonly soundRest: HTMLElement;
+    readonly countLines: Readonly<Record<"left" | "right", HTMLElement>>;
+    readonly selectionLine: HTMLElement;
+    readonly skipButton: HTMLButtonElement;
   };
 }
 
@@ -273,6 +296,51 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     noticeStatus,
   ]);
 
+  // The replay of missed sounds. Its words come with each snapshot, so they start empty.
+  const replayHeading = heading(replayCopy.heading);
+  const replayLines = make("div", "visit-replay-lines");
+  const sheetCounts = {
+    left: make("p", "visit-voice"),
+    right: make("p", "visit-voice"),
+  };
+  const replayCounts = make("div", "visit-replay-sheet-counts", [
+    sheetCounts.left,
+    sheetCounts.right,
+  ]);
+  const replaySelection = make("p", "visit-quiet");
+  const replayStatus = status();
+  const replayStartButton = button(replayCopy.startButton, "visit-button-lit");
+  const replayProceedButton = button(replayCopy.skipButton);
+  const replay = sheet("replay", replayHeading, [
+    replayLines,
+    replaySelection,
+    replayCounts,
+    controls([replayStartButton, replayProceedButton]),
+    replayStatus,
+  ]);
+
+  const soundLead = make("span", "visit-replay-sound-lead");
+  const soundRest = make("span", "visit-replay-sound-rest");
+  // The space keeps the two sentences apart for anything that reads the text and not the layout.
+  const replayingSound = make("p", "visit-replay-sound", [
+    soundLead,
+    " ",
+    soundRest,
+  ]);
+  const replayingCounts = {
+    left: make("p", "visit-replay-count visit-replay-count-left"),
+    right: make("p", "visit-replay-count visit-replay-count-right"),
+  };
+  const replayingSelection = make("p", "visit-replay-note");
+  const replaySkipButton = button(replayCopy.skipRestButton);
+  const replaying = make("div", "visit-replay", [
+    replayingSound,
+    replayingCounts.left,
+    replayingCounts.right,
+    make("div", "visit-replay-foot", [replayingSelection, replaySkipButton]),
+  ]);
+  replaying.hidden = true;
+
   main.classList.add("visit");
   // The drawing starts faint, behind the front door. Set before anything is drawn, so that the
   // page never opens on a bright house that then fades.
@@ -286,11 +354,13 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     answerButtons.right,
     caption,
     rest,
+    replaying,
     frontDoor,
     calibration,
     headphoneCheck,
     rules,
     notice,
+    replay,
   );
 
   return {
@@ -342,6 +412,26 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       line: noticeLine,
       statusLine: noticeStatus,
       button: noticeButton,
+    },
+    replay: {
+      element: replay,
+      heading: replayHeading,
+      lines: replayLines,
+      counts: replayCounts,
+      countLines: sheetCounts,
+      selectionLine: replaySelection,
+      statusLine: replayStatus,
+      startButton: replayStartButton,
+      proceedButton: replayProceedButton,
+    },
+    replaying: {
+      element: replaying,
+      sound: replayingSound,
+      soundLead,
+      soundRest,
+      countLines: replayingCounts,
+      selectionLine: replayingSelection,
+      skipButton: replaySkipButton,
     },
   };
 }

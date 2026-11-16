@@ -275,6 +275,175 @@
   font-style: italic;
 }
 
+/*
+ * The replay of missed sounds. While the sounds play, the house stays in full view and gives up
+ * the strip under it: what is said of the playing sound, the count of each side under the side it
+ * belongs to, and the way out. Every block has a fixed height, so nothing jumps from one sound to
+ * the next.
+ */
+.visit[data-replay="playing"] {
+  --visit-caption: 17.5rem;
+}
+
+.visit-replay {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(5.5rem, auto) minmax(7.25rem, auto) auto;
+  column-gap: 1.5rem;
+  /* On a very narrow screen the words may need more height. They take it from the cellar. */
+  min-height: var(--visit-caption);
+  padding: 0.5rem 1.25rem 0.9rem;
+  background: linear-gradient(to top, var(--color-night) 88%, transparent);
+  pointer-events: none;
+}
+
+.visit-replay p {
+  margin: 0;
+}
+
+/* The playing sound: its side and its pitch first, then what happened to it. */
+.visit-replay-sound {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: start;
+  font-size: 0.9375rem;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--color-graphite);
+  text-wrap: balance;
+}
+
+.visit-replay[data-side="right"] .visit-replay-sound {
+  text-align: right;
+}
+
+.visit-replay-sound-lead {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--color-lamp);
+  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
+  line-height: 1.2;
+}
+
+.visit-replay-count {
+  grid-row: 2;
+  align-self: start;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-graphite-faint);
+  font-size: 0.875rem;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.visit-replay-count-left {
+  grid-column: 1;
+}
+
+.visit-replay-count-right {
+  grid-column: 2;
+  text-align: right;
+}
+
+.visit-replay-foot {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.25rem;
+}
+
+.visit-replay-note {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--color-graphite);
+  font-size: 0.8125rem;
+  line-height: 1.25;
+}
+
+.visit-replay-foot .visit-button {
+  flex: none;
+  margin: 0 0.4rem;
+  pointer-events: auto;
+}
+
+/*
+ * A screen wide enough to have room beside the house: the words stand left and right of it, each
+ * count on its own side, and the playing sound above the count of its side.
+ */
+@media (min-aspect-ratio: 5 / 4) and (min-width: 40rem),
+  (max-height: 520px) and (orientation: landscape) {
+  .visit[data-replay="playing"] {
+    --visit-caption: 5.25rem;
+  }
+
+  .visit-replay {
+    /*
+     * The width the drawing takes: its height times 592 / 880, the proportion of the house's
+     * view box.
+     */
+    --replay-house: calc(
+      (100dvh - var(--visit-bar) - var(--visit-caption)) * 0.6727
+    );
+
+    inset: var(--visit-bar) 0 0;
+    grid-template-columns:
+      minmax(0, 1fr) min(var(--replay-house), 60%)
+      minmax(0, 1fr);
+    grid-template-rows: 44% minmax(0, 1fr) var(--visit-caption);
+    column-gap: 1.25rem;
+    min-height: 0;
+    padding: 0 1.5rem;
+    background: none;
+  }
+
+  .visit-replay-sound {
+    grid-column: 1;
+    align-self: end;
+    max-width: 21rem;
+    padding-bottom: 1.25rem;
+    font-size: 1rem;
+  }
+
+  .visit-replay[data-side="right"] .visit-replay-sound {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .visit-replay-count {
+    max-width: 21rem;
+    padding-top: 0.75rem;
+    font-size: 1rem;
+  }
+
+  .visit-replay-count-right {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  /* The note stands under the left count and the way out under the right one. */
+  .visit-replay-foot {
+    display: contents;
+  }
+
+  .visit-replay-note {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: center;
+    max-width: 21rem;
+  }
+
+  .visit-replay-foot .visit-button {
+    grid-column: 3;
+    grid-row: 3;
+    align-self: center;
+    justify-self: end;
+  }
+}
+
 /* A sheet of text over the faint drawing. */
 .visit-sheet {
   position: absolute;
@@ -395,6 +564,25 @@ p.visit-status {
   font-variant-numeric: lining-nums;
 }
 
+/* The two counts after the replay, side by side like the two sides of the house. */
+.visit-replay-sheet-counts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  max-width: 31rem;
+  margin: 1.25rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.visit-replay-sheet-counts p {
+  margin: 0;
+}
+
+.visit-replay-sheet-counts p + p {
+  text-align: right;
+}
+
 .visit-controls {
   display: flex;
   flex-wrap: wrap;
@@ -422,6 +610,7 @@ p.visit-status {
 /* A sheet that appears fades in. Browsers without @starting-style show it at once, in the dark. */
 .visit-sheet,
 .visit-rest,
+.visit-replay,
 .visit-bar > * {
   transition:
     opacity 0.6s ease,
@@ -431,6 +620,7 @@ p.visit-status {
 @starting-style {
   .visit-sheet,
   .visit-rest,
+  .visit-replay,
   .visit-bar > * {
     opacity: 0;
   }
@@ -465,6 +655,35 @@ p.visit-status {
 
   .visit-sheet-body {
     padding: 0.5rem 0;
+  }
+
+  /* The drawing takes the whole height here, and the replay's last row is as tall as its button. */
+  .visit[data-replay="playing"] {
+    --visit-caption: 0rem;
+  }
+
+  .visit-replay {
+    --replay-house: calc((100dvh - 1rem) * 0.6727);
+
+    grid-template-rows: 40% minmax(0, 1fr) 3.75rem;
+    padding: 0 1rem;
+  }
+
+  .visit-replay-sound,
+  .visit-replay-count {
+    font-size: 0.875rem;
+  }
+
+  .visit-replay-sound {
+    padding-bottom: 0.5rem;
+  }
+
+  .visit-replay-sound-lead {
+    font-size: 1.0625rem;
+  }
+
+  .visit-replay-count {
+    padding-top: 0.4rem;
   }
 }
 

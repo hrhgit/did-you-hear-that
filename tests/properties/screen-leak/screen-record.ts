@@ -18,8 +18,11 @@ import type { LeakSample } from "./guess-from-screen";
 /** One time the page would have changed, other than the ambient motion of the lit room. */
 export interface ScreenMoment {
   readonly atMs: number;
-  /** `screen`: the screen derived from a snapshot changed. `ripple`, `say`: a reaction. */
-  readonly what: "screen" | "ripple" | "say";
+  /**
+   * `screen`: the screen derived from a snapshot changed. `ripple`, `say`: a reaction to a scored
+   * trial. `replayRipple`: the ripple of a sound that is played again after the rooms.
+   */
+  readonly what: "screen" | "ripple" | "say" | "replayRipple";
 }
 
 /** What a recorder is told when a trial's window is set. */

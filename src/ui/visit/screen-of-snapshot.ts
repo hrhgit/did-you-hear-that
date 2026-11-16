@@ -4,11 +4,16 @@ import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import {
   betweenRoomsLine,
+  roomCopy,
   roomNames,
   roomProgressLine,
 } from "../../copy/room-copy";
 import { visitCopy } from "../../copy/visit-copy";
-import type { VisitRoom, VisitSnapshot } from "../../session/visit-flow-types";
+import type {
+  MissedSoundReplaySnapshot,
+  VisitRoom,
+  VisitSnapshot,
+} from "../../session/visit-flow-types";
 
 /** How a room of the drawing is shown. The drawing of the house takes the same four words. */
 export type ScreenRoomState = "dark" | "lit" | "visited" | "closed";
@@ -20,6 +25,7 @@ export type SheetName =
   | "headphoneCheck"
   | "rules"
   | "notice"
+  | "replay"
   | "result";
 
 /** What the button of the notice sheet does. `proceed` is the flow's own next step. */
@@ -61,6 +67,32 @@ export interface NoticeScreen {
 }
 
 /**
+ * The replay of the sounds a visitor did not catch. Before the sounds and after them it is a
+ * sheet of text. While they play there is no sheet: the house is in full view, and the words
+ * stand beside it.
+ */
+export interface ReplayScreen {
+  /** Whether the sounds are playing now. */
+  readonly playing: boolean;
+  readonly heading: string;
+  /** What the house says on the sheet, in order. Empty while the sounds play. */
+  readonly lines: readonly string[];
+  /** How many sounds there were when only some are played, or null. */
+  readonly selectionLine: string | null;
+  /** How many sounds the house made on each side and how many were caught, or null. */
+  readonly counts: { readonly left: string; readonly right: string } | null;
+  /** The sound that is playing, or the last one that started: its side and what is said of it. */
+  readonly sound: {
+    readonly side: "left" | "right";
+    readonly label: string;
+  } | null;
+  /** The label of the control that starts the sounds, or null where they cannot be started. */
+  readonly startLabel: string | null;
+  /** The label of the control that skips the sounds or goes on to the picture, or null. */
+  readonly proceedLabel: string | null;
+}
+
+/**
  * Everything the page shows for one snapshot of the visit, as plain data. It is made from the
  * snapshot alone, and a snapshot holds nothing about a trial, so a screen cannot either. The
  * result is only named here (`sheet: "result"`). Its picture is drawn by `src/ui/result` from the
@@ -69,8 +101,10 @@ export interface NoticeScreen {
 export interface Screen {
   /** The sheet over the drawing, or null inside a room and between two rooms. */
   readonly sheet: SheetName | null;
-  /** Whether the stop control is shown: from the first sound until the last room is finished. */
+  /** Whether the stop control is shown: from the first sound until the picture. */
   readonly stopShown: boolean;
+  /** What the stop control says. */
+  readonly stopLabel: string;
   /** Whether the pause control is shown: inside a room. */
   readonly pauseShown: boolean;
   /** Whether the two halves of the screen take answers: inside a room. */
@@ -89,6 +123,7 @@ export interface Screen {
   readonly calibration: CalibrationScreen | null;
   readonly headphoneCheck: HeadphoneCheckScreen | null;
   readonly notice: NoticeScreen | null;
+  readonly replay: ReplayScreen | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
@@ -124,21 +159,76 @@ function roomLabelOf(
   };
 }
 
+/** The replay as the page shows it. Every word comes from the snapshot. */
+function replayScreenOf(snapshot: MissedSoundReplaySnapshot): ReplayScreen {
+  const view = snapshot.replay;
+  const proceedLabel = snapshot.canProceed ? view.proceedLabel : null;
+  const base = {
+    playing: false,
+    heading: view.heading,
+    selectionLine: view.selectionLine,
+    sound: null,
+    startLabel: null,
+    proceedLabel,
+  } satisfies Partial<ReplayScreen>;
+  switch (view.phase) {
+    case "nothingMissed":
+      return {
+        ...base,
+        lines: [view.line],
+        counts: { left: view.counts.leftLine, right: view.counts.rightLine },
+      };
+    case "announcing":
+      return {
+        ...base,
+        lines: view.announcementLines,
+        counts: null,
+        startLabel: view.canStart ? view.startLabel : null,
+      };
+    case "playing":
+      return {
+        ...base,
+        playing: true,
+        lines: [],
+        counts:
+          view.counts === null
+            ? null
+            : { left: view.counts.leftLine, right: view.counts.rightLine },
+        sound:
+          view.current === null
+            ? null
+            : { side: view.current.ear, label: view.current.rippleLabel },
+      };
+    case "finished":
+      return {
+        ...base,
+        lines: [view.endLine],
+        // The end line already says how many of the missed sounds were played, and the line
+        // about the selection speaks of sounds still to come.
+        selectionLine: null,
+        counts: { left: view.counts.leftLine, right: view.counts.rightLine },
+      };
+  }
+}
+
 /** The screen for a snapshot. A pure function: the same snapshot always gives the same screen. */
 export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
   // No sound can play at the front door, on the exit screen, on a device that cannot play, or
-  // after the last room, so the stop control is not shown there.
+  // once the picture is shown, so the stop control is not shown there.
   const outside =
     snapshot.stage === "entry" ||
     snapshot.stage === "exit" ||
     snapshot.stage === "unsupported" ||
-    snapshot.stage === "missedSoundReplay" ||
     snapshot.stage === "result" ||
     snapshot.stage === "swappedRepeat";
   const inRoom = snapshot.stage === "room" && snapshot.pause === null;
   const litRoom = inRoom ? snapshot.room : null;
   const base = {
     stopShown: !outside,
+    stopLabel:
+      snapshot.stage === "missedSoundReplay"
+        ? snapshot.replay.stopLabel
+        : roomCopy.stopButton,
     pauseShown: inRoom,
     answersShown: inRoom,
     room: null,
@@ -148,12 +238,29 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     calibration: null,
     headphoneCheck: null,
     notice: null,
+    replay: null,
     soundNotStartedLine: snapshot.activationRefused
       ? visitCopy.soundNotStartedLine
       : null,
   } satisfies Partial<Screen>;
 
   if (snapshot.pause !== null) {
+    if (
+      snapshot.stage === "missedSoundReplay" &&
+      snapshot.replay.phase === "playing" &&
+      snapshot.replay.pauseLine !== null
+    ) {
+      // The replay says for itself why its sounds paused.
+      return {
+        ...base,
+        sheet: "notice",
+        notice: {
+          heading: leavingCopy.pauseHeading,
+          line: snapshot.replay.pauseLine,
+          button: { label: snapshot.replay.resumeLabel, action: "resume" },
+        },
+      };
+    }
     return {
       ...base,
       sheet: "notice",
@@ -222,18 +329,30 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         room: roomLabelOf(snapshot, snapshot.finishedRoom),
         restLine: betweenRoomsLine(snapshot.nextRoom.roomId),
       };
-    case "missedSoundReplay":
-      // The replay of the sounds a visitor did not catch has its own spec. Until it is built,
-      // the last room leads straight to the picture.
+    case "missedSoundReplay": {
+      const replay = replayScreenOf(snapshot);
+      const current =
+        snapshot.replay.phase === "playing" ? snapshot.replay.current : null;
+      if (!replay.playing) {
+        return { ...base, sheet: "replay", replay };
+      }
+      // While the sounds play the house is in full view, and the room of the sound is lit.
       return {
         ...base,
-        sheet: "notice",
-        notice: {
-          heading: leavingCopy.lastRoom.heading,
-          line: leavingCopy.lastRoom.line,
-          button: { label: leavingCopy.lastRoom.button, action: "proceed" },
-        },
+        sheet: null,
+        replay,
+        room:
+          current === null
+            ? null
+            : {
+                id: current.room.roomId,
+                name: current.roomName,
+                progress: current.positionLabel,
+              },
+        litRoom: current === null ? null : current.room.roomId,
+        roomStates: roomStatesOf(snapshot, current?.room ?? null),
       };
+    }
     case "result":
       return { ...base, sheet: "result" };
     case "swappedRepeat":

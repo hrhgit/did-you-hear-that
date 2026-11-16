@@ -12,6 +12,7 @@ import { drawHouseSection } from "../house/draw-house-section";
 import { startMotionLayer } from "../house/motion-layer";
 import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
+import { joinReplayButtons } from "./join-replay-buttons";
 import { listenForAnswers } from "./listen-for-answers";
 import type { VisitSnapshot } from "../../session/visit-flow-types";
 import { reactionOfEvent } from "./reaction-of-event";
@@ -147,6 +148,14 @@ export function startVisit(
     if (screenView.restButtonIsMeant()) {
       flow.proceed();
     }
+  });
+  joinReplayButtons(page, () => screenView.replayButtonIsMeant(), {
+    startReplay: () => {
+      flow.startReplay();
+    },
+    proceed: () => {
+      flow.proceed();
+    },
   });
   press(page.notice.button, () => {
     const action = screenView.current()?.notice?.button?.action;
