@@ -71,6 +71,46 @@ describe("audioOutputConfig", () => {
     });
   });
 
+  describe("the calibration music (audible-start design.md, Config)", () => {
+    it("has the values of the audible-start design", () => {
+      expect(audioOutputConfig.calibrationSettingSpanMinDb).toBe(10);
+      expect(audioOutputConfig.calibrationMusicRisePeriodMs).toBe(2000);
+      expect(audioOutputConfig.calibrationMusicGainStepMs).toBe(100);
+      expect(audioOutputConfig.calibrationMusicLoadMaxMs).toBe(10000);
+    });
+
+    it("ends the name of every music value with its unit", () => {
+      for (const fieldName of [
+        "calibrationSettingSpanMinDb",
+        "calibrationMusicRisePeriodMs",
+        "calibrationMusicGainStepMs",
+        "calibrationMusicLoadMaxMs",
+      ]) {
+        expect(Object.keys(audioOutputConfig)).toContain(fieldName);
+        expect(fieldName).toMatch(/(Db|Ms)$/);
+      }
+    });
+
+    it("divides the rise period into a whole number of gain steps", () => {
+      const { calibrationMusicRisePeriodMs, calibrationMusicGainStepMs } =
+        audioOutputConfig;
+      expect(calibrationMusicGainStepMs).toBeGreaterThan(0);
+      expect(calibrationMusicGainStepMs).toBeLessThanOrEqual(
+        calibrationMusicRisePeriodMs,
+      );
+      expect(
+        Number.isInteger(
+          calibrationMusicRisePeriodMs / calibrationMusicGainStepMs,
+        ),
+      ).toBe(true);
+    });
+
+    it("gives a positive span and a positive load limit", () => {
+      expect(audioOutputConfig.calibrationSettingSpanMinDb).toBeGreaterThan(0);
+      expect(audioOutputConfig.calibrationMusicLoadMaxMs).toBeGreaterThan(0);
+    });
+  });
+
   describe("playable buffers (D6)", () => {
     it("gives a Peak_Bound to exactly the six sounds", () => {
       expect(Object.keys(audioOutputConfig.peakBoundDb)).toEqual([...soundIds]);
@@ -126,6 +166,13 @@ describe("audioOutputConfig", () => {
         audioOutputConfig.calibrationRiseMaxDb,
         `calibrationRiseMaxDb is above 5 dB. A larger rise between repeats ${loosening}.`,
       ).toBeLessThanOrEqual(5);
+    });
+
+    it("keeps the rise period of the calibration music at 2000 ms or longer", () => {
+      expect(
+        audioOutputConfig.calibrationMusicRisePeriodMs,
+        `calibrationMusicRisePeriodMs is below 2000 ms. A faster rise of the calibration music ${loosening}.`,
+      ).toBeGreaterThanOrEqual(2000);
     });
 
     it("keeps the headphone check level at 0 dB or lower", () => {

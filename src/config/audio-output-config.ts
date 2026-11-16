@@ -10,7 +10,8 @@ import type { SoundId } from "./sound-id";
  * The bottom of the calibration control, the Keep_Minimum, the rise between repeats, the output
  * fade, the stop fade and the headphone check level are guarded against loosening by the config
  * test (D32). Making one stricter is always allowed. Loosening one needs the project owner's
- * approval first.
+ * approval first. The rise period of the calibration music is guarded the same way
+ * (`.kiro/specs/audible-start/design.md`, Config).
  */
 export interface AudioOutputConfig {
   /** The raised-cosine fade the output stage multiplies into each end of every buffer. */
@@ -37,6 +38,20 @@ export interface AudioOutputConfig {
   readonly headphoneCheckLevelDb: number;
   /** Every room must reach at least this level at the top of the calibration control. */
   readonly roomTopMinDb: number;
+  /**
+   * The fewest decibels of settings a calibration sound must leave to keep, from the Keep_Minimum
+   * up to the top of the control. A calibration music whose top would leave fewer is not used.
+   */
+  readonly calibrationSettingSpanMinDb: number;
+  /**
+   * The calibration music rises by at most `calibrationRiseMaxDb` in this long, the limit of the
+   * exception to audio-safety rule 6 for the calibration music.
+   */
+  readonly calibrationMusicRisePeriodMs: number;
+  /** One step of the calibration music's level: an exponential ramp over this long. */
+  readonly calibrationMusicGainStepMs: number;
+  /** Longest wait for the calibration music to load before the hiss is used instead. */
+  readonly calibrationMusicLoadMaxMs: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -68,7 +83,7 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   },
   // D6: eight stairs renders in a row above the bound happen about once in 10^10
   renderAttemptsMaxCount: 8,
-  // D8: about 86 dB below full scale for the hiss. Guarded (D32)
+  // D8: about 86 dB below full scale for the calibration sound. Guarded (D32)
   calibrationSettingMinDb: -60,
   // D8
   calibrationSettingStepDb: 1,
@@ -78,8 +93,17 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   calibrationSettingKeepMinDb: -40,
   // D8: keeps the repeats distinct
   calibrationRepeatGapMs: 400,
-  // D20: the level the visitor just matched to their hands. Guarded (D32)
+  // D20: the anchor: the level the visitor just set. Guarded (D32)
   headphoneCheckLevelDb: 0,
   // D8: every room can reach at least the anchor at the top of the control
   roomTopMinDb: 0,
+  // audible-start D9: the fewest dB of settings that can be kept, the brief's own figure
+  calibrationSettingSpanMinDb: 10,
+  // audible-start brief: "5 dB per 2 seconds", the exception to rule 6 approved by the owner on
+  // 2026-11-16. Guarded: a shorter period is a faster rise
+  calibrationMusicRisePeriodMs: 2000,
+  // audible-start D6: steps of 100 ms, each at most 0.25 dB
+  calibrationMusicGainStepMs: 100,
+  // audible-start D4: after 10 s without the music, the hiss
+  calibrationMusicLoadMaxMs: 10000,
 });

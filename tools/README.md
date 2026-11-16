@@ -4,6 +4,8 @@ Node scripts that serve development: offline sound rendering with a spectrum rep
 
 Code here may import any module under `src/`. It may not import from `tests/`, and nothing outside `tools/` may import from here.
 
+`npx tsx tools/measure-calibration-music.ts` decodes `public/audio/calibration-waltz.m4a` with ffmpeg into memory at 44100 Hz and 48000 Hz and prints its RMS, peak, crest factor and Music_Top, the step at the loop's seam, the time the music takes to rise, and the loudness of the music and of the hiss (`.kiro/specs/audible-start/design.md`, D8); it writes no file, needs ffmpeg and is not run by `npm test`.
+
 ## The render tool
 
 `npm run render:sounds` renders every sound in `src/audio/synth` at 44100 Hz and 48000 Hz with seeds 1 to 10, measures each buffer and checks it against the sound rules: the band, the fades, the duration, the level, the peak and, for the calibration noise, its shape. It plays nothing. `render-sounds.ts` is the command-line wrapper. `run-sound-render.ts` is its core, which reads and writes nothing, and `sound-render/` holds its parts.
