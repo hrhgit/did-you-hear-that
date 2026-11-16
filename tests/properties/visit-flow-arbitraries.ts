@@ -18,6 +18,7 @@ import type {
 } from "../listeners/listener-types";
 import type {
   TimeStampMode,
+  VisitorCalibrationControl,
   VisitorDisturbance,
   VisitorEnding,
   VisitorExtraPress,
@@ -79,6 +80,13 @@ export const calibrationTargetArbitrary: fc.Arbitrary<number> = fc
       audioOutputConfig.calibrationSettingKeepMinDb +
       steps * audioOutputConfig.calibrationSettingStepDb,
   );
+
+/**
+ * How the visitor moves the calibration control (audible-start R27.2): by presses, by one drag
+ * with `setCalibrationTarget`, or by a drag and then presses.
+ */
+export const calibrationControlArbitrary: fc.Arbitrary<VisitorCalibrationControl> =
+  fc.constantFrom("presses", "target", "both");
 
 const headphoneCheckAnswerArbitrary: fc.Arbitrary<HeadphoneCheckAnswer> =
   fc.constantFrom("left", "right", "bothSides", "nothingHeard");
@@ -152,7 +160,7 @@ const endingArbitrary: fc.Arbitrary<VisitorEnding> = fc.record({
 
 /**
  * A visitor script as the design draws it: a visit type; a calibration target from the
- * Keep_Minimum to the top; a first headphone check answer (anything but `left` is followed by
+ * Keep_Minimum to the top, reached by presses, a drag or both (audible-start R27.2); a first headphone check answer (anything but `left` is followed by
  * `left`); a listener; answer delays from 0 to `responseWindowMs + 500` ms after the window opens
  * and time stamps of the modes drawn, from the visitor's seeded source; extra presses; up to four
  * disturbances, each followed by `resume` after 0 to 10 s; at most one ending; and rests of 0 to
@@ -171,6 +179,7 @@ export function visitorScriptArbitrary(
   return fc.record({
     visitType: visitTypeArbitrary,
     calibrationTargetDb: calibrationTargetArbitrary,
+    calibrationControl: calibrationControlArbitrary,
     firstHeadphoneCheckAnswer: headphoneCheckAnswerArbitrary,
     listener: visitorListenerArbitrary,
     visitorSeed: seedArbitrary,

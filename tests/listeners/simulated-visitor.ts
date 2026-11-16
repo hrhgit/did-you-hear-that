@@ -253,6 +253,15 @@ export interface VisitorSwappedRepeatBehaviour {
   readonly turnsBack: boolean;
 }
 
+/**
+ * How the visitor moves the calibration control (audible-start R27.2). `presses`: louder and
+ * quieter only, as a person holding the button. `target`: one drag of the control to its setting
+ * with `setCalibrationTarget`, then a wait for the played setting to catch up. `both`: one drag to
+ * halfway between the bottom of the control and its setting, which need not lie on the control's
+ * grid, then presses for the rest.
+ */
+export type VisitorCalibrationControl = "presses" | "target" | "both";
+
 /** The headphones the visitor wears. */
 export interface VisitorHeadphones {
   /** Headphone_Imbalance: how much quieter the right earpiece plays than the left, in dB. */
@@ -264,6 +273,8 @@ export interface VisitorScript {
   readonly visitType: VisitType;
   /** The calibration setting the visitor raises the hiss to and keeps. */
   readonly calibrationTargetDb: number;
+  /** How the visitor moves the control to that setting. Without it, `presses`, as before audible-start. */
+  readonly calibrationControl?: VisitorCalibrationControl;
   /** The first answer to the first headphone check. Every later answer is `left`. */
   readonly firstHeadphoneCheckAnswer: HeadphoneCheckAnswer;
   readonly listener: VisitorListenerSpec;
@@ -398,7 +409,8 @@ interface PlannedAction {
  * exact time planned. After every step it looks at the snapshot and plans what the stage asks
  * for: in calibration it starts the hiss, presses louder after each repeat until the played
  * setting reaches its target (at most `calibrationRiseMaxDb` above the last repeat, as a person
- * holding the button), and keeps it; at the headphone check it plays the check and answers; at
+ * holding the button), and keeps it, or first drags the control as `script.calibrationControl`
+ * says; at the headphone check it plays the check and answers; at
  * `rules`, `betweenRooms` and `missedSoundReplay` it proceeds after a rest; while a pause holds it
  * resumes, at the time its disturbance set or at once. Each presented trial goes to the listener,
  * and an answer other than `none` is given after a drawn delay with a drawn time stamp. With a
@@ -523,6 +535,9 @@ export async function playVisit(
   let reactedTo: VisitSnapshot | null = null;
   /** The visitor's own count of where the control is: the controller's target. */
   let controlDb: number = audioOutputConfig.calibrationSettingMinDb;
+  const calibrationControl = script.calibrationControl ?? "presses";
+  /** True once the visitor has dragged the control in the calibration under way. */
+  let dragged = false;
   let headphoneChecksAnswered = 0;
   /** True when the visitor's last stage action left the snapshot as it was. */
   let retrying = false;
@@ -751,12 +766,32 @@ export async function playVisit(
         if (!snapshot.playing) {
           atOnce(() => {
             controlDb = snapshot.controlBottomDb;
+            dragged = false;
             flow.startCalibration();
           });
           return;
         }
         const playedDb = snapshot.playedSettingDb;
         if (playedDb === null) {
+          return;
+        }
+        if (calibrationControl !== "presses" && !dragged) {
+          atOnce(() => {
+            dragged = true;
+            flow.setCalibrationTarget(
+              calibrationControl === "target"
+                ? script.calibrationTargetDb
+                : (snapshot.controlBottomDb + script.calibrationTargetDb) / 2,
+            );
+            // The flow rounds the drag down to the grid; the control now stands where it says.
+            const after = flow.snapshot();
+            if (
+              after.stage === "calibration" &&
+              after.targetSettingDb !== undefined
+            ) {
+              controlDb = after.targetSettingDb;
+            }
+          });
           return;
         }
         if (playedDb === script.calibrationTargetDb) {

@@ -126,6 +126,83 @@ describe("playVisit", () => {
     }
   });
 
+  // How the visitor moves the calibration control (audible-start R27.2).
+  it.each([
+    // [control, drags, presses of louder]
+    [undefined, [], true],
+    ["presses" as const, [], true],
+    ["target" as const, [-20], false],
+    ["both" as const, [-40], true],
+  ])(
+    "calibrates by %s: drags %j, presses louder: %s, and keeps its setting",
+    async (calibrationControl, drags, presses) => {
+      const harness = createVisitHarness({
+        seed: 20261209,
+        performanceOffsetMs: 5555,
+      });
+      const run = await playVisit(harness, {
+        ...script,
+        ...(calibrationControl === undefined ? {} : { calibrationControl }),
+      });
+      expect(run.ending).toBe("done");
+      expect(run.finalStage).toBe("result");
+      const final = harness.flow.snapshot();
+      if (final.stage !== "result") {
+        throw new Error("The visit did not reach its result.");
+      }
+      expect(
+        final.visitLog.calibrations.map((calibration) => calibration.settingDb),
+      ).toEqual([script.calibrationTargetDb]);
+      expect(
+        harness.actions
+          .filter((action) => action.name === "setCalibrationTarget")
+          .map((action) => action.args[0]),
+      ).toEqual(drags);
+      expect(harness.actions.some((action) => action.name === "louder")).toBe(
+        presses,
+      );
+      // A drag is made while the hiss plays, never before it has started.
+      for (const action of harness.actions) {
+        if (action.name === "setCalibrationTarget") {
+          expect(action.stageBefore).toBe("calibration");
+          expect(action.pausedBefore).toBe(false);
+        }
+      }
+    },
+  );
+
+  it("drags halfway to a setting off the grid, which the flow rounds down, and presses on from there", async () => {
+    const harness = createVisitHarness({
+      seed: 20261210,
+      performanceOffsetMs: 0,
+    });
+    const run = await playVisit(harness, {
+      ...script,
+      calibrationTargetDb: -27,
+      calibrationControl: "both",
+    });
+    expect(run.ending).toBe("done");
+    const drags = harness.actions.filter(
+      (action) => action.name === "setCalibrationTarget",
+    );
+    expect(drags.map((action) => action.args[0])).toEqual([-43.5]);
+    const final = harness.flow.snapshot();
+    if (final.stage !== "result") {
+      throw new Error("The visit did not reach its result.");
+    }
+    expect(final.visitLog.calibrations[0]?.settingDb).toBe(-27);
+    // The first press of louder after the drag moves the target from −44, where the flow put it.
+    const calibrationSnapshots = harness.snapshots.flatMap((recorded) =>
+      recorded.snapshot.stage === "calibration" ? [recorded.snapshot] : [],
+    );
+    expect(
+      calibrationSnapshots.map((snapshot) => snapshot.targetSettingDb),
+    ).toContain(-44);
+    expect(
+      calibrationSnapshots.map((snapshot) => snapshot.targetSettingDb),
+    ).not.toContain(-43.5);
+  });
+
   /** A visitor whose ears are 25 dB apart, so that every floor offers the swapped repeat. */
   const uneven: VisitorScript = Object.freeze({
     ...script,

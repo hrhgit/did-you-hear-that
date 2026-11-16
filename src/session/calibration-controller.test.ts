@@ -11,6 +11,7 @@ import { createCalibrationController } from "./calibration-controller";
 
 const {
   calibrationSettingMinDb,
+  calibrationSettingStepDb,
   calibrationSettingKeepMinDb,
   calibrationRiseMaxDb,
   calibrationRepeatGapMs,
@@ -276,6 +277,144 @@ describe("createCalibrationController", () => {
       repeatRefusal: "notRunning",
     });
     expect(backend.calls).toEqual([]);
+  });
+
+  describe('setTarget (audible-start design.md, "The calibration target")', () => {
+    // Every row of the table, through the controller.
+    it.each([
+      ["on the grid, in range", -20, -20],
+      ["between grid settings", -20.5, -21],
+      ["within the tolerance below a grid setting", -20 - 1e-12, -20],
+      ["below the bottom", -75, calibrationSettingMinDb],
+      ["−Infinity", Number.NEGATIVE_INFINITY, calibrationSettingMinDb],
+      ["above the top", 3, calibrationSettingTopDb()],
+      ["+Infinity", Number.POSITIVE_INFINITY, calibrationSettingTopDb()],
+    ])(
+      "%s: %s gives the target %s and notifies",
+      async (_row, settingDb, expectedDb) => {
+        const { controller } = await setup();
+        controller.open();
+        let changes = 0;
+        controller.onChange(() => {
+          changes += 1;
+        });
+        controller.setTarget(settingDb);
+        expect(controller.snapshot().targetSettingDb).toBe(expectedDb);
+        expect(changes).toBe(1);
+      },
+    );
+
+    it.each([Number.NaN, "-20", undefined, null])(
+      "changes nothing and notifies nothing for %s",
+      async (settingDb) => {
+        const { controller } = await setup();
+        controller.open();
+        controller.setTarget(-30);
+        const before = controller.snapshot();
+        let changes = 0;
+        controller.onChange(() => {
+          changes += 1;
+        });
+        controller.setTarget(settingDb as number);
+        expect(controller.snapshot()).toEqual(before);
+        expect(changes).toBe(0);
+      },
+    );
+
+    it("takes a target set before open, and open puts the target at the bottom (D3)", async () => {
+      const { backend, controller } = await setup();
+      controller.setTarget(-10);
+      expect(controller.snapshot().targetSettingDb).toBe(-10);
+      expect(backend.scheduled()).toHaveLength(0);
+      controller.open();
+      expect(controller.snapshot()).toMatchObject({
+        targetSettingDb: calibrationSettingMinDb,
+        playedSettingDb: calibrationSettingMinDb,
+      });
+    });
+
+    it("plays the repeats towards a target dragged to the top at most calibrationRiseMaxDb apart (R3.8)", async () => {
+      const { controller, advanceToNextRepeat } = await setup();
+      controller.open();
+      controller.setTarget(Number.POSITIVE_INFINITY);
+      const played = [controller.snapshot().playedSettingDb];
+      for (let repeat = 0; repeat < 20; repeat += 1) {
+        advanceToNextRepeat();
+        played.push(controller.snapshot().playedSettingDb);
+      }
+      expect(played.slice(0, 13)).toEqual([
+        -60, -55, -50, -45, -40, -35, -30, -25, -20, -15, -10, -5, -4,
+      ]);
+      expect(played.slice(13)).toEqual(Array<number>(8).fill(-4));
+      expect(controller.snapshot()).toMatchObject({
+        targetSettingDb: calibrationSettingTopDb(),
+        atTop: true,
+      });
+    });
+
+    it("lets louder and quieter go on from a dragged target as before", async () => {
+      const { controller, advanceToNextRepeat } = await setup();
+      controller.open();
+      controller.setTarget(-58);
+      controller.louder();
+      expect(controller.snapshot().targetSettingDb).toBe(-57);
+      advanceToNextRepeat();
+      expect(controller.snapshot().playedSettingDb).toBe(-57);
+      controller.setTarget(-30);
+      controller.quieter();
+      expect(controller.snapshot().targetSettingDb).toBe(-58);
+    });
+  });
+
+  it("gives with louder and quieter the targets they gave before audible-start (D2)", async () => {
+    const { controller, advanceToNextRepeat } = await setup();
+    const topDb = calibrationSettingTopDb();
+    /** The rule of louder and quieter before audible-start, written out. */
+    const before = {
+      louder: (targetDb: number, playedDb: number | null): number =>
+        Math.min(
+          topDb,
+          Math.max(
+            calibrationSettingMinDb,
+            Math.max(targetDb, playedDb ?? targetDb) + calibrationSettingStepDb,
+          ),
+        ),
+      quieter: (targetDb: number, playedDb: number | null): number =>
+        Math.min(
+          topDb,
+          Math.max(
+            calibrationSettingMinDb,
+            (playedDb ?? targetDb) - calibrationSettingStepDb,
+          ),
+        ),
+    };
+    const presses: readonly ("louder" | "quieter" | "wait")[] = [
+      ...Array<"louder">(9).fill("louder"),
+      "wait",
+      "quieter",
+      "quieter",
+      "wait",
+      ...Array<"louder">(70).fill("louder"),
+      "wait",
+      "wait",
+      "quieter",
+      ...Array<"quieter">(70).fill("quieter"),
+      "wait",
+      "louder",
+    ];
+    controller.quieter();
+    controller.open();
+    for (const press of presses) {
+      if (press === "wait") {
+        advanceToNextRepeat();
+        continue;
+      }
+      const { targetSettingDb, playedSettingDb } = controller.snapshot();
+      controller[press]();
+      expect(controller.snapshot().targetSettingDb, press).toBe(
+        before[press](targetSettingDb, playedSettingDb),
+      );
+    }
   });
 
   it("calls every change listener", async () => {

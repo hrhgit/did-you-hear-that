@@ -263,4 +263,21 @@ describe("visit-flow-types", () => {
       "noLevel" | "differenceShrank"
     >();
   });
+
+  // The additions of audible start (audible-start design.md, "Interface contract").
+
+  it("gives VisitFlow a setCalibrationTarget that takes a setting and returns nothing", () => {
+    expectTypeOf<VisitFlow["setCalibrationTarget"]>().toEqualTypeOf<
+      (settingDb: number) => void
+    >();
+  });
+
+  it("gives CalibrationSnapshot an optional targetSettingDb, so that literals written before it still compile (D29)", () => {
+    expectTypeOf<Pick<CalibrationSnapshot, "targetSettingDb">>().toEqualTypeOf<{
+      readonly targetSettingDb?: number;
+    }>();
+    expectTypeOf<
+      Omit<CalibrationSnapshot, "targetSettingDb">
+    >().toExtend<CalibrationSnapshot>();
+  });
 });

@@ -1008,6 +1008,16 @@ The run counts are those of "Correctness properties" (D36). Estimates before the
 
 The budget follows the rule the owner chose for the replay on 2026-11-15, as the swapped repeat did: this spec's property files must take together at most the slowest of three runs of `npm test` with every one of them present, plus about three tenths, rounded up to a multiple of 15 seconds, on the project machine when nothing else heavy runs on it. The time of a file is the sum of its test durations in Vitest's JSON reporter, without its import. No task before the last can know the budget, so each task that adds property files runs `npm test` three times and records the times here, and does not stop because of time; the last task computes the budget and reports it. Every property file has a timeout of 120 seconds. No task lowers a run count.
 
+Measured times:
+
+| Task | Date | File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|---|---|
+| 1 | 2026-11-16 | `audible-start-cp7-calibration-target.property.test.ts` (controller 1.18, 1.33, 1.42 s; visit flow 5.15, 5.23, 5.29 s) | 6.33 s | 6.56 s | 6.71 s |
+| 1 | 2026-11-16 | Sum of this spec's property files | 6.33 s | 6.56 s | 6.71 s |
+| 1 | 2026-11-16 | The whole of `npm test` | 74.4 s | 81.5 s | 82.4 s |
+
+Task 1: the machine ran nothing else heavy; the load came from the three runs themselves (load average 10.4 on 8 cores after the third).
+
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/audible-start-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, written out and first with `it.fails`. The task stops there and reports it, so that the case and the fix go in separate commits (`tech.md`). A property is never weakened to pass. A case that only an owner's choice or a steering value could remove stays an expected break and is reported with its question. A counterexample of an existing accuracy property stops the task with the property and the amount by which it misses (R24.2).

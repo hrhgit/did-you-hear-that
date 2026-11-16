@@ -338,6 +338,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     startCalibration: recorded("startCalibration"),
     louder: recorded("louder"),
     quieter: recorded("quieter"),
+    setCalibrationTarget: recorded("setCalibrationTarget"),
     keepCalibration: recorded("keepCalibration"),
     playHeadphoneCheck: recorded("playHeadphoneCheck"),
     answerHeadphoneCheck: recorded("answerHeadphoneCheck"),

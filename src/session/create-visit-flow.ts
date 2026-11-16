@@ -363,6 +363,9 @@ export function createVisitFlow(
           atTop: fresh ? false : controller.atTop,
           line: fresh ? calibrationCopy.openLine : controller.line,
           keepRefusal: current.keepRefusal,
+          // The bottom until the visitor first starts the sound: `open` puts the target there
+          // (audible-start R3.5, R3.6, D3).
+          targetSettingDb: fresh ? controlBottomDb : controller.targetSettingDb,
         });
       }
       case "headphoneCheck":
@@ -1108,6 +1111,15 @@ export function createVisitFlow(
       step(() => {
         if (inVisit("calibration") !== null) {
           calibration.quieter();
+        }
+      });
+    },
+
+    setCalibrationTarget(settingDb) {
+      step(() => {
+        // Ignored outside calibration and while a pause holds (audible-start R3.9).
+        if (inVisit("calibration") !== null) {
+          calibration.setTarget(settingDb);
         }
       });
     },

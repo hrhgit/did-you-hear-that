@@ -384,6 +384,7 @@ type ActionName =
   | "startCalibration"
   | "louder"
   | "quieter"
+  | "setCalibrationTarget"
   | "keepCalibration"
   | "playHeadphoneCheck"
   | "answerHeadphoneCheck"
@@ -405,6 +406,7 @@ const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
   startCalibration: (flow) => flow.startCalibration(),
   louder: (flow) => flow.louder(),
   quieter: (flow) => flow.quieter(),
+  setCalibrationTarget: (flow) => flow.setCalibrationTarget(-20),
   keepCalibration: (flow) => flow.keepCalibration(),
   playHeadphoneCheck: (flow) => flow.playHeadphoneCheck(),
   answerHeadphoneCheck: (flow) => flow.answerHeadphoneCheck("left"),
@@ -442,6 +444,7 @@ const stageRows: readonly {
       "startCalibration",
       "louder",
       "quieter",
+      "setCalibrationTarget",
       "keepCalibration",
       "stop",
       "resume",
@@ -696,6 +699,7 @@ describe("createVisitFlow: calibration", () => {
       atTop: false,
       line: calibrationCopy.openLine,
       keepRefusal: null,
+      targetSettingDb: calibrationSettingMinDb,
     });
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
@@ -790,6 +794,117 @@ describe("createVisitFlow: calibration", () => {
       });
     }
   }, 60_000);
+});
+
+describe('createVisitFlow: the calibration target (audible-start design.md, "The calibration target")', () => {
+  it("takes a drag to the top at once and plays the repeats towards it at most 5 dB apart (R3.2, R3.4, R3.8)", async () => {
+    const harness = createHarness();
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    harness.flow.setCalibrationTarget(Number.POSITIVE_INFINITY);
+    expect(harness.flow.snapshot()).toMatchObject({
+      targetSettingDb: calibrationSettingTopDb(),
+      playedSettingDb: calibrationSettingMinDb,
+    });
+    const played: number[] = [];
+    for (let wait = 0; wait < 600; wait += 1) {
+      const snapshot = harness.flow.snapshot();
+      if (snapshot.stage !== "calibration") {
+        throw new Error(`Calibration ended: ${snapshot.stage}.`);
+      }
+      if (snapshot.playedSettingDb !== played.at(-1)) {
+        played.push(snapshot.playedSettingDb!);
+      }
+      if (snapshot.atTop) {
+        break;
+      }
+      harness.advance(100);
+    }
+    expect(played).toEqual([
+      -60, -55, -50, -45, -40, -35, -30, -25, -20, -15, -10, -5, -4,
+    ]);
+    expect(harness.flow.snapshot()).toMatchObject({
+      targetSettingDb: calibrationSettingTopDb(),
+      playedSettingDb: calibrationSettingTopDb(),
+      atTop: true,
+      line: calibrationCopy.atTopLine,
+    });
+  }, 60_000);
+
+  it("rounds a target down to the grid and holds it at the bottom", async () => {
+    const harness = createHarness();
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    harness.flow.setCalibrationTarget(-33.7);
+    expect(harness.flow.snapshot()).toMatchObject({ targetSettingDb: -34 });
+    harness.flow.setCalibrationTarget(Number.NEGATIVE_INFINITY);
+    expect(harness.flow.snapshot()).toMatchObject({
+      targetSettingDb: calibrationSettingMinDb,
+    });
+  });
+
+  it.each([Number.NaN, "-20", undefined])(
+    "changes nothing for %s (R3.3)",
+    async (settingDb) => {
+      const harness = createHarness();
+      await toCalibration(harness);
+      harness.flow.startCalibration();
+      harness.flow.setCalibrationTarget(-30);
+      const before = harness.flow.snapshot();
+      const snapshotCount = harness.snapshots.length;
+      const callCount = harness.calls.length;
+      harness.flow.setCalibrationTarget(settingDb as number);
+      expect(harness.flow.snapshot()).toBe(before);
+      expect(harness.snapshots).toHaveLength(snapshotCount);
+      expect(harness.calls).toHaveLength(callCount);
+    },
+  );
+
+  it("takes a target before the sound has started, shows the bottom meanwhile, and starts at the bottom (R3.5, R3.6, D3)", async () => {
+    const harness = createHarness();
+    await toCalibration(harness);
+    harness.flow.setCalibrationTarget(-10);
+    expect(harness.flow.snapshot()).toMatchObject({
+      playing: false,
+      playedSettingDb: null,
+      targetSettingDb: calibrationSettingMinDb,
+    });
+    expect(harness.backend.scheduled()).toHaveLength(0);
+    harness.flow.startCalibration();
+    expect(harness.flow.snapshot()).toMatchObject({
+      playing: true,
+      playedSettingDb: calibrationSettingMinDb,
+      targetSettingDb: calibrationSettingMinDb,
+    });
+    harness.advance(3000);
+    expect(harness.flow.snapshot()).toMatchObject({
+      playedSettingDb: calibrationSettingMinDb,
+    });
+  });
+
+  it("is ignored while a pause holds in calibration (R3.9)", async () => {
+    const harness = createHarness();
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    harness.backend.fire("hidden");
+    const paused = harness.flow.snapshot();
+    expect(paused).toMatchObject({
+      stage: "calibration",
+      pause: { reason: "hidden" },
+      targetSettingDb: calibrationSettingMinDb,
+    });
+    const callCount = harness.calls.length;
+    harness.flow.setCalibrationTarget(-20);
+    await harness.settle();
+    expect(harness.flow.snapshot()).toEqual(paused);
+    expect(harness.calls).toHaveLength(callCount);
+    harness.flow.resume();
+    await harness.settle();
+    expect(harness.flow.snapshot()).toMatchObject({
+      pause: null,
+      targetSettingDb: calibrationSettingMinDb,
+    });
+  });
 });
 
 describe("createVisitFlow: the headphone check", () => {

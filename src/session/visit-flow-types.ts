@@ -81,6 +81,14 @@ export interface VisitFlow {
   louder(): void;
   /** Calibration: moves the control one step quieter than the setting last played. */
   quieter(): void;
+  /**
+   * Calibration: puts the target of the control at `settingDb`, for a control that can be dragged
+   * or moved by keys. The target is rounded down to the control's grid and held from the bottom of
+   * the control to its top; NaN changes nothing. The sound still starts at the bottom of the control
+   * and still rises by at most 5 dB per repeat of the hiss, or 5 dB in 2 seconds for the music: the
+   * played setting follows the target. Ignored outside calibration and while a pause holds.
+   */
+  setCalibrationTarget(settingDb: number): void;
   /** Calibration: keeps the setting last played and moves to the headphone check, or gives the reason it cannot. */
   keepCalibration(): void;
   /** Headphone check: plays the hiss in the left ear. */
@@ -216,6 +224,12 @@ export interface CalibrationSnapshot extends SnapshotBase<"calibration"> {
   readonly line: string;
   /** Why the last keep was refused, or null. */
   readonly keepRefusal: KeepRefusal | null;
+  /**
+   * Where the control is moving to: the thumb of a slider. On the control's grid, from the bottom to
+   * the top. The bottom until the sound has started. Always present in the snapshots the flow gives;
+   * optional only so that literals written before it still compile.
+   */
+  readonly targetSettingDb?: number;
 }
 
 /** Making sure left is left. Shown right after a calibration is kept. */

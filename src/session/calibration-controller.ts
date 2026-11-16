@@ -11,6 +11,7 @@ import type {
   PlayRefusal,
 } from "../audio/output/create-audio-output";
 import type { RangeReport } from "../audio/output/range-report";
+import { calibrationTargetSettingDb } from "./calibration-target-setting";
 
 /** What the calibration screen shows (design.md, "The calibration controller"). */
 export interface CalibrationSnapshot {
@@ -48,6 +49,14 @@ export interface CalibrationController {
   louder(): void;
   /** Moves the target one step down from the setting last played. */
   quieter(): void;
+  /**
+   * Puts the target at `settingDb`, rounded down to the control's grid and held within the
+   * control (audible-start R3.2 to R3.4, D1). NaN or a value that is not a number changes
+   * nothing. The repeats still start at the bottom and rise by at most `calibrationRiseMaxDb` per
+   * repeat towards the target. Before `open`, the target changes, and `open` puts it at the
+   * bottom (D3).
+   */
+  setTarget(settingDb: number): void;
   /** Keeps the setting last played, if the shell allows it (R16.4 to R16.6). */
   keep(): KeepOutcome;
   /** Stops playing repeats. The calibration stays open in the shell. */
@@ -168,8 +177,23 @@ export function createCalibrationController(options: {
     }
   });
 
-  const limitTarget = (settingDb: number): number =>
-    Math.min(topSettingDb, Math.max(calibrationSettingMinDb, settingDb));
+  const control = Object.freeze({
+    bottomDb: calibrationSettingMinDb,
+    topDb: topSettingDb,
+    stepDb: calibrationSettingStepDb,
+  });
+  /**
+   * Puts the target at a setting through `calibrationTargetSettingDb`, the one rule for every way
+   * the target moves (audible-start D2), and says whether it was taken.
+   */
+  const moveTarget = (settingDb: number): boolean => {
+    const nextDb = calibrationTargetSettingDb(settingDb, control);
+    if (nextDb === null) {
+      return false;
+    }
+    targetSettingDb = nextDb;
+    return true;
+  };
 
   const line = (): string => {
     if (kept !== null) {
@@ -200,7 +224,7 @@ export function createCalibrationController(options: {
     },
 
     louder() {
-      targetSettingDb = limitTarget(
+      moveTarget(
         Math.max(targetSettingDb, playedSettingDb ?? targetSettingDb) +
           calibrationSettingStepDb,
       );
@@ -208,10 +232,16 @@ export function createCalibrationController(options: {
     },
 
     quieter() {
-      targetSettingDb = limitTarget(
+      moveTarget(
         (playedSettingDb ?? targetSettingDb) - calibrationSettingStepDb,
       );
       notify();
+    },
+
+    setTarget(settingDb) {
+      if (moveTarget(settingDb)) {
+        notify();
+      }
     },
 
     keep(): KeepOutcome {

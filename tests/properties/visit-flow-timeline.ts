@@ -90,6 +90,7 @@ const flowActionNames = [
   "startCalibration",
   "louder",
   "quieter",
+  "setCalibrationTarget",
   "keepCalibration",
   "playHeadphoneCheck",
   "answerHeadphoneCheck",
