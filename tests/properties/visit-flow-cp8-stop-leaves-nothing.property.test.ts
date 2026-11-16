@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { createSeededRandom } from "../../src/config/seeded-random";
+import { swappedRepeatCopy } from "../../src/copy/swapped-repeat-copy";
 import {
   playVisit,
   type VisitorEnding,
@@ -177,17 +178,38 @@ describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
             expect(flow.snapshot()).toEqual(final);
             expect(harness.outputCalls.at(-1)?.name).toBe("stopAll");
 
-            // Stop in the swapped repeat silences and shows the result.
+            // Stop in the swapped repeat silences and shows the result. It is the result before in
+            // every field but the turn-back line. Leaving the stage once its phase `instruction`
+            // was shown gives the Turn_Back_Line (swapped-repeat R9.1, R9.2); a stage that opened
+            // in `unavailable` showed no instruction and leaves the line as it was. Nothing
+            // between the choice and the stop here can move an opened stage to `unavailable`.
             const offered = final.summary.rooms.find(
               (room) => room.swappedRepeatOffered,
             );
             if (offered !== undefined) {
               flow.chooseSwappedRepeat(offered.room.roomIndex);
               await harness.settle();
-              expect(flow.snapshot().stage).toBe("swappedRepeat");
+              const inRepeat = flow.snapshot();
+              expect(inRepeat.stage).toBe("swappedRepeat");
+              const instructionShown =
+                inRepeat.stage === "swappedRepeat" &&
+                inRepeat.repeat.phase !== "unavailable";
               flow.stop();
               await harness.settle();
-              expect(flow.snapshot()).toEqual(final);
+              const afterStop = flow.snapshot();
+              expect({ ...afterStop, turnBackLine: null }).toEqual({
+                ...final,
+                turnBackLine: null,
+              });
+              expect(
+                afterStop.stage === "result"
+                  ? afterStop.turnBackLine
+                  : undefined,
+              ).toBe(
+                instructionShown
+                  ? swappedRepeatCopy.turnBackLine
+                  : final.turnBackLine,
+              );
               expect(harness.outputCalls.at(-1)?.name).toBe("stopAll");
             }
 
