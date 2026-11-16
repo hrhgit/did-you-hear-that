@@ -41,7 +41,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 - **Visit_Summary**: the per-room and per-visit results computed from the Visit_Log for the result Stage.
 - **Pooled_Counts**: the numbers of No_Sound_Trials and False_Alarms summed over the Room_Results of every finished Room_Attempt of a Visit.
 - **Visit_False_Alarm_Rule**: the rule of R17 that marks a whole Visit unreliable from its Pooled_Counts.
-- **Visit_Limit**: `visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction`, the limit of the Visit_False_Alarm_Rule. A proposed value (Q1).
+- **Visit_Limit**: `visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction`, the limit of the Visit_False_Alarm_Rule. Proposed by this spec and decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q1).
 - **Room_Limit**: `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction`, the existing per-room limit (0.3).
 - **Simulated_Visitor**: a test-only driver in `tests/listeners/` that plays a Visit through the Visit_Flow, answering trials with a Simulated_Listener and pressing through the other Stages.
 - **Visit_Harness**: the test-only code in `tests/properties/` that builds a Visit_Flow on the Fake_Audio_Backend and the manual timer and moves both clocks together.
@@ -270,7 +270,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 4. THE Visit_False_Alarm_Rule SHALL never remove a state `unreliable` or a reason that the Threshold_Search gave.
 5. THE Visit_False_Alarm_Rule SHALL leave the per-room rule of the Threshold_Search and the Room_Limit unchanged.
 6. THE Visit_False_Alarm_Rule SHALL be one pure function in `src/session/` that the Visit_Flow and the measurement of R23 both call.
-7. THE Visit_Limit SHALL be a field of `visitFlowConfig` with the proposed value 0.2, whose comment says that it is proposed and awaits the project owner's choice (Q1), and SHALL be described as proposed, not approved, wherever this spec mentions it.
+7. THE Visit_Limit SHALL be a field of `visitFlowConfig` with the value 0.2, whose comment says that it was decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1), and SHALL be described so wherever this spec mentions it.
 
 ### Requirement 18: The visit summary
 
@@ -301,7 +301,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 
 #### Acceptance criteria
 
-1. THE file `src/config/visit-flow-config.ts` SHALL hold `visitFlowConfig` with `visitFalseAlarmRateUnreliableAboveFraction` (0.2, proposed) and `refusedPlaysInARowMaxCount` (3), each with a comment naming its decision, deeply frozen, every field name ending in its unit.
+1. THE file `src/config/visit-flow-config.ts` SHALL hold `visitFlowConfig` with `visitFalseAlarmRateUnreliableAboveFraction` (0.2, Q1) and `refusedPlaysInARowMaxCount` (3), each with a comment naming its decision, deeply frozen, every field name ending in its unit.
 2. THE config unit test SHALL check the values, the unit endings, that the Visit_Limit lies above 0 and at most the Room_Limit, and that `refusedPlaysInARowMaxCount` is a positive integer.
 3. THE `hearingMethodConfig`, `audioOutputConfig` and `audioSafetyConfig` SHALL stay unchanged.
 4. THE `src/session` code of this spec SHALL contain no number that affects a level, a time or a result other than values read from `src/config`, apart from 0 and 1.

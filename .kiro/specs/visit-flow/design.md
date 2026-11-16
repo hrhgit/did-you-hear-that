@@ -29,7 +29,7 @@ The design rests on four choices.
 - **The interface sees nothing about a trial until it is scored.** The room snapshot holds the room and the pause state, and nothing that changes when a sound is scheduled or a window opens. The only event about a trial, `trialScored`, is created in the same timer callback or action that scores it. It carries a `reaction` that tells the interface what to draw at once: a ripple for a catch, the house's line for an answer to silence, and nothing for every other outcome. The interface can show every event the moment it arrives.
 - **Answers are judged on the page clock against the moment the sound started.** The output shell returns the start on the audio clock. The flow converts it with the shell's timestamp pair. A no-sound trial's window opens where a sound asked for at the same moment would have started, including the measured output delay, so that the two kinds of trial cannot be told apart by timing (D4).
 - **The visit log is the one record.** Every trial that was played is in it once, in order, scored or discarded. The result, the replay, the no-headphone replay and the stored visit read it. The visit summary is a pure function of the log, so the picture cannot disagree with the record.
-- **A visit-level false alarm rule pools the no-sound trials of every room.** It is one pure function. Its limit is a new config value with a proposed value of 0.2, which awaits the project owner's choice (Q1). The measurement that lets the owner choose is in "Measurements".
+- **A visit-level false alarm rule pools the no-sound trials of every room.** It is one pure function. Its limit is a new config value of 0.2, proposed by this spec and decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q1). The measurement that lets the owner choose is in "Measurements".
 
 ## Sources
 
@@ -713,7 +713,10 @@ export interface VisitSummary {
   readonly pooledFalseAlarmCount: number;
   /** `pooledFalseAlarmCount / pooledNoSoundTrialCount`, or 0 without no-sound trials. */
   readonly pooledFalseAlarmRateFraction: number;
-  /** The visit limit the rate was judged against (proposed, Q1). */
+  /**
+   * The visit limit the rate was judged against (Q1, decided by the owner's coordinator on
+   * 2026-11-16, at the owner's request).
+   */
   readonly visitFalseAlarmRateLimitFraction: number;
   /** Whether the rate is above it. Then every ear is unreliable and the visit should be repeated. */
   readonly visitFalseAlarmRateAboveLimit: boolean;
@@ -762,9 +765,10 @@ The fields of a `trialScored` event for a missed sound hold its ear and level. T
 ```ts
 export interface VisitFlowConfig {
   /**
-   * PROPOSED, NOT APPROVED (visit-flow design.md, D17 and Q1). A visit whose false alarm rate over
-   * the no-sound trials of all its rooms is above this is marked unreliable as a whole. A strict
-   * limit: a rate exactly at it is not above it.
+   * Decided by the owner's coordinator on 2026-11-16, at the owner's request (visit-flow
+   * design.md, D17 and Q1). A visit whose false alarm rate over the no-sound trials of all its
+   * rooms is above this is marked unreliable as a whole. A strict limit: a rate exactly at it is
+   * not above it.
    */
   readonly visitFalseAlarmRateUnreliableAboveFraction: number;
   /** After this many refusals in a row of one trial's sound, the visit ends (D25). */
@@ -772,16 +776,17 @@ export interface VisitFlowConfig {
 }
 
 export const visitFlowConfig: VisitFlowConfig = deepFreeze({
-  // D17, Q1: proposed by this spec from the measurement in design.md. Awaits the owner's choice.
+  // D17, Q1: proposed by this spec from the measurement in design.md; decided by the owner's
+  // coordinator on 2026-11-16, at the owner's request.
   visitFalseAlarmRateUnreliableAboveFraction: 0.2,
   // D25
   refusedPlaysInARowMaxCount: 3,
 });
 ```
 
-The test checks the two values, that every field name ends in a unit, that the object is deeply frozen, that the visit limit is above 0 and at most `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction` (a visit limit above the room limit would mark only visits whose rooms are mostly marked already), and that the refusal count is a positive integer. A test named for Q1 checks the value 0.2 with a message saying that the value is a proposal and that changing it is the project owner's choice, recorded in Q1.
+The test checks the two values, that every field name ends in a unit, that the object is deeply frozen, that the visit limit is above 0 and at most `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction` (a visit limit above the room limit would mark only visits whose rooms are mostly marked already), and that the refusal count is a positive integer. A test named for Q1 checks the value 0.2 with a message saying that the value was decided by the owner's coordinator on 2026-11-16, at the owner's request, in Q1, and that the owner may reverse it.
 
-No other number is added. Everything else the flow needs comes from `hearingMethodConfig` (the response window, the room frequencies, the swapped repeat difference, the per-room limit, the search's settings), `audioOutputConfig` (the scheduling lead) and `ghostSoundConfig` (the centre frequency of each sound). The new config does not go into the initial values table of `hearing-method.md`; that is a steering change for the owner (Q1).
+No other number is added. Everything else the flow needs comes from `hearingMethodConfig` (the response window, the room frequencies, the swapped repeat difference, the per-room limit, the search's settings), `audioOutputConfig` (the scheduling lead) and `ghostSoundConfig` (the centre frequency of each sound). The new config did not go into the initial values table of `hearing-method.md`; that was a steering change for the owner (Q1). Since Q1 was decided, the owner's coordinator added its row on 2026-11-16, at the owner's request.
 
 ## The rooms of a visit
 
@@ -1229,7 +1234,7 @@ The property files of tasks 10 and 11 read the design in these particular ways.
 
 ### Counterexamples
 
-A counterexample becomes a named case in `tests/properties/visit-flow-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the visitor script written out, first with `it.fails`, then turned into `it` by the commit that changes the code, as the earlier specs do. A case that could only be removed by changing a steering value or a value awaiting the owner (Q1) stays an expected break with a decision giving the numbers.
+A counterexample becomes a named case in `tests/properties/visit-flow-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the visitor script written out, first with `it.fails`, then turned into `it` by the commit that changes the code, as the earlier specs do. A case that could only be removed by changing a steering value or the visit limit (Q1) stays an expected break with a decision giving the numbers.
 
 Regression 1 was found by CP7 in task 13, with fast-check seed -1594251289. In the third room of a quick visit a device change abandoned attempt 1. A second device change came 0.4 ms after attempt 2 started and before it presented a trial, so the flow abandoned attempt 2 as well and ran attempt 3, as R13.3 asks for every device change during a Room_Attempt. CP7's check kept the first device change's pause open until the next presented trial, so it did not count attempt 2 as stopped and expected the first trial of attempt 2. The fault was in the property file, not in the flow, and nothing under `src/` changed. The case `regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)` plays the visit without fast-check, with a fixed listener and the second device change at 288 000 ms, and checks that the two device changes fell in that order before it checks CP7's condition. Commit bc369e2 kept it as `it.fails` and moved CP7's check for one visit into `tests/properties/visit-flow-cp7-check.ts`, unchanged. Commit 0427136 corrected the check: when a pause begins in a new run of the room after a device change and before that run's first trial, the check makes sure that the run is the next attempt of the same room, and then treats the pause as one in that run, so a device change there counts that run as abandoned too.
 
@@ -1287,9 +1292,9 @@ No number or rule from a steering file is changed or loosened by this spec.
 
 ## Questions for the project owner
 
-None of these is decided here. The first is a new acceptance number that this spec proposes and does not treat as approved.
+None of these was decided by this spec. The first is a new acceptance number that this spec proposed and did not treat as approved. All four were decided by the owner's coordinator on 2026-11-16, at the owner's request, and the owner may reverse each of them; the decision follows the heading of each question.
 
-**Q1. The limit of the visit-level false alarm rule.** The config holds `visitFalseAlarmRateUnreliableAboveFraction` at the proposed value 0.2. A visit whose false alarms over the no-sound trials of all its rooms are above it is marked unreliable as a whole: every ear of every floor is shown as unreliable and the visitor is invited to repeat the visit. The per-room limit of 30 percent stays as it is. The measurement to choose from is in "Measurements", and `npx tsx tests/listeners/print-visit-rule-measurement.ts` prints it again. The numbers of that script's run in task 5, and the four printed figures in which they differ from "Measurements", are in D36. In short:
+**Q1. The limit of the visit-level false alarm rule. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: 0.20, the value in the config.** The config holds `visitFalseAlarmRateUnreliableAboveFraction` at the proposed value 0.2. A visit whose false alarms over the no-sound trials of all its rooms are above it is marked unreliable as a whole: every ear of every floor is shown as unreliable and the visitor is invited to repeat the visit. The per-room limit of 30 percent stays as it is. The measurement to choose from is in "Measurements", and `npx tsx tests/listeners/print-visit-rule-measurement.ts` prints it again. The numbers of that script's run in task 5, and the four printed figures in which they differ from "Measurements", are in D36. In short:
 
 | Visit limit | Wrong ears of the regression 4 listener removed (quick / full) | Attentive visits marked | Plausible visits marked, listeners with false alarm rate 0.05 to 0.10 (quick / full) |
 |---|---|---|---|
@@ -1298,13 +1303,21 @@ None of these is decided here. The first is a new acceptance number that this sp
 | **0.20, proposed** | **71 % / 79 %** | **0 %** | **5.5 % / 1.5 %** |
 | 0.15 | 89 % / 94 % | 0.4 % / 0.1 % | 14.2 % / 9.7 % |
 
-0.20 is proposed because it removes most of the case the brief names at no measured cost to attentive listeners, and it marks few visits of listeners who answer silence one time in ten or less. The owner may choose another value; then CP11's limits are restated from the table. Once chosen, adding a row to the initial values table of `hearing-method.md` is a steering change for the owner: "False alarm rate over a whole visit that marks the visit unreliable". The current row "False alarm rate that marks a visit unreliable | above 30 percent" is applied per room by the engine (threshold-search D7) and is called the per-room limit by the brief, and the owner may want to reword it to say so.
+0.20 is proposed because it removes most of the case the brief names at no measured cost to attentive listeners, and it marks few visits of listeners who answer silence one time in ten or less. The owner may choose another value; then CP11's limits are restated from the table. Once chosen, adding a row to the initial values table of `hearing-method.md` is a steering change for the owner: "False alarm rate over a whole visit that marks the visit unreliable". The current row "False alarm rate that marks a visit unreliable | above 30 percent" is applied per room by the engine (threshold-search D7) and is called the per-room limit by the brief, and the owner may want to reword it to say so. Done on 2026-11-16 by the owner's coordinator, at the owner's request: the table has the row "False alarm rate over a whole visit that marks the visit unreliable | above 20 percent", and the per-room row now reads "False alarm rate that marks a visit unreliable, applied to each room | above 30 percent". No number changed.
 
-**Q2. Constant pressing.** Answers outside every window are counted, logged and given in the summary, but no rule uses them. A visitor who presses steadily, about once a second or faster, answers every no-sound window, so the per-room and the visit rule already mark the visit. A visitor who presses less often answers some windows and is caught by the false alarm rate in proportion. Should a count of ignored answers mark a visit as well? It would need a new limit, which this spec does not propose, because no measurement here shows a case the false alarm rules miss.
+**Q2. Constant pressing. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: no rule for ignored answers.** Reason: no measured case that the false alarm rules miss. Answers outside every window are counted, logged and given in the summary, but no rule uses them. A visitor who presses steadily, about once a second or faster, answers every no-sound window, so the per-room and the visit rule already mark the visit. A visitor who presses less often answers some windows and is caught by the false alarm rate in proportion. Should a count of ignored answers mark a visit as well? It would need a new limit, which this spec does not propose, because no measurement here shows a case the false alarm rules miss.
 
-**Q3. The length of the visits.** With the steering's gaps (1.5 to 4.0 s) and window (2.0 s) and the engine's rooms, the rooms alone take a median of 5.1 minutes in a quick visit and 8.4 minutes in a full visit for attentive simulated listeners, and 6.4 and 10.6 minutes over the plausible range ("Measurements"). The product and the front door promise 3 and 7 minutes. This spec changes no timing. Options for the owner: name the visits by what they take; shorten the gaps or the window (steering values); lower the trial limit (a steering value, with the threshold-search properties to run again); or keep everything and accept the gap.
+**Q3. The length of the visits. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: name the visits by what they take, and change no timing.** With the steering's gaps (1.5 to 4.0 s) and window (2.0 s) and the engine's rooms, the rooms alone take a median of 5.1 minutes in a quick visit and 8.4 minutes in a full visit for attentive simulated listeners, and 6.4 and 10.6 minutes over the plausible range ("Measurements"). The product and the front door promise 3 and 7 minutes. This spec changes no timing. Options for the owner: name the visits by what they take; shorten the gaps or the window (steering values); lower the trial limit (a steering value, with the threshold-search properties to run again); or keep everything and accept the gap.
 
-**Q4. A device change mid-room.** The design calibrates again and starts the interrupted room from its beginning, keeping the floors already finished, which were measured against the earlier calibration (D12). Floors are never compared, so each floor stays sound on its own. If the owner prefers that a device change ends the visit, the change is small: `deviceChanged` in a room would lead to `exit`.
+How the two lengths were found, from figures this spec and the replay already print and with no new measurement:
+
+- The rooms alone, median over the plausible range ("How long the rooms take", from `tests/listeners`): 6.4 minutes for a quick visit and 10.6 minutes for a full one.
+- The missed-sound replay, median length with 20 sounds and a gap of 400 ms (missed-sound-replay design.md, "Measurements", plausible range): 30.2 seconds in a quick visit and 30.5 seconds in a full one, about half a minute.
+- Quick: 6.4 + 0.50 = 6.9 minutes, rounded up to a whole minute: 7 minutes. Full: 10.6 + 0.51 = 11.1 minutes, rounded up: 12 minutes.
+
+The front door's buttons say "Enter for about 7 minutes" and "Enter for about 12 minutes" (`src/copy/front-door-copy.ts`), and `product.md` and the comment of `VisitType` in `src/config/hearing-method-config.ts` call them the visit of about 7 minutes and the visit of about 12 minutes. No timing changed. The figures leave out calibration, the headphone check, the rules, the rests between rooms, the last door of the full visit and the swapped repeat, so a visit can take longer than its label.
+
+**Q4. A device change mid-room. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: D12 is kept as designed, so a device change calibrates again and starts the interrupted room again.** The design calibrates again and starts the interrupted room from its beginning, keeping the floors already finished, which were measured against the earlier calibration (D12). Floors are never compared, so each floor stays sound on its own. If the owner prefers that a device change ends the visit, the change is small: `deviceChanged` in a room would lead to `exit`.
 
 ## Decisions
 
@@ -1342,7 +1355,7 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D16. The snapshot gives reasons as codes, and the flow adds no copy.** The interface's own copy (`leaving-copy.ts`, `visit-copy.ts`, `room-copy.ts`, being written by the owner) chooses the lines for a pause, an exit and an answered silence. The flow gives only the lines it already gets from existing copy: the calibration controller's line, the headphone check judgement line and `roomsShortLine`. This keeps every string in `src/copy` and the flow free of strings, and avoids two lines for one thing.
 
-**D17. The visit-level false alarm rule pools the finished rooms, marks the whole visit, and has its own proposed limit.** The brief asks for a rule on the pooled count, what it marks, and a measurement. Pooling three or five rooms gives 11 to about 40 no-sound trials instead of about 7, so a listener's false alarm rate is estimated two to three times more closely. What it marks follows `hearing-method.md` ("the result for that visit is marked unreliable and the visitor is invited to repeat it") and brief 06 (a notice that the whole visit is unreliable): every ear becomes unreliable with the reason `visitFalseAlarmRate`, which also removes the swapped repeat. Marking only some ears was considered and rejected: the guessed catches that produce too-quiet results are spread over every room of such a visitor. "Above" is strict and judged with the engine's `atMostFraction`, as for the room. The limit is a separate field because the measurement shows that reusing the per-room 0.30 removes only about a third of the case the brief names; 0.20 removes 70 to 82 percent at no measured cost to attentive listeners. It is proposed, not approved (Q1). Abandoned attempts are left out, so that the pooled counts come from the same room runs as the floors' results.
+**D17. The visit-level false alarm rule pools the finished rooms, marks the whole visit, and has its own proposed limit.** The brief asks for a rule on the pooled count, what it marks, and a measurement. Pooling three or five rooms gives 11 to about 40 no-sound trials instead of about 7, so a listener's false alarm rate is estimated two to three times more closely. What it marks follows `hearing-method.md` ("the result for that visit is marked unreliable and the visitor is invited to repeat it") and brief 06 (a notice that the whole visit is unreliable): every ear becomes unreliable with the reason `visitFalseAlarmRate`, which also removes the swapped repeat. Marking only some ears was considered and rejected: the guessed catches that produce too-quiet results are spread over every room of such a visitor. "Above" is strict and judged with the engine's `atMostFraction`, as for the room. The limit is a separate field because the measurement shows that reusing the per-room 0.30 removes only about a third of the case the brief names; 0.20 removes 70 to 82 percent at no measured cost to attentive listeners. It was proposed by this spec and decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q1). Abandoned attempts are left out, so that the pooled counts come from the same room runs as the floors' results.
 
 **D18. A room is its ghost sound, found from its frequency.** The config lists the visits as frequencies; the sounds have centre frequencies. Matching the two keeps one source for each, and the interface already names rooms by sound id. Rooms are visited in the config's order, which is up the house.
 

@@ -795,7 +795,7 @@ A Saved_Visit is the envelope above plus a payload:
 How it relates to the visit log (D9):
 
 - The visit log is the flow's one record of the visit (visit-flow R10). It is stored unchanged. The visit log is plain data that survives `JSON.stringify` and `JSON.parse` unchanged (visit-flow R10.7), so the log read back deep-equals the log saved.
-- The summary is stored as it was shown, not computed again on reading. `summarizeVisit` is a pure function of the log and the settings, so it could be; but the settings include the visit limit, which awaits the owner's choice (visit-flow Q1), and the swapped-repeat spec may narrow when the repeat is offered (visit-flow D24). Computing it again would let a later change redraw an old visit differently from how it was seen, or reject it. The stored summary keeps its own `visitFalseAlarmRateLimitFraction`.
+- The summary is stored as it was shown, not computed again on reading. `summarizeVisit` is a pure function of the log and the settings, so it could be; but the settings include the visit limit, which the owner may still change (visit-flow Q1), and the swapped-repeat spec may narrow when the repeat is offered (visit-flow D24). Computing it again would let a later change redraw an old visit differently from how it was seen, or reject it. The stored summary keeps its own `visitFalseAlarmRateLimitFraction`.
 - `floorDb` is stored because the depth of light depends on it (R13.5) and it may change after the first listening session (`hearing-method.md`, "Known limits").
 - The no-headphone replay plays back "a visit log stored in the repository as a data file", and "the log comes from the storage module's export" (brief 09). `exportVisitLog(id)` gives the stored log as JSON text for that. The replay spec validates the file against the engine itself (its brief: "A tool validates a visit log file"); this spec only checks that a stored log has the right version, visit type and rooms.
 - A stopped visit has no log to save (visit-flow R14.5); only a visit that reached the result can be saved. Robot mode saves nothing (visit-flow D15, R8.3).
@@ -1434,9 +1434,9 @@ No number or rule from a steering file is changed or loosened by this spec.
 
 ## Whatever the owner chooses in visit-flow Q1 to Q4
 
-These four questions stay open. The result page works for every answer.
+These four questions were decided by the owner's coordinator on 2026-11-16, at the owner's request, and the owner may reverse each of them. The result page works for every answer.
 
-- **Q1, the visit limit (proposed 0.2, not approved).** The page reads whether the visit is marked and the limit from the summary itself. The notice names the limit the summary was judged by, so a saved visit keeps its own. Changing the value changes no code here. CP1 and CP3 run over limits from 0.05 to 0.30.
+- **Q1, the visit limit (0.2, decided by the owner's coordinator on 2026-11-16, at the owner's request).** The page reads whether the visit is marked and the limit from the summary itself. The notice names the limit the summary was judged by, so a saved visit keeps its own. Changing the value changes no code here. CP1 and CP3 run over limits from 0.05 to 0.30.
 - **Q2, constant pressing.** The page says nothing about answers outside every window. If the owner adds a rule that marks a visit, it adds a reason to `VisitUnreliableReason`; the copy then needs one line for it in `unreliableReasonLine`, and `parseSavedVisitPayload` its name, which the type tests make sure of. Nothing else changes.
 - **Q3, the length of the visits.** The labels name visit types by their number of rooms, not by minutes (D22).
 - **Q4, a device change mid-room.** Each floor is drawn on its own scale, from the cap of its own last finished attempt, so a floor measured after a new calibration is drawn correctly whichever way the owner decides.
@@ -1447,7 +1447,7 @@ Outside this spec's tasks, by hand: everything under `src/ui/`, `index.html`, `s
 
 ## Questions for the project owner
 
-These seven questions were decided on 2026-11-15 on the owner's behalf, at the owner's request. No value changed: every proposed value is kept. Each question and its options stay as they were put, and the decision with its reasons follows each one. The four numbers of Q1, Q4 and Q5 are in `src/config/result-page-config.ts`, marked as decided on 2026-11-15. The visit-level false alarm limit of 0.2 is still proposed, not approved, and visit-flow Q1 to Q4 are still open; "Whatever the owner chooses in visit-flow Q1 to Q4" shows that the page works for each answer.
+These seven questions were decided on 2026-11-15 on the owner's behalf, at the owner's request. No value changed: every proposed value is kept. Each question and its options stay as they were put, and the decision with its reasons follows each one. The four numbers of Q1, Q4 and Q5 are in `src/config/result-page-config.ts`, marked as decided on 2026-11-15. The visit-level false alarm limit of 0.2 and visit-flow Q1 to Q4 were open when these questions were decided; visit-flow Q1 to Q4 were decided by the owner's coordinator on 2026-11-16, at the owner's request, and the owner may reverse each of them; "Whatever the owner chooses in visit-flow Q1 to Q4" shows that the page works for each answer.
 
 **Q1. How the depth of light follows from a level.** Proposed: on each floor, a found threshold at the floor's own loudest playable level (`searchCapDb`) lights 0.1 of the wing (`foundLightDepthAtCapFraction`), one at the quietest playable level (`floorDb`) lights 0.9 (`foundLightDepthAtFloorFraction`), and the light is linear in decibels between them; better than floor reaches the far wall (1) and worse than cap stays dark (0), as the brief says ("How far the light reaches", D15). Options and what each costs:
 

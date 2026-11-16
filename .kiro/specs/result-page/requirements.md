@@ -6,7 +6,7 @@ This spec builds everything the result page needs that is not drawing. It adds s
 
 The page itself is built by hand by the project owner, outside this spec's tasks: everything under `src/ui/`, `index.html`, `src/main.ts`, the CSS, the drawing of the lit cross-section, the layout at phone and desktop sizes, input handling, turning the picture into an image file for the "save picture" control, and the browser tests in `tests/e2e/`. The owner builds the page against the types of one file, `src/session/result-page-types.ts`, which the first task writes with no behaviour. `design.md` gives that file in full in its section "Interface contract", with the names, signatures and full wording of every copy function and constant. The line of the brief's "Done when" about rendering every combination without overlap is the owner's to meet, and no task here claims it.
 
-The input is `docs/briefs/06-result-page.md`; the steering files in `.kiro/steering/`; `docs/architecture.md` and `docs/roadmap.md`; the visit-flow spec under `.kiro/specs/visit-flow/`, above all its contract file `src/session/visit-flow-types.ts` and its decisions D1, D13, D15 and D17 and its open questions Q1 to Q4; and the code in `src/config`, `src/session`, `src/storage` (still empty), `src/copy`, and, read only, `src/ui/house/` and `src/ui/visit/`. Open points are settled in the Decisions section of `design.md` (D1, D2 and so on). Every new number was listed as a question for the project owner (Q1, Q2 and so on) in the same document. Those questions, Q1 to Q7, were decided on 2026-11-15 on the owner's behalf, at the owner's request, and every proposed value was kept; `design.md` gives each decision with its reasons. The visit-level false alarm limit of 0.2 (visit-flow Q1) is still proposed, not approved, and visit-flow Q1 to Q4 are still open. This spec describes none of those as decided.
+The input is `docs/briefs/06-result-page.md`; the steering files in `.kiro/steering/`; `docs/architecture.md` and `docs/roadmap.md`; the visit-flow spec under `.kiro/specs/visit-flow/`, above all its contract file `src/session/visit-flow-types.ts` and its decisions D1, D13, D15 and D17 and its open questions Q1 to Q4; and the code in `src/config`, `src/session`, `src/storage` (still empty), `src/copy`, and, read only, `src/ui/house/` and `src/ui/visit/`. Open points are settled in the Decisions section of `design.md` (D1, D2 and so on). Every new number was listed as a question for the project owner (Q1, Q2 and so on) in the same document. Those questions, Q1 to Q7, were decided on 2026-11-15 on the owner's behalf, at the owner's request, and every proposed value was kept; `design.md` gives each decision with its reasons. The visit-level false alarm limit of 0.2 (visit-flow Q1) and visit-flow Q1 to Q4 were open when this spec was written. Visit-flow Q1 to Q4 were decided by the owner's coordinator on 2026-11-16, at the owner's request, and the owner may reverse each of them; the limit stays 0.2.
 
 Comparison with past visits is the second thing the roadmap cuts if time runs short. Its requirement (R20) is met by tasks of its own that come after saving and deleting, so that they can be left out without undoing anything.
 
@@ -18,7 +18,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 
 - **Page**: the result page the project owner builds by hand in `src/ui`. It imports only `src/session`, `src/copy` and `src/config`.
 - **Contract_File**: `src/session/result-page-types.ts`, the types the Page uses to save, list, compare and delete visits and to read the Result_Picture.
-- **Visit_Flow**, **Visit_Log**, **Visit_Summary**, **Room_Summary**, **Visit_Ear_Result**, **Result_Snapshot**, **Visit_Limit**: as in the visit-flow spec. The Visit_Limit is `visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction`, proposed at 0.2 and not approved (visit-flow Q1).
+- **Visit_Flow**, **Visit_Log**, **Visit_Summary**, **Room_Summary**, **Visit_Ear_Result**, **Result_Snapshot**, **Visit_Limit**: as in the visit-flow spec. The Visit_Limit is `visitFlowConfig.visitFalseAlarmRateUnreliableAboveFraction`, 0.2, proposed by the visit-flow spec and decided by the owner's coordinator on 2026-11-16, at the owner's request (visit-flow Q1).
 - **Live_Result**: the visit the Visit_Flow shows in its `result` stage, read from a Result_Snapshot.
 - **Floor**: one Room_Summary of a visit, drawn as one floor of the house. Floors are visited in the order of the house, from the lowest up.
 - **Wing**: the left or the right half of a Floor, one per ear.
@@ -243,7 +243,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 1. THE Result_Picture SHALL give the false alarm line built from the Visit_Summary's pooled false alarm and no-sound trial counts, in the form "You answered 2 of 9 times when I made no sound."
 2. WHEN the Visit_Summary says the pooled false alarm rate is above its limit, THE Result_Picture SHALL give a notice with a heading and a line saying that the whole visit is unreliable and inviting the visitor to walk through the house again.
 3. THE notice SHALL name the limit from the Visit_Summary's own `visitFalseAlarmRateLimitFraction`, so that it follows whatever value the owner chooses in visit-flow Q1 and a Saved_Visit keeps the limit it was judged by.
-4. THE Result_Picture SHALL say nothing about the answers outside every window (visit-flow Q2 is open).
+4. THE Result_Picture SHALL say nothing about the answers outside every window (visit-flow Q2, decided by the owner's coordinator on 2026-11-16, at the owner's request: no rule for those answers).
 
 ### Requirement 17: The limits statement
 
@@ -314,7 +314,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 
 #### Acceptance criteria
 
-1. THE result page SHALL work for any Visit_Limit the owner chooses (visit-flow Q1), reading it from the Visit_Summary, and SHALL describe 0.2 as proposed, not approved.
+1. THE result page SHALL work for any Visit_Limit the owner chooses (visit-flow Q1), reading it from the Visit_Summary, and SHALL describe 0.2 as decided by the owner's coordinator on 2026-11-16, at the owner's request.
 2. THE result page SHALL work whether or not the owner adds a rule for answers outside every window (visit-flow Q2), and whatever the visits are called or how long they take (visit-flow Q3).
 3. THE result page SHALL work whether a device change starts the room again or ends the visit (visit-flow Q4), because each Floor is drawn on its own Floor_Scale.
 

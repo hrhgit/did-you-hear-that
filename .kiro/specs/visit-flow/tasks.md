@@ -4,7 +4,7 @@ Work through the tasks in order. Each task ends with its own checks passing and 
 
 The project owner is building the interface by hand in the same working tree. No task creates or changes anything under `src/ui/`, nor `index.html`, `listen.html` or `src/main.ts` (R24.1). No task changes `src/copy/`, `src/engine/`, `src/audio/`, `src/storage/`, `tools/`, `.kiro/steering/`, `docs/briefs/`, `package.json`, `package-lock.json`, or the READMEs of `src/config/`, `src/copy/` and `src/ui/` (R24.2, D30). Many of those files hold the owner's uncommitted work. Before each commit, run `git status` and stage only the files of the task, by name.
 
-Never change a value from a steering file. The visit limit of `visitFlowConfig` is a proposal (Q1): do not present it as approved anywhere, and do not change it to make a check hold. If only another value would do, keep the case as an expected break and add the numbers to Q1.
+Never change a value from a steering file. The visit limit of `visitFlowConfig` was decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1), and the owner may reverse it: do not present it as the owner's own decision anywhere, and do not change it to make a check hold. If only another value would do, keep the case as an expected break and add the numbers to Q1.
 
 If a property finds a counterexample, keep it as a named regression test in `tests/properties/visit-flow-regressions.test.ts`, first with `it.fails`, and put the fix in a separate commit, as the Testing strategy in `design.md` describes.
 
@@ -16,8 +16,8 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Decisions: D1, D31_
 
 - [x] 2. Add the visit flow config
-  - Write `src/config/visit-flow-config.ts` as in "Config" in `design.md`, with its own `deepFreeze`. The comment on `visitFalseAlarmRateUnreliableAboveFraction` says that the value is proposed, not approved, and names D17 and Q1.
-  - Write `src/config/visit-flow-config.test.ts`: the exact values; unit endings; deeply frozen; the visit limit above 0 and at most `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction`; the refusal count a positive integer; and a test named for Q1 whose message says the value is a proposal awaiting the project owner's choice.
+  - Write `src/config/visit-flow-config.ts` as in "Config" in `design.md`, with its own `deepFreeze`. The comment on `visitFalseAlarmRateUnreliableAboveFraction` says that the value was decided by the owner's coordinator on 2026-11-16, at the owner's request, and names D17 and Q1.
+  - Write `src/config/visit-flow-config.test.ts`: the exact values; unit endings; deeply frozen; the visit limit above 0 and at most `hearingMethodConfig.falseAlarmRateUnreliableAboveFraction`; the refusal count a positive integer; and a test named for Q1 whose message says the value was decided by the owner's coordinator on 2026-11-16, at the owner's request, and that the owner may reverse it.
   - Do not change `hearing-method-config.ts`, `audio-output-config.ts`, `audio-safety-config.ts` or `src/config/README.md`.
   - Check: `npm run typecheck`, `npm test`, `npm run lint`.
   - _Requirements: 17.7, 20.1, 20.2, 20.3_
@@ -104,7 +104,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - _Decisions: D9, D12, D13, D17, D19_
 
 - [x] 12. Update the READMEs
-  - In `src/session/README.md`, describe the visit flow: the contract file and its rule of only adding, `createVisitFlow`, the room runner, the log recorder, the summary and the visit-level rule with its proposed limit, and what the flow does not do (draw, store).
+  - In `src/session/README.md`, describe the visit flow: the contract file and its rule of only adding, `createVisitFlow`, the room runner, the log recorder, the summary and the visit-level rule with its limit (Q1), and what the flow does not do (draw, store).
   - In `tests/listeners/README.md`, describe the simulated visitor and the measurement script, with the command that runs it. In `tests/properties/README.md`, describe the visit harness, the visitor scripts and the regression file.
   - Check: `findBannedTerms` over the three changed READMEs (through a one-off `npx tsx -e` that writes nothing), `npm run lint`.
   - _Requirements: 24.4, 24.5_
@@ -114,7 +114,7 @@ If a property finds a counterexample, keep it as a named regression test in `tes
   - Run `npm run typecheck`, `npm test` (three times), `npm run lint`, `npm run check:copy` and `npm run build`.
   - Search `src/session/` for numbers that set a level, a time or a limit outside `src/config` (R20.4). Search `src/ui/` for `onTrialPresented` and `VisitFlowTestOptions` and confirm neither appears in a file this spec could have touched.
   - Run `git status` and `git log` for this spec's commits: no file under `src/ui/`, nor `index.html`, `listen.html`, `src/main.ts`, nor any file listed as "Not changed" in `design.md` was changed or committed by this spec, and the owner's uncommitted files are still uncommitted.
-  - Review the diff against `requirements.md` and the coverage table in `design.md`. Confirm that Q1 still describes the visit limit as proposed.
+  - Review the diff against `requirements.md` and the coverage table in `design.md`. Confirm that Q1 describes the visit limit as decided by the owner's coordinator on 2026-11-16, at the owner's request.
   - Check: every command above.
   - _Requirements: 20.4, 24.1, 24.2, 24.3, 24.5_
   - _Decisions: D30_

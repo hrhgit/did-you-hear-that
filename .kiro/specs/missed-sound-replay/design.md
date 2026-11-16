@@ -388,15 +388,17 @@ export interface MissedSoundReplayConfig {
   /** Brief 07: "Each sound is played 20 dB above the level at which it was missed, clamped to the cap." */
   readonly replayRaiseDb: number;
   /**
-   * PROPOSED, NOT APPROVED (missed-sound-replay design.md, D7 and Q1). The most sounds one replay
-   * plays. With more missed sounds than this, the replay plays an evenly spread selection of this
-   * many and says how many there were in all. A whole number of at least 2.
+   * Decided by the owner's coordinator on 2026-11-16, at the owner's request (missed-sound-replay
+   * design.md, D7 and Q1). The most sounds one replay plays. With more missed sounds than this,
+   * the replay plays an evenly spread selection of this many and says how many there were in all.
+   * A whole number of at least 2.
    */
   readonly replaySoundsMaxCount: number;
   /**
-   * PROPOSED, NOT APPROVED (D9, Q2). The wait from the end of one replayed sound to the request
-   * for the next, on the timer's clock. The sound then starts after the output stage's scheduling
-   * lead. Also the wait from the start press, and from the end of a pause, to the next request.
+   * Decided by the owner's coordinator on 2026-11-16, at the owner's request (D9, Q2). The wait
+   * from the end of one replayed sound to the request for the next, on the timer's clock. The
+   * sound then starts after the output stage's scheduling lead. Also the wait from the start
+   * press, and from the end of a pause, to the next request.
    */
   readonly replayGapMs: number;
 }
@@ -404,20 +406,20 @@ export interface MissedSoundReplayConfig {
 export const missedSoundReplayConfig: MissedSoundReplayConfig = deepFreeze({
   // Brief 07
   replayRaiseDb: 20,
-  // D7, Q1: PROPOSED, NOT APPROVED. Awaits the owner's choice.
+  // D7, Q1: decided by the owner's coordinator on 2026-11-16, at the owner's request.
   replaySoundsMaxCount: 20,
-  // D9, Q2: PROPOSED, NOT APPROVED. Awaits the owner's choice.
+  // D9, Q2: decided by the owner's coordinator on 2026-11-16, at the owner's request.
   replayGapMs: 400,
 });
 ```
 
-The file has its own `deepFreeze`, as `visit-flow-config.ts` does. The test checks the three values, that every field name ends in `Db`, `Count` or `Ms`, deep freezing, `replayRaiseDb > 0`, `replaySoundsMaxCount` a whole number of at least 2 (the selection keeps the first and the last missed sound, D7), and `replayGapMs` a whole number above 0. A test named for Q1 and Q2 checks the two proposed values with a message saying that they are PROPOSED, NOT APPROVED and await the owner's choice in Q1 and Q2.
+The file has its own `deepFreeze`, as `visit-flow-config.ts` does. The test checks the three values, that every field name ends in `Db`, `Count` or `Ms`, deep freezing, `replayRaiseDb > 0`, `replaySoundsMaxCount` a whole number of at least 2 (the selection keeps the first and the last missed sound, D7), and `replayGapMs` a whole number above 0. A test named for Q1 and Q2 checks the two values with a message saying that they were decided by the owner's coordinator on 2026-11-16, at the owner's request, in Q1 and Q2, and that the owner may reverse them.
 
 | Field | Value | Status |
 |---|---|---|
 | `replayRaiseDb` | 20 | From brief 07 |
-| `replaySoundsMaxCount` | 20 | PROPOSED, NOT APPROVED (Q1) |
-| `replayGapMs` | 400 | PROPOSED, NOT APPROVED (Q2) |
+| `replaySoundsMaxCount` | 20 | Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q1) |
+| `replayGapMs` | 400 | Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it (Q2) |
 
 Existing values the replay reads and does not change: `hearingMethodConfig.capRelativeToAnchorDb` (15 dB, the anchor cap), `audioOutputConfig.scheduleLeadMs` (50 ms, to put a sound's start on the page clock when the backend gives no timestamp pair), `visitFlowConfig.refusedPlaysInARowMaxCount` (3, D16). The output stage reads its own limits (see "Which limits of the output stage act on a replayed sound").
 
@@ -1147,9 +1149,9 @@ Outside this spec's tasks, by hand:
 
 ## Questions for the project owner
 
-None of these is decided here. The design uses the proposed answer of each so that it is complete, and every proposed number is marked PROPOSED, NOT APPROVED in `src/config` and in this document. The owner has since decided Q6 and, on 2026-11-15, Q7; Q1 to Q5 stay open.
+None of these was decided by this spec. The design uses the proposed answer of each so that it is complete. The owner has since decided Q6 and, on 2026-11-15, Q7. Q1 to Q5 were decided by the owner's coordinator on 2026-11-16, at the owner's request, each with its proposed answer, and the owner may reverse each of them; the decision follows the heading of each, and `src/config` and this document mark them so.
 
-**Q1. The most sounds one replay plays (`replaySoundsMaxCount`). Proposed: 20, PROPOSED, NOT APPROVED.** The brief asks for a brief replay and an evenly spread selection "if there are more missed sounds than the configured maximum". The search makes misses common: a quick visit misses a median of 33 to 37 sounds, a full one 56 to 60 ("Measurements"). So the maximum decides both how long the replay is and whether a selection is the rule or the exception. With the proposed gap of 400 ms:
+**Q1. The most sounds one replay plays (`replaySoundsMaxCount`). Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: 20 sounds.** Reason: about 30 seconds keeps the replay brief. The brief asks for a brief replay and an evenly spread selection "if there are more missed sounds than the configured maximum". The search makes misses common: a quick visit misses a median of 33 to 37 sounds, a full one 56 to 60 ("Measurements"). So the maximum decides both how long the replay is and whether a selection is the rule or the exception. With the proposed gap of 400 ms:
 
 | Option | Selection in | Replay length, median | What it costs |
 |---|---|---|---|
@@ -1159,7 +1161,7 @@ None of these is decided here. The design uses the proposed answer of each so th
 | 60 | almost no quick, 30 to 47 % of full | 50 to 90 s, longest 98 s | Close to the whole list; one and a half minutes in a full visit |
 | No limit (a very large value) | never | 50 to 92 s, longest 139 s | Every miss, as the brief's first sentence says; over two minutes in the longest full visits, which works against "the replay stays brief" |
 
-**Q2. The gap between replayed sounds (`replayGapMs`). Proposed: 400 ms, PROPOSED, NOT APPROVED.** The wait from the end of one sound to the request for the next; the sound then starts 50 ms later. Options:
+**Q2. The gap between replayed sounds (`replayGapMs`). Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: 400 ms.** The wait from the end of one sound to the request for the next; the sound then starts 50 ms later. Options:
 
 | Option | Median length at 20 sounds | What it costs |
 |---|---|---|
@@ -1169,21 +1171,21 @@ None of these is decided here. The design uses the proposed answer of each so th
 
 Any value above 0 keeps the output stage from refusing a replayed sound as `busy` because of the replayed sound before it, because the next request always comes after the end of the last sound. It does not keep the first replayed sound from finding the last room's sound still playing; a `busy` refusal then is asked for again one gap later and is not counted (D9).
 
-**Q3. Answers on the wrong side. Proposed: (a), not replayed, PROPOSED, NOT APPROVED.** The brief replays "every trial scored as missed", and the log names the outcome `missed`. A wrong side is a separate outcome: the visitor answered, on the other side. The hearing method counts it as a miss for the ear and records it separately, and visit-flow D6 expected that "the replay will show it". Plausible listeners give a median of 7 (quick) to 13 (full) wrong sides; attentive ones almost none. Options:
+**Q3. Answers on the wrong side. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: option (a), not replayed.** The brief replays "every trial scored as missed", and the log names the outcome `missed`. A wrong side is a separate outcome: the visitor answered, on the other side. The hearing method counts it as a miss for the ear and records it separately, and visit-flow D6 expected that "the replay will show it". Plausible listeners give a median of 7 (quick) to 13 (full) wrong sides; attentive ones almost none. Options:
 
-- (a) **Proposed, PROPOSED, NOT APPROVED.** Not replayed. The count line adds "Once you named the other side." or "Three times you named the other side." when there were any, so that made = caught + wrong side + missed can be read. Cost: a sound the visitor did not place correctly is not heard again; one more sentence in the count.
+- (a) **Proposed, and chosen by the owner's coordinator on 2026-11-16.** Not replayed. The count line adds "Once you named the other side." or "Three times you named the other side." when there were any, so that made = caught + wrong side + missed can be read. Cost: a sound the visitor did not place correctly is not heard again; one more sentence in the count.
 - (b) Replayed with the misses, in order. Cost: the replay includes sounds the visitor heard, which weakens "how much went by unheard"; the ripple label would need its own wording ("You named the other side"); the replay grows by a fifth for plausible listeners. The plan's filter and the label change; nothing else.
 - (c) Not replayed and not mentioned. Cost: "On your right I made seven sounds. You caught three." with three replayed sounds instead of four reads as a wrong count, although each number is true.
 
-**Q4. What the running count covers. Proposed: (a), both sides over the whole visit so far, PROPOSED, NOT APPROVED.** The brief: "A running count is shown in words, for example 'On your right I made seven sounds. You caught three.'" Options:
+**Q4. What the running count covers. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: option (a), both sides over the whole visit so far.** The brief: "A running count is shown in words, for example 'On your right I made seven sounds. You caught three.'" Options:
 
-- (a) **Proposed, PROPOSED, NOT APPROVED.** Both sides over the whole visit so far: every scored sound trial of a finished room run up to and including the sound being replayed, so the numbers climb as the replay moves through the visit and reach the visit's totals at the end. Cost: with a selection, the numbers jump between replayed sounds; the counts pool every floor, which is a count of answers and not a level, as the pooled false alarm line is (result-page Q3).
+- (a) **Proposed, and chosen by the owner's coordinator on 2026-11-16.** Both sides over the whole visit so far: every scored sound trial of a finished room run up to and including the sound being replayed, so the numbers climb as the replay moves through the visit and reach the visit's totals at the end. Cost: with a selection, the numbers jump between replayed sounds; the counts pool every floor, which is a count of answers and not a level, as the pooled false alarm line is (result-page Q3).
 - (b) The room of the current sound only, up to that sound. Cost: the counts start again in each room; the line would name the room; per-floor counts of catches are easy to read as a measure of that floor, which the staircase does not make them.
 - (c) The visit's totals, shown from the announcement on. Cost: it does not run; the replay adds nothing to it.
 
-**Q5. The cap of a replayed sound. Proposed: (a), the room's top under the last kept calibration, PROPOSED, NOT APPROVED.** The brief: "20 dB above the level at which it was missed, clamped to the cap". The design reads "the cap" as audio-safety rule 2's cap for that sound with the calibration in use: the room's top, the lower of the anchor cap and the ceiling (D5). Rule 2 and the initial values allow a stricter cap at any time. Options:
+**Q5. The cap of a replayed sound. Decided by the owner's coordinator on 2026-11-16, at the owner's request; the owner may reverse it: option (a), the room's top under the last kept calibration.** Reason: it is audio-safety rule 2's cap and loosens nothing. The brief: "20 dB above the level at which it was missed, clamped to the cap". The design reads "the cap" as audio-safety rule 2's cap for that sound with the calibration in use: the room's top, the lower of the anchor cap and the ceiling (D5). Rule 2 and the initial values allow a stricter cap at any time. Options:
 
-- (a) **Proposed, PROPOSED, NOT APPROVED.** The room's top under the last kept calibration. Cost: a replayed sound can be up to one 5 dB step louder than any trial of its room, because the search's cap is the top rounded down to its grid; the louder end of the replay is the loudest moment of the product.
+- (a) **Proposed, and chosen by the owner's coordinator on 2026-11-16.** The room's top under the last kept calibration. Cost: a replayed sound can be up to one 5 dB step louder than any trial of its room, because the search's cap is the top rounded down to its grid; the louder end of the replay is the loudest moment of the product.
 - (b) The search's cap of the trial's room run (`searchCapDb` of its attempt). The replay is never louder than the loudest level the search could ask for in that room. Cost: more sounds are held back; the label "as loud as the house may play" would become "as loud as this room went"; the plan reads the attempt's cap instead of the calibration's top.
 - (c) A replay ceiling of its own below the room top, such as the anchor (0 dB). Cost: a new number for the owner; many sounds missed near the top would replay no louder than they were, which the label would say.
 
