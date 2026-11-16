@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/ui/base.css" />
+    <link rel="stylesheet" href="/src/ui/house/house.css" />
+    <link rel="stylesheet" href="/src/ui/visit/visit.css" />
+    <title></title>
+  </head>
+  <body>
+    <!--
+      The development replay sheet. The development server serves it at /replay-sheet.html. The
+      build does not take it as an input and nothing links to it. It shows the page of the visit
+      at any moment a test or a developer hands to it, with no visit flow and no sound. Every
+      string is set from src/copy by the script or comes with the snapshot.
+    -->
+    <main></main>
+    <script type="module" src="/src/ui/visit/start-replay-sheet.ts"></script>
+  </body>
+</html>

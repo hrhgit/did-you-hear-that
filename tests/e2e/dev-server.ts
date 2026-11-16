@@ -5,14 +5,17 @@
  * which does not hold the listening page.
  *
  * The same server serves the development result sheet, `result-sheet.html`, which
- * `result-page.spec.ts` opens. The build does not hold that page either.
+ * `result-page.spec.ts` opens, and the development replay sheet, `replay-sheet.html`, which
+ * `replay.spec.ts` opens. The build holds neither of those pages.
  */
 export const devServer: Readonly<{
   port: number;
   listeningPagePath: string;
   resultSheetPath: string;
+  replaySheetPath: string;
 }> = Object.freeze({
   port: 5175,
   listeningPagePath: "/listen.html",
   resultSheetPath: "/result-sheet.html",
+  replaySheetPath: "/replay-sheet.html",
 });
