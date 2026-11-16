@@ -111,6 +111,37 @@ describe("audioOutputConfig", () => {
     });
   });
 
+  describe("the playable floor (audible-start design.md, Config)", () => {
+    it("has the values of the audible-start design", () => {
+      expect(audioOutputConfig.playableRmsMinFraction).toBe(10 ** (-84 / 20));
+      expect(audioOutputConfig.playableRangeBelowAnchorMinDb).toBe(30);
+    });
+
+    it("puts the playable RMS 84 dB below full scale, about 6.31e-5", () => {
+      expect(
+        20 * Math.log10(audioOutputConfig.playableRmsMinFraction),
+      ).toBeCloseTo(-84, 12);
+      expect(audioOutputConfig.playableRmsMinFraction).toBeGreaterThan(6.3e-5);
+      expect(audioOutputConfig.playableRmsMinFraction).toBeLessThan(6.32e-5);
+    });
+
+    it("ends the name of every floor value with its unit", () => {
+      for (const fieldName of [
+        "playableRmsMinFraction",
+        "playableRangeBelowAnchorMinDb",
+      ]) {
+        expect(Object.keys(audioOutputConfig)).toContain(fieldName);
+        expect(fieldName).toMatch(/(Db|Fraction)$/);
+      }
+    });
+
+    it("gives a positive range below the anchor", () => {
+      expect(audioOutputConfig.playableRangeBelowAnchorMinDb).toBeGreaterThan(
+        0,
+      );
+    });
+  });
+
   describe("playable buffers (D6)", () => {
     it("gives a Peak_Bound to exactly the six sounds", () => {
       expect(Object.keys(audioOutputConfig.peakBoundDb)).toEqual([...soundIds]);
@@ -154,11 +185,11 @@ describe("audioOutputConfig", () => {
       ).toBeLessThanOrEqual(-60);
     });
 
-    it("keeps the Keep_Minimum at -40 dB or higher", () => {
+    it("keeps the Keep_Minimum at -27 dB or higher (audible-start D25)", () => {
       expect(
         audioOutputConfig.calibrationSettingKeepMinDb,
-        `calibrationSettingKeepMinDb is below -40 dB. Keeping a lower setting ${loosening}.`,
-      ).toBeGreaterThanOrEqual(-40);
+        `calibrationSettingKeepMinDb is below -27 dB. Keeping a lower setting ${loosening}, and leaves less than 30 dB of playable range below the anchor.`,
+      ).toBeGreaterThanOrEqual(-27);
     });
 
     it("keeps the rise between calibration repeats at 5 dB or less", () => {

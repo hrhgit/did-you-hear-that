@@ -155,6 +155,41 @@ function calibrationAnchorHolds(calibration: unknown): boolean {
   );
 }
 
+/**
+ * Whether a calibration's `roomFloorLevelDb`, when it has one, is a plain object with a finite
+ * number for every ghost room (audible-start design.md, "Checking a payload").
+ */
+function calibrationFloorsHold(calibration: unknown): boolean {
+  if (
+    !isJsonObject(calibration) ||
+    !Object.hasOwn(calibration, "roomFloorLevelDb")
+  ) {
+    return true;
+  }
+  const floors = calibration.roomFloorLevelDb;
+  return (
+    isJsonObject(floors) &&
+    ghostSoundIds.every((soundId) => isFiniteNumber(floors[soundId]))
+  );
+}
+
+/**
+ * Whether a `searchFloorDb`, when the object has one, is finite and below the object's own
+ * `searchCapDb` (audible-start design.md, "Checking a payload"). For a room attempt and for a
+ * room summary alike.
+ */
+function searchFloorHolds(entry: unknown): boolean {
+  if (!isJsonObject(entry) || !Object.hasOwn(entry, "searchFloorDb")) {
+    return true;
+  }
+  const { searchFloorDb, searchCapDb } = entry;
+  return (
+    isFiniteNumber(searchFloorDb) &&
+    isFiniteNumber(searchCapDb) &&
+    searchFloorDb < searchCapDb
+  );
+}
+
 /** Rule 2: the light check of the log. */
 function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
   if (
@@ -167,7 +202,9 @@ function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
     !Array.isArray(log.rooms) ||
     log.rooms.length === 0 ||
     !logListFields.every((field) => Array.isArray(log[field])) ||
-    !(log.calibrations as readonly unknown[]).every(calibrationAnchorHolds)
+    !(log.calibrations as readonly unknown[]).every(calibrationAnchorHolds) ||
+    !(log.calibrations as readonly unknown[]).every(calibrationFloorsHold) ||
+    !(log.roomAttempts as readonly unknown[]).every(searchFloorHolds)
   ) {
     return false;
   }
@@ -225,6 +262,7 @@ function roomSummaryHolds(
     !isJsonObject(roomSummary) ||
     !roomsEqual(roomSummary.room, logRoom) ||
     !isFiniteNumber(roomSummary.searchCapDb) ||
+    !searchFloorHolds(roomSummary) ||
     !isCount(roomSummary.noSoundTrialCount) ||
     !isCount(roomSummary.falseAlarmCount) ||
     roomSummary.falseAlarmCount > roomSummary.noSoundTrialCount ||
@@ -343,8 +381,10 @@ export function savedVisitPayloadJson(
  * checked against the engine, which is the no-headphone replay's to do. A payload without the key
  * `swappedRepeats` reads with an empty list; a payload with it reads only when its records meet
  * `swappedRepeatRunsHold` (swapped-repeat R13.3, R13.4). A calibration's `anchor`, when present,
- * is `music` or `hiss`; a payload written before the audible-start spec has none and reads as
- * before (audible-start R11.1, R11.5). Never throws.
+ * is `music` or `hiss`; a calibration's `roomFloorLevelDb`, when present, has a finite number for
+ * every ghost room; a room attempt's or a room summary's `searchFloorDb`, when present, is finite
+ * and below its `searchCapDb`. A payload written before the audible-start spec has none of them
+ * and reads as before (audible-start R11.1, R11.5). Never throws.
  */
 export function parseSavedVisitPayload(
   payloadJson: string,

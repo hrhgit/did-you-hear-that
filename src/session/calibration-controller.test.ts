@@ -231,14 +231,14 @@ describe("createCalibrationController", () => {
   it("keeps the setting last played, ends the loop and shows the kept line (R16.4, R16.8)", async () => {
     const { backend, controller, advance, advanceToNextRepeat } = await setup();
     controller.open();
-    for (let press = 0; press < 20; press += 1) {
+    for (let press = 0; press < 40; press += 1) {
       controller.louder();
     }
-    for (let repeat = 0; repeat < 4; repeat += 1) {
+    for (let repeat = 0; repeat < 8; repeat += 1) {
       advanceToNextRepeat();
     }
     const played = controller.snapshot().playedSettingDb;
-    expect(played).toBe(calibrationSettingMinDb + 20);
+    expect(played).toBe(calibrationSettingMinDb + 40);
     expect(played).toBeGreaterThanOrEqual(calibrationSettingKeepMinDb);
     expect(controller.snapshot().line).toBe(calibrationCopy.hiss.openLine);
 

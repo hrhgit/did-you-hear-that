@@ -49,7 +49,7 @@ describe("missed-sound replay regressions", () => {
     const plan: VisitLogPlan = {
       visitType: "quick",
       visitSeed: 0,
-      calibrationSettingsDb: [-40],
+      calibrationSettingsDb: [-27],
       freeTops: [flatTops(0)],
       rooms: [
         { abandoned: [], finished: emptyRun },
@@ -170,7 +170,7 @@ describe("missed-sound replay regressions", () => {
     const plan: VisitLogPlan = {
       visitType: "quick",
       visitSeed: 0,
-      calibrationSettingsDb: [-40],
+      calibrationSettingsDb: [-27],
       freeTops: [flatTops(0)],
       rooms: [
         { abandoned: [], finished: emptyRun },

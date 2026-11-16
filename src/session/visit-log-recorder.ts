@@ -76,6 +76,11 @@ export interface VisitLogRecorder {
      * without it reads as one matched to the visitor's hands, as before the audible-start spec.
      */
     readonly anchor?: Exclude<CalibrationAnchor, "hands">;
+    /**
+     * The Playable_Floor of every ghost room with this calibration (audible-start R12.3). The flow
+     * always gives it; a calibration recorded without it has none, as before the audible-start spec.
+     */
+    readonly roomFloorLevelDb?: Readonly<Record<GhostSoundId, number>>;
   }): LoggedCalibration;
   /** Records an answered headphone check. */
   headphoneCheckAnswered(input: {
@@ -90,6 +95,11 @@ export interface VisitLogRecorder {
     readonly engineSeed: number;
     readonly calibrationIndex: number;
     readonly searchCapDb: number;
+    /**
+     * The quietest level the run's search can ask for, its Search_Floor (audible-start R12.5).
+     * Every room run gives it; a run recorded without it has none, as before the audible-start spec.
+     */
+    readonly searchFloorDb?: number;
     readonly startedAtMs: number;
   }): number;
   /**
@@ -224,6 +234,7 @@ interface OpenAttempt {
   readonly calibrationIndex: number;
   readonly searchCapDb: number;
   readonly startedAtMs: number;
+  readonly searchFloorDb?: number;
 }
 
 interface OpenPause {
@@ -319,12 +330,25 @@ export function createVisitLogRecorder(options: {
           `A calibration's anchor is music or hiss, but got ${String(anchor)}.`,
         );
       }
+      const floors = input.roomFloorLevelDb;
+      const roomFloorLevelDb =
+        floors === undefined
+          ? undefined
+          : Object.freeze(
+              Object.fromEntries(
+                ghostSoundIds.map((soundId) => [
+                  soundId,
+                  plainNumber(`roomFloorLevelDb.${soundId}`, floors[soundId]),
+                ]),
+              ) as Record<GhostSoundId, number>,
+            );
       const entry: LoggedCalibration = Object.freeze({
         calibrationIndex: calibrations.length,
         settingDb: plainNumber("settingDb", input.settingDb),
         roomTopLevelDb,
         keptAtMs: sinceStart("keptAtMs", input.keptAtMs),
         ...(anchor === undefined ? {} : { anchor }),
+        ...(roomFloorLevelDb === undefined ? {} : { roomFloorLevelDb }),
       });
       calibrations.push(entry);
       return entry;
@@ -363,6 +387,11 @@ export function createVisitLogRecorder(options: {
         ),
         searchCapDb: plainNumber("searchCapDb", input.searchCapDb),
         startedAtMs: sinceStart("startedAtMs", input.startedAtMs),
+        ...(input.searchFloorDb === undefined
+          ? {}
+          : {
+              searchFloorDb: plainNumber("searchFloorDb", input.searchFloorDb),
+            }),
       });
       attempts.push(open);
       openAttempts.set(open.roomIndex, open);

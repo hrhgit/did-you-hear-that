@@ -6,6 +6,7 @@ import type {
   SoundOutcome,
 } from "../engine/search-types";
 import type { CalibrationSound as OutputCalibrationSound } from "../audio/output/create-audio-output";
+import type { GhostSoundId } from "../config/sound-id";
 import type {
   BetweenRoomsSnapshot,
   CalibrationAnchor,
@@ -19,6 +20,7 @@ import type {
   HeadphoneCheckSnapshot,
   LoggedCalibration,
   LoggedEarResult,
+  LoggedRoomAttempt,
   LoggedRoomResult,
   MissedSoundReplay,
   MissedSoundReplaySnapshot,
@@ -33,6 +35,7 @@ import type {
   ReplaySoundStartedEvent,
   ResultSnapshot,
   RoomSnapshot,
+  RoomSummary,
   RulesSnapshot,
   ScoredVisitTrial,
   SwapCheckJudgement,
@@ -318,5 +321,27 @@ describe("visit-flow-types", () => {
     expectTypeOf<
       Omit<LoggedCalibration, "anchor">
     >().toExtend<LoggedCalibration>();
+  });
+
+  it("gives LoggedCalibration an optional roomFloorLevelDb for every ghost room (D29)", () => {
+    expectTypeOf<Pick<LoggedCalibration, "roomFloorLevelDb">>().toEqualTypeOf<{
+      readonly roomFloorLevelDb?: Readonly<Record<GhostSoundId, number>>;
+    }>();
+    expectTypeOf<
+      Omit<LoggedCalibration, "roomFloorLevelDb">
+    >().toExtend<LoggedCalibration>();
+  });
+
+  it("gives LoggedRoomAttempt and RoomSummary an optional searchFloorDb (D29)", () => {
+    expectTypeOf<Pick<LoggedRoomAttempt, "searchFloorDb">>().toEqualTypeOf<{
+      readonly searchFloorDb?: number;
+    }>();
+    expectTypeOf<
+      Omit<LoggedRoomAttempt, "searchFloorDb">
+    >().toExtend<LoggedRoomAttempt>();
+    expectTypeOf<Pick<RoomSummary, "searchFloorDb">>().toEqualTypeOf<{
+      readonly searchFloorDb?: number;
+    }>();
+    expectTypeOf<Omit<RoomSummary, "searchFloorDb">>().toExtend<RoomSummary>();
   });
 });

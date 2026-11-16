@@ -326,7 +326,7 @@ describe("createAudioOutput", () => {
     });
 
     it("refuses every sound while stopped, until activate", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       output.stopAll();
       output.beginCalibration();
       expect(output.play(trial)).toMatchObject({ reason: "notRunning" });
@@ -336,7 +336,8 @@ describe("createAudioOutput", () => {
       expect(
         output.playCalibrationRepeat({ requestedSettingDb: -60, random }),
       ).toMatchObject({ reason: "notRunning" });
-      expect(backend.scheduled().length).toBe(7);
+      // The eight calibration repeats from -60 to -25 dB, and nothing after the stop.
+      expect(backend.scheduled().length).toBe(8);
     });
   });
 
@@ -429,7 +430,7 @@ describe("createAudioOutput", () => {
     });
 
     it("forgets the kept calibration when a new one begins (R15.2)", async () => {
-      const { output } = await runningAndCalibrated(-30);
+      const { output } = await runningAndCalibrated(-25);
       output.beginCalibration();
       expect(output.rangeReport()).toBeNull();
       expect(
@@ -474,7 +475,7 @@ describe("createAudioOutput", () => {
 
   describe("playing a sound (R8.4, R12, R13)", () => {
     it("starts a sound one scheduling lead ahead on the audio clock and returns its start and end", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       output.beginRoom();
       backend.advanceClockBy(10_000);
       const nowMs = backend.currentTimeMs();
@@ -502,7 +503,7 @@ describe("createAudioOutput", () => {
     });
 
     it("refuses a sound that would start before the current one ends (D16)", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       const request = {
         soundId: "attic",
         ear: "left",
@@ -531,7 +532,7 @@ describe("createAudioOutput", () => {
     });
 
     it("logs a clamp with its start, sound, ear, purpose and levels, and returns the same values (R7.8, D22)", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       expect(output.clampLog()).toEqual([]);
       output.beginRoom();
       const outcome = output.play({
@@ -577,7 +578,7 @@ describe("createAudioOutput", () => {
 
   describe("the rise limit within a Room_Span (R11, D15)", () => {
     it("limits a rise on one ear across purposes, and beginRoom forgets the previous sounds", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       // The last calibration repeat, at Level 0 in both ears, is the previous sound on each ear:
       // one upward step above it is the cap of 5 dB, and is played as asked.
       const afterCalibration = output.play({
@@ -659,7 +660,7 @@ describe("createAudioOutput", () => {
     });
 
     it("exempts a replay from the rise limit but not from the cap, and counts it as the previous sound", async () => {
-      const { backend, output } = await runningAndCalibrated(-30);
+      const { backend, output } = await runningAndCalibrated(-25);
       output.beginRoom();
       const steps = [
         { levelDb: startingLevelDb, purpose: "trial" },
@@ -712,7 +713,7 @@ describe("createAudioOutput", () => {
       "stops with the reason %s: fades, reports, refuses, then suspends or closes after the timer",
       async (reason) => {
         const { backend, timer, output, stops } =
-          await runningAndCalibrated(-30);
+          await runningAndCalibrated(-25);
         output.play({
           soundId: "cellar",
           ear: "left",
@@ -747,9 +748,9 @@ describe("createAudioOutput", () => {
         expect(backend.calls.slice(callCount + 1)).toEqual([
           { kind: reason === "pageLeft" ? "close" : "suspend" },
         ]);
-        // Seven calibration repeats and the one sound before the stop, nothing after it.
+        // Eight calibration repeats and the one sound before the stop, nothing after it.
         timer.advanceBy(60_000);
-        expect(backend.scheduled().length).toBe(8);
+        expect(backend.scheduled().length).toBe(9);
 
         // The busy interval ended with the stop, so a sound may start at once after activate.
         await output.activate();
@@ -771,7 +772,7 @@ describe("createAudioOutput", () => {
     );
 
     it("keeps the first reason on a second stop, reports both, and fades again", async () => {
-      const { backend, output, stops } = await runningAndCalibrated(-30);
+      const { backend, output, stops } = await runningAndCalibrated(-25);
       backend.fire("hidden");
       backend.fire("deviceChanged");
       expect(output.state()).toEqual({ kind: "stopped", reason: "hidden" });
@@ -787,7 +788,7 @@ describe("createAudioOutput", () => {
     });
 
     it("closes rather than suspends when the page was left during a stop", async () => {
-      const { backend, timer, output } = await runningAndCalibrated(-30);
+      const { backend, timer, output } = await runningAndCalibrated(-25);
       output.stopAll();
       backend.fire("pageLeft");
       timer.advanceBy(stopFadeMs + scheduleLeadMs);
@@ -798,7 +799,7 @@ describe("createAudioOutput", () => {
     });
 
     it("does not suspend after a stop when activate came first", async () => {
-      const { backend, timer, output } = await runningAndCalibrated(-30);
+      const { backend, timer, output } = await runningAndCalibrated(-25);
       output.stopAll();
       await output.activate();
       timer.advanceBy(60_000);

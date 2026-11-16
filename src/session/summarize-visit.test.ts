@@ -322,6 +322,37 @@ describe("summarizeVisit", () => {
     expect(summary.rooms[1]?.right).toEqual(quietResults[1].right);
   });
 
+  it("gives each floor the Search_Floor of the attempt its result comes from (audible-start R12.6)", () => {
+    const summary = summarizeVisit(
+      makeLog({
+        roomAttempts: [
+          { ...finished(0, quietResults[0], 1, 5), searchFloorDb: -30 },
+          { ...abandoned(1, 5), searchFloorDb: -40 },
+          { ...finished(1, quietResults[1], 2, 5), searchFloorDb: -50 },
+          { ...finished(2, quietResults[2], 1, 0), searchFloorDb: -45 },
+        ],
+      }),
+    );
+    expect(summary.rooms.map((room) => room.searchFloorDb)).toEqual([
+      -30, -50, -45,
+    ]);
+  });
+
+  it("gives no Search_Floor to a floor whose attempt has none, as a visit recorded before audible-start", () => {
+    const summary = summarizeVisit(
+      makeLog({
+        roomAttempts: [
+          finished(0, quietResults[0]),
+          finished(1, quietResults[1]),
+          finished(2, quietResults[2]),
+        ],
+      }),
+    );
+    for (const room of summary.rooms) {
+      expect(Object.hasOwn(room, "searchFloorDb")).toBe(false);
+    }
+  });
+
   it.each([
     [-30, -16, 14, false],
     [-30, -15, 15, true],

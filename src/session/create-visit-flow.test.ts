@@ -285,9 +285,12 @@ async function toRoom(harness: Harness): Promise<void> {
 
 type Listener = (trial: FlowPresentedTrial, index: number) => Ear | null;
 
-/** Catches every sound at or above its ear's threshold, on the right side, and nothing else. */
+/**
+ * Catches every sound at or above its ear's threshold, on the right side, and nothing else. The
+ * default lies above every room's Search_Floor at the Keep_Minimum (audible-start R12.5).
+ */
 function stepListener(
-  thresholdsDb: Readonly<Record<Ear, number>> = { left: -40, right: -40 },
+  thresholdsDb: Readonly<Record<Ear, number>> = { left: -20, right: -20 },
 ): Listener {
   return (trial) =>
     trial.kind === "sound" &&
@@ -359,7 +362,7 @@ async function toResult(
 }
 
 /** The listener whose floors differ by 20 dB, so that both ears are found and the repeat is offered. */
-const unevenListener = stepListener({ left: -40, right: -20 });
+const unevenListener = stepListener({ left: -25, right: -5 });
 
 async function toSwappedRepeat(harness: Harness): Promise<void> {
   const result = await toResult(harness, unevenListener);
@@ -775,6 +778,13 @@ describe("createVisitFlow: calibration", () => {
           nursery: report.rooms.nursery.topLevelDb,
           stairs: report.rooms.stairs.topLevelDb,
           attic: report.rooms.attic.topLevelDb,
+        },
+        roomFloorLevelDb: {
+          cellar: report.rooms.cellar.floorLevelDb,
+          corridor: report.rooms.corridor.floorLevelDb,
+          nursery: report.rooms.nursery.floorLevelDb,
+          stairs: report.rooms.stairs.floorLevelDb,
+          attic: report.rooms.attic.floorLevelDb,
         },
         keptAtMs: expect.any(Number),
         anchor: "hiss",
@@ -2853,6 +2863,8 @@ describe('createVisitFlow: the missed-sound replay (missed-sound-replay design.m
   const afterwardsMs = 10 * 60_000;
   /** A step listener whose threshold lies below the floor: it catches every sound. */
   const catchEveryListener = stepListener({ left: -1000, right: -1000 });
+  /** A listener with which the last answer of the visit comes while its sound still plays. */
+  const busyCaseListener = stepListener({ left: -10, right: -10 });
 
   function replaySnapshotOf(harness: Harness): MissedSoundReplaySnapshot {
     const snapshot = harness.flow.snapshot();
@@ -3332,7 +3344,7 @@ describe('createVisitFlow: the missed-sound replay (missed-sound-replay design.m
 
     it("a first sound refused busy because the last trial's sound still plays is asked for again one gap later (R6.3, R12.3)", async () => {
       const harness = createHarness();
-      const { snapshot } = await enterReplay(harness, stepListener(), false);
+      const { snapshot } = await enterReplay(harness, busyCaseListener, false);
       const plan = planMissedSoundReplay(snapshot.visitLog);
       harness.flow.startReplay();
       await harness.settle();

@@ -19,6 +19,7 @@ import { judgeSwapCheck } from "./judge-swap-check";
 import type { LatestOffset, PresentedTrial, RoomRunner } from "./room-runner";
 import { createRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
+import { roomSearchFloorDb } from "./room-search-floor";
 import { swappedEarpieceOutput } from "./swapped-earpiece-output";
 import type { SwappedRepeatOutcomeSettings } from "./swapped-repeat-outcome";
 import { swappedRepeatRunOf } from "./swapped-repeat-run";
@@ -171,8 +172,9 @@ function firstRunCalibrationIndex(log: VisitLog, roomIndex: number): number {
  * It plays the swap check only through `output.playHeadphoneCheck`, in the left earpiece, and the
  * room only through `createRoomRunner` on `swappedEarpieceOutput(output)`, so each trial of an ear
  * plays in the other earpiece. The room's search is created as the flow creates every room's, from
- * `hearingMethodConfig` with the cap `roomSearchCapDb` of the room's top, which must equal the first
- * run's; the engine seed is `drawEngineSeed()`. The run is recorded on its own `VisitLogRecorder`,
+ * `hearingMethodConfig` with the cap `roomSearchCapDb` of the room's top and the floor
+ * `roomSearchFloorDb` of its playable floor, which must equal the first run's (audible-start
+ * R12.7); the engine seed is `drawEngineSeed()`. The run is recorded on its own `VisitLogRecorder`,
  * on the visit log's clock, and nothing is written to the visit log. It reads time only through the
  * timer it is given and adds no number of its own.
  *
@@ -498,6 +500,17 @@ export function createSwappedRepeat(
           `The repeat's search cap ${String(searchCapDb)} dB differs from the first run's ${String(roomSummary.searchCapDb)} dB.`,
         );
       }
+      // The repeat uses the first run's Search_Floor, and stops with an error if the calibration
+      // gives another (audible-start R12.7).
+      const searchFloorDb = roomSearchFloorDb(
+        report.rooms[room.roomId].floorLevelDb,
+        hearingMethodConfig,
+      );
+      if (searchFloorDb !== roomSummary.searchFloorDb) {
+        throw new Error(
+          `The repeat's search floor ${String(searchFloorDb)} dB differs from the first run's ${String(roomSummary.searchFloorDb)} dB.`,
+        );
+      }
       const calibrationIndex = firstRunCalibrationIndex(log, roomIndex);
       const engineSeed = options.drawEngineSeed();
       const runRecorder = createVisitLogRecorder({
@@ -511,12 +524,20 @@ export function createSwappedRepeat(
         engineSeed,
         calibrationIndex,
         searchCapDb,
+        searchFloorDb,
         startedAtMs: timer.now(),
       });
       const search = createThresholdSearch({
         settings: {
           ...hearingMethodConfig,
           capRelativeToAnchorDb: searchCapDb,
+          floorDb: searchFloorDb,
+          // Held at or above the floor, as the flow holds the first run's (create-visit-flow.ts).
+          // Each ear's own start from practice replaces it (audible-start task 11).
+          startingLevelDb: Math.max(
+            hearingMethodConfig.startingLevelDb,
+            searchFloorDb,
+          ),
         },
         random: createSeededRandom(engineSeed),
       });

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { audioOutputConfig } from "../../config/audio-output-config";
 import { hearingMethodConfig } from "../../config/hearing-method-config";
 import type { SoundId } from "../../config/sound-id";
 import { ghostSoundIds, soundIds } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import { decibelsToGain } from "../synth/decibels-to-gain";
 import { rangeReport } from "./range-report";
+import { roomFloorLevelDb } from "./room-floor-level";
 import { roomTopLevelDb } from "./room-top-level";
 
 const { capRelativeToAnchorDb, floorDb } = hearingMethodConfig;
@@ -87,6 +89,45 @@ describe("rangeReport", () => {
     // About 1.0e-5 of full scale, about 100 dB below it (design.md, Measurements).
     expect(report.floorRmsFraction).toBeGreaterThan(0.99e-5);
     expect(report.floorRmsFraction).toBeLessThan(1.01e-5);
+  });
+
+  it.each([
+    [-40, -17.98],
+    [-27, -30.98],
+    [-16, -41.98],
+    [-5, -52.98],
+    [-4, -53.98],
+  ])(
+    "gives every sound's playable floor at %d dB, set by the playable RMS (audible-start R12.2)",
+    (settingDb, expectedDb) => {
+      const calibrationGain = decibelsToGain(settingDb);
+      const report = rangeReport(calibrationGain);
+      for (const soundId of soundIds) {
+        const room = report.rooms[soundId];
+        expect(room.floorLevelDb, soundId).toBe(
+          roomFloorLevelDb(soundId, calibrationGain),
+        );
+        expect(
+          Math.abs(room.floorLevelDb - expectedDb),
+          soundId,
+        ).toBeLessThanOrEqual(0.01);
+        expect(room.floorSetBy, soundId).toBe("playableRms");
+      }
+    },
+  );
+
+  it("names the fixed floor where the playable RMS would lie below it", () => {
+    const report = rangeReport(decibelsToGain(20));
+    for (const soundId of soundIds) {
+      expect(report.rooms[soundId].floorLevelDb, soundId).toBe(floorDb);
+      expect(report.rooms[soundId].floorSetBy, soundId).toBe("fixedFloor");
+    }
+  });
+
+  it("gives the playable RMS beside the RMS at the floor (audible-start R12.2)", () => {
+    expect(rangeReport(1).playableRmsMinFraction).toBe(
+      audioOutputConfig.playableRmsMinFraction,
+    );
   });
 
   it("is frozen", () => {

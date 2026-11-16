@@ -40,6 +40,7 @@ import { judgeHeadphoneCheck } from "./judge-headphone-check";
 import type { LatestOffset, PresentedTrial, RoomRunner } from "./room-runner";
 import { createRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
+import { roomSearchFloorDb } from "./room-search-floor";
 import { summarizeVisit } from "./summarize-visit";
 import type {
   EarpieceState,
@@ -958,8 +959,14 @@ export function createVisitFlow(
       const roomIndex = current.finishedRoomCount;
       const room = roomAt(current, roomIndex);
       output.beginRoom();
+      const roomRange = report.rooms[room.roomId];
       const searchCapDb = roomSearchCapDb(
-        report.rooms[room.roomId].topLevelDb,
+        roomRange.topLevelDb,
+        hearingMethodConfig,
+      );
+      // The search asks for nothing below the room's playable floor (audible-start R12.5).
+      const searchFloorDb = roomSearchFloorDb(
+        roomRange.floorLevelDb,
         hearingMethodConfig,
       );
       const engineSeed = drawSeed(current.source);
@@ -967,6 +974,15 @@ export function createVisitFlow(
         settings: {
           ...hearingMethodConfig,
           capRelativeToAnchorDb: searchCapDb,
+          floorDb: searchFloorDb,
+          // Held at or above the floor, as every start of the search must be. At a setting from
+          // the audible-start Keep_Minimum (−27 dB, D25) up the floor lies below the fixed start
+          // and this changes nothing; below it, it keeps the search valid. Each ear's own start
+          // from practice replaces it (audible-start task 11).
+          startingLevelDb: Math.max(
+            hearingMethodConfig.startingLevelDb,
+            searchFloorDb,
+          ),
         },
         random: createSeededRandom(engineSeed),
       });
@@ -975,6 +991,7 @@ export function createVisitFlow(
         engineSeed,
         calibrationIndex: keptCalibration.calibrationIndex,
         searchCapDb,
+        searchFloorDb,
         startedAtMs: timer.now(),
       });
       current.activeRoomIndex = roomIndex;
@@ -1166,6 +1183,13 @@ export function createVisitFlow(
             outcome.rangeReport.rooms[soundId].topLevelDb,
           ]),
         ) as Record<GhostSoundId, number>;
+        // Every ghost room's Playable_Floor with this calibration (audible-start R12.3).
+        const roomFloorLevelDb = Object.fromEntries(
+          ghostSoundIds.map((soundId) => [
+            soundId,
+            outcome.rangeReport.rooms[soundId].floorLevelDb,
+          ]),
+        ) as Record<GhostSoundId, number>;
         const kept = calibration.snapshot().kept;
         if (kept === null) {
           throw new Error(
@@ -1175,6 +1199,7 @@ export function createVisitFlow(
         current.lastCalibration = current.recorder.calibrationKept({
           settingDb: outcome.settingDb,
           roomTopLevelDb,
+          roomFloorLevelDb,
           keptAtMs: timer.now(),
           // How the anchor was set: with the music, or with the hiss (audible-start R8.4).
           anchor: kept.anchor,

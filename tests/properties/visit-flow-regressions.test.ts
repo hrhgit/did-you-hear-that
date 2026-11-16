@@ -68,20 +68,23 @@ describe("visit flow regressions", () => {
   // attempt 2's first trial. The flow was right; the property's bookkeeping was not.
   //
   // This case keeps the script fast-check drew except its listener, which was a drawn function,
-  // and the time of the second device change. The listener here answers the side of every sound at
-  // or above −30 dB and nothing otherwise. With it, replaying the visit put attempt 2 of the third
-  // room from 286 989 ms to its first trial at 290 149 ms, so the second device change is set at
-  // 288 000 ms, between the two. The case asserts that order first, so that it cannot quietly
-  // stop covering two device changes in a row.
+  // its calibration and the times of the two device changes. The audible-start Keep_Minimum
+  // (−27 dB, D25) and the playable floor moved the calibration from −40 dB to −27 dB and the
+  // listener's threshold from −30 dB to −20 dB, above the Search_Floor, which changed the times.
+  // The listener here answers the side of every sound at or above −20 dB and nothing otherwise.
+  // With it, the third room's first attempt presents its first trial at 192 815 ms; the first
+  // device change at 200 000 ms abandons it; attempt 2 runs from 230 217 ms to its first trial at
+  // 233 377 ms, so the second device change is set at 232 000 ms, between the two. The case
+  // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
       visitType: "quick",
-      calibrationTargetDb: -40,
+      calibrationTargetDb: -27,
       firstHeadphoneCheckAnswer: "left",
       listener: {
         kind: "function",
         respond: (trial: ListenerTrial) =>
-          trial.kind === "sound" && trial.levelDb >= -30 ? trial.ear : "none",
+          trial.kind === "sound" && trial.levelDb >= -20 ? trial.ear : "none",
       },
       visitorSeed: 4294950317,
       answerDelayMaxMs,
@@ -89,8 +92,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 266_399, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 288_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 200_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 232_000, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };

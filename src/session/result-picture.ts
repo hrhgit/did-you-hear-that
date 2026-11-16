@@ -140,9 +140,11 @@ function wing(
 }
 
 /**
- * One floor, from its own room summary and the visit's quietest level alone (D16), the earlier
- * visit's summary of the same room, or null when there is none, and the floor's swapped repeat,
- * or null. The repeat is drawn beside the floor and changes nothing else of it; a floor with one
+ * One floor, from its own room summary alone (D16), the earlier visit's summary of the same room,
+ * or null when there is none, and the floor's swapped repeat, or null. The floor is drawn on its
+ * own scale, from its `searchCapDb` to its `searchFloorDb`, or to the visit's quietest level for a
+ * floor recorded before the audible-start spec, which has no `searchFloorDb` (audible-start R12.6,
+ * D23). The repeat is drawn beside the floor and changes nothing else of it; a floor with one
  * offers no other (swapped-repeat R12.1, R12.3, R12.4, D16; Q4, decided by the owner on
  * 2026-11-15).
  */
@@ -154,7 +156,10 @@ function floor(
   repeatRun: SwappedRepeatRun | null,
 ): PictureFloor {
   const { room, rightMinusLeftDb } = roomSummary;
-  const scale: FloorScale = { searchCapDb: roomSummary.searchCapDb, floorDb };
+  const scale: FloorScale = {
+    searchCapDb: roomSummary.searchCapDb,
+    floorDb: roomSummary.searchFloorDb ?? floorDb,
+  };
   return {
     room: {
       roomIndex: room.roomIndex,
@@ -254,7 +259,8 @@ function comparisonOf(
  * Everything the page draws and says about one visit (result-page design.md, "`resultPicture`").
  * One floor per room summary in the summary's order, which is the order of the house from the
  * lowest floor up; each floor and each wing is computed from its own room summary, on the floor's
- * own scale from its `searchCapDb` to the visit's `floorDb` (D15, D16). The only fields made from
+ * own scale from its `searchCapDb` to its own `searchFloorDb`, or to the visit's `floorDb` for a
+ * floor recorded before the audible-start spec (D15, D16; audible-start R12.6). The only fields made from
  * more than one floor are the pooled false alarm line and the visit notice (D17). Every string
  * comes from `src/copy`, and the limits statement is the constant itself. Only a live result
  * offers the swapped repeat (D20). With an earlier visit, each wing of a floor whose room the

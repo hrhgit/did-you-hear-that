@@ -153,6 +153,11 @@ export function summarizeVisit(
       swappedRepeatOffered:
         rightMinusLeftDb !== null &&
         Math.abs(rightMinusLeftDb) >= settings.swappedRepeatDifferenceDb,
+      // The run's Search_Floor, when the attempt has one; absent for a run recorded before the
+      // audible-start spec (R12.6).
+      ...(attempt.searchFloorDb === undefined
+        ? {}
+        : { searchFloorDb: attempt.searchFloorDb }),
     });
   });
 

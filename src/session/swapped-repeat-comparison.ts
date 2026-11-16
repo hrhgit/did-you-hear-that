@@ -101,8 +101,9 @@ function runWords(
 /**
  * A floor's first run and its swapped repeat side by side (swapped-repeat design.md, "The
  * Comparison", D16, R11.2). Both runs are on the floor's own scale, from the first run's
- * `searchCapDb` to `floorDb`, so a depth in the repeat means what a depth in the first run means
- * on that floor and nothing across floors. Each ear is labelled with the earpiece on it in that
+ * `searchCapDb` to the first run's `searchFloorDb`, or to `floorDb` for a first run recorded before
+ * the audible-start spec, which has none (audible-start D23), so a depth in the repeat means what a
+ * depth in the first run means on that floor and nothing across floors. Each ear is labelled with the earpiece on it in that
  * run: as marked its own, in the repeat the record's `earpieceOnEar`. The outcome is the record's.
  * Every string comes from `src/copy`. Throws a `RangeError` when the record is not of the summary's
  * floor. A pure function; the result is deeply frozen.
@@ -118,7 +119,10 @@ export function swappedRepeatComparison(
       `A repeat of floor ${String(repeatRun.roomIndex)} cannot be set beside floor ${String(room.roomIndex)}.`,
     );
   }
-  const scale: FloorScale = { searchCapDb: firstRun.searchCapDb, floorDb };
+  const scale: FloorScale = {
+    searchCapDb: firstRun.searchCapDb,
+    floorDb: firstRun.searchFloorDb ?? floorDb,
+  };
   const first = run(
     "asMarked",
     firstRun.left,

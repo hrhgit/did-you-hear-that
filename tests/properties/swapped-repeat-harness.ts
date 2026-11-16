@@ -21,6 +21,7 @@ import type {
 import { createSwappedRepeat } from "../../src/session/create-swapped-repeat";
 import { earpieceOnEar } from "../../src/session/earpiece-on-ear";
 import { roomSearchCapDb } from "../../src/session/room-search-cap";
+import { roomSearchFloorDb } from "../../src/session/room-search-floor";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { summarizeVisit } from "../../src/session/summarize-visit";
 import type {
@@ -417,12 +418,23 @@ export async function createRepeatHarness(
   const shellTops = Object.fromEntries(
     ghostSoundIds.map((soundId) => [soundId, range.rooms[soundId].topLevelDb]),
   ) as Record<GhostSoundId, number>;
+  // The shell's playable floors, as the flow logs them at keep (audible-start R12.3).
+  const shellFloors = Object.fromEntries(
+    ghostSoundIds.map((soundId) => [
+      soundId,
+      range.rooms[soundId].floorLevelDb,
+    ]),
+  ) as Record<GhostSoundId, number>;
   const lastIndex = lastCalibration.calibrationIndex;
   const log: VisitLog = deepFreeze({
     ...drawnLog,
     calibrations: drawnLog.calibrations.map((calibration) =>
       calibration.calibrationIndex === lastIndex
-        ? { ...calibration, roomTopLevelDb: shellTops }
+        ? {
+            ...calibration,
+            roomTopLevelDb: shellTops,
+            roomFloorLevelDb: shellFloors,
+          }
         : calibration,
     ),
     roomAttempts: drawnLog.roomAttempts.map((attempt) =>
@@ -431,6 +443,10 @@ export async function createRepeatHarness(
             ...attempt,
             searchCapDb: roomSearchCapDb(
               shellTops[drawnLog.rooms[attempt.roomIndex]!.roomId],
+              hearingMethodConfig,
+            ),
+            searchFloorDb: roomSearchFloorDb(
+              shellFloors[drawnLog.rooms[attempt.roomIndex]!.roomId],
               hearingMethodConfig,
             ),
           }

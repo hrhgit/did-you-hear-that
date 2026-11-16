@@ -262,7 +262,7 @@ describe("playVisit", () => {
       kind: "psychometric" as const,
       parameters: Object.freeze({
         ...stepListener,
-        trueThresholdDb: Object.freeze({ left: -42.5, right: -17.5 }),
+        trueThresholdDb: Object.freeze({ left: -27.5, right: -2.5 }),
       }),
       seed: 9,
     }),

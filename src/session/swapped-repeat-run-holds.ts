@@ -142,6 +142,22 @@ function listsHold(record: JsonObject): boolean {
   );
 }
 
+/**
+ * Rule 7: whether the attempt's `searchFloorDb`, when it has one, is finite and below its
+ * `searchCapDb` (audible-start design.md, "Checking a payload").
+ */
+function searchFloorHolds(attempt: JsonObject): boolean {
+  if (!Object.hasOwn(attempt, "searchFloorDb")) {
+    return true;
+  }
+  const { searchFloorDb, searchCapDb } = attempt;
+  return (
+    isFiniteNumber(searchFloorDb) &&
+    isFiniteNumber(searchCapDb) &&
+    searchFloorDb < searchCapDb
+  );
+}
+
 /** Rule 4: the calibration of the floor's last finished attempt in the log, or null without one. */
 function firstRunCalibrationIndex(
   visitLog: VisitLog,
@@ -191,14 +207,17 @@ function recordHolds(
   ) {
     return false;
   }
-  // Rule 7: the run's one room attempt, ended finished, with a result.
+  // Rule 7: the run's one room attempt, ended finished, with a result, and the first run's
+  // Search_Floor (audible-start R12.7).
   const { attempt } = record;
   if (
     !isJsonObject(attempt) ||
     attempt.roomIndex !== roomIndex ||
     attempt.attempt !== 1 ||
     attempt.ending !== "finished" ||
-    !isJsonObject(attempt.result)
+    !isJsonObject(attempt.result) ||
+    !searchFloorHolds(attempt) ||
+    attempt.searchFloorDb !== firstRun.searchFloorDb
   ) {
     return false;
   }
@@ -260,7 +279,9 @@ function recordHolds(
  * 6. the five lists arrays, the last swap check `confirmed`, every sound trial's `earpiece` the
  *    earpiece on its ear and every no-sound trial's null, every ignored answer's `earpiece` the
  *    earpiece on its side;
- * 7. `attempt` a plain object of the record's floor, attempt 1, ending `finished`, with a result;
+ * 7. `attempt` a plain object of the record's floor, attempt 1, ending `finished`, with a result,
+ *    and with the floor summary's `searchFloorDb`: both absent, or equal, finite and below the
+ *    attempt's `searchCapDb` (audible-start R12.7);
  * 8. `left` and `right` meet the ear result rule, and `rightMinusLeftDb` is right minus left when
  *    both are found and null otherwise;
  * 9. `firstRightMinusLeftDb` equals the floor summary's `rightMinusLeftDb`;

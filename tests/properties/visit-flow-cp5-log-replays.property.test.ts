@@ -64,6 +64,17 @@ describe("visit flow CP5. The log replays through the engine (Universal; R7.9, R
                 settings: {
                   ...hearingMethodConfig,
                   capRelativeToAnchorDb: attempt.searchCapDb,
+                  // The run's Search_Floor, and the start held at or above it, as the flow
+                  // creates the search (audible-start R12.5).
+                  ...(attempt.searchFloorDb === undefined
+                    ? {}
+                    : {
+                        floorDb: attempt.searchFloorDb,
+                        startingLevelDb: Math.max(
+                          hearingMethodConfig.startingLevelDb,
+                          attempt.searchFloorDb,
+                        ),
+                      }),
                 },
                 random: createSeededRandom(attempt.engineSeed),
               });

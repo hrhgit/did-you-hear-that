@@ -378,6 +378,106 @@ describe("createVisitLogRecorder", () => {
     expect(visit.log().calibrations).toEqual([]);
   });
 
+  it("records the playable floor of every ghost room with a kept calibration (audible-start R12.3)", () => {
+    const visit = recorder();
+    const roomFloors = {
+      cellar: -30.98,
+      corridor: -30.98,
+      nursery: -30.98,
+      stairs: -30.98,
+      attic: -30.98,
+    };
+    const entry = visit.calibrationKept({
+      settingDb: -27,
+      roomTopLevelDb: roomTops,
+      keptAtMs: visitStartMs + 1,
+      anchor: "music",
+      roomFloorLevelDb: roomFloors,
+    });
+    expect(entry.roomFloorLevelDb).toEqual(roomFloors);
+    expect(entry.roomFloorLevelDb).not.toBe(roomFloors);
+    expect(Object.isFrozen(entry.roomFloorLevelDb)).toBe(true);
+    expect(visit.log().calibrations[0]?.roomFloorLevelDb).toEqual(roomFloors);
+  });
+
+  it("records no playable floor for a calibration given none, as one recorded before audible-start", () => {
+    const visit = recorder();
+    const entry = visit.calibrationKept({
+      settingDb: -27,
+      roomTopLevelDb: roomTops,
+      keptAtMs: visitStartMs + 1,
+    });
+    expect(Object.hasOwn(entry, "roomFloorLevelDb")).toBe(false);
+  });
+
+  it("refuses a playable floor that is not a finite number", () => {
+    const visit = recorder();
+    expect(() =>
+      visit.calibrationKept({
+        settingDb: -27,
+        roomTopLevelDb: roomTops,
+        keptAtMs: visitStartMs + 1,
+        roomFloorLevelDb: {
+          cellar: -30,
+          corridor: Number.NaN,
+          nursery: -30,
+          stairs: -30,
+          attic: -30,
+        },
+      }),
+    ).toThrow(RangeError);
+  });
+
+  it("records the Search_Floor of a room run in its attempt (audible-start R12.5)", () => {
+    const visit = recorder();
+    const attempt = visit.attemptStarted({
+      roomIndex: 0,
+      engineSeed: 7,
+      calibrationIndex: 0,
+      searchCapDb: 5,
+      searchFloorDb: -30,
+      startedAtMs: visitStartMs + 10,
+    });
+    const entry = visit.attemptEnded({
+      roomIndex: 0,
+      attempt,
+      endedAtMs: visitStartMs + 20,
+      ending: "abandoned",
+      result: null,
+    });
+    expect(entry.searchFloorDb).toBe(-30);
+    expect(visit.log().roomAttempts[0]?.searchFloorDb).toBe(-30);
+    expect(() =>
+      visit.attemptStarted({
+        roomIndex: 1,
+        engineSeed: 7,
+        calibrationIndex: 0,
+        searchCapDb: 5,
+        searchFloorDb: Number.POSITIVE_INFINITY,
+        startedAtMs: visitStartMs + 30,
+      }),
+    ).toThrow(RangeError);
+  });
+
+  it("records no Search_Floor for a run given none, as one recorded before audible-start", () => {
+    const visit = recorder();
+    const attempt = visit.attemptStarted({
+      roomIndex: 0,
+      engineSeed: 7,
+      calibrationIndex: 0,
+      searchCapDb: 5,
+      startedAtMs: visitStartMs + 10,
+    });
+    const entry = visit.attemptEnded({
+      roomIndex: 0,
+      attempt,
+      endedAtMs: visitStartMs + 20,
+      ending: "abandoned",
+      result: null,
+    });
+    expect(Object.hasOwn(entry, "searchFloorDb")).toBe(false);
+  });
+
   it("freezes every entry and the log", () => {
     const log = fullLog();
     expect(isDeeplyFrozen(log)).toBe(true);

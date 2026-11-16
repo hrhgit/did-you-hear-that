@@ -44,6 +44,12 @@ export interface SoundRowSnapshot {
   readonly highestLevelDb: number;
   /** The room top, exactly as the Range_Report gives it. */
   readonly roomTopLevelDb: number;
+  /**
+   * The Playable_Floor, exactly as the Range_Report gives it (audible-start D23). The row's control
+   * still goes down to `floorDb`, below it, so that a listening session can find where the
+   * headphones stop playing (audible-start Q39).
+   */
+  readonly playableFloorLevelDb: number;
   readonly lastPlay: RowPlay | null;
 }
 
@@ -215,6 +221,7 @@ export function createListeningPageSession(
                   lowestLevelDb: floorDb,
                   highestLevelDb: highestLevelOf(report, soundId),
                   roomTopLevelDb: report.rooms[soundId].topLevelDb,
+                  playableFloorLevelDb: report.rooms[soundId].floorLevelDb,
                   lastPlay: row.lastPlay,
                 });
               }),

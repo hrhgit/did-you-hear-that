@@ -221,6 +221,28 @@ describe("createListeningPageSession", () => {
     }
   });
 
+  it("gives each row its playable floor, and still lets its control go below it (audible-start D23, Q39)", async () => {
+    const { session } = await calibrated(-4);
+    const { rows, rangeReport } = session.snapshot();
+    for (const row of rows) {
+      expect(row.playableFloorLevelDb, row.soundId).toBe(
+        rangeReport?.rooms[row.soundId].floorLevelDb,
+      );
+      // −57.98 − (−4), the table of "The playable floor" in audible-start design.md.
+      expect(
+        Math.abs(row.playableFloorLevelDb - -53.98),
+        row.soundId,
+      ).toBeLessThanOrEqual(0.01);
+      expect(row.lowestLevelDb, row.soundId).toBeLessThan(
+        row.playableFloorLevelDb,
+      );
+    }
+    for (let press = 0; press < 30; press += 1) {
+      session.levelDown("attic");
+    }
+    expect(rowOf(session, "attic").levelDb).toBe(floorDb);
+  });
+
   it("moves a row's level one grid step at a time, between the floor and the rounded top", async () => {
     const { session } = await calibrated(-4);
     session.levelUp("nursery");
@@ -397,7 +419,7 @@ describe("createListeningPageSession", () => {
   });
 
   it("never asks for a level above the anchor cap", async () => {
-    const { session } = await calibrated(-40);
+    const { session } = await calibrated(-25);
     for (const soundId of soundIds) {
       for (let press = 0; press < 30; press += 1) {
         session.levelUp(soundId);

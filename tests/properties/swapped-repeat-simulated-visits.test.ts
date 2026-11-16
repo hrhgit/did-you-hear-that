@@ -33,8 +33,11 @@ const timeoutMs = 120_000;
 /** Every answer comes within the first half of its window, so that the listener stays a Step_Listener. */
 const answerDelayMs = hearingMethodConfig.responseWindowMs / 2;
 
-/** The middle of the two true thresholds, and the size of the one difference each case has. */
-const baseDb = -30.5;
+/**
+ * The middle of the two true thresholds, and the size of the one difference each case has. Every
+ * threshold lies above the Search_Floor of a calibration at −22 dB (audible-start R12.5).
+ */
+const baseDb = -15.5;
 const differenceDb = 25;
 
 interface Case {
@@ -50,10 +53,10 @@ interface Case {
 }
 
 // For a Step_Listener each estimate is the lowest grid level at or above the threshold heard
-// through the earpiece (threshold-search CP1): −43 dB gives −40 and −18 gives −15.
+// through the earpiece (threshold-search CP1): −28 dB gives −25 and −3 gives 0.
 const cases: readonly Case[] = [
   {
-    // Left ear −43, right ear −18, the headphones even: the right ear needs the louder sound both
+    // Left ear −28, right ear −3, the headphones even: the right ear needs the louder sound both
     // times, whichever earpiece is on it.
     name: "an ear difference only",
     earDifferenceDb: differenceDb,
@@ -63,8 +66,8 @@ const cases: readonly Case[] = [
     repeatRightMinusLeftDb: 25,
   },
   {
-    // Both ears −30.5, the right earpiece 25 dB quieter: through the left earpiece a threshold of
-    // −43, through the right −18. The right earpiece needs the louder sound both times.
+    // Both ears −15.5, the right earpiece 25 dB quieter: through the left earpiece a threshold of
+    // −28, through the right −3. The right earpiece needs the louder sound both times.
     name: "an imbalance only",
     earDifferenceDb: 0,
     imbalanceDb: differenceDb,

@@ -17,7 +17,8 @@ import { createRepeatHarness } from "./swapped-repeat-harness";
 // reaches the end of the room, played on the repeat harness:
 // - the record's `attempt.searchCapDb` is the first run's `searchCapDb`, and its
 //   `calibrationIndex` the first run's;
-// - `createThresholdSearch` with `hearingMethodConfig`, that cap and `attempt.engineSeed`, given
+// - `createThresholdSearch` with `hearingMethodConfig`, that cap, the attempt's Search_Floor
+//   (audible-start R12.5, R12.7) and `attempt.engineSeed`, given
 //   the record's scored responses in order, asks for exactly the record's scored trials (kind,
 //   ear, level, gap, trial number) and gives the record's room result;
 // - every trial was played with the Purpose `trial`, the room's Sound_Id and the visit's render
@@ -46,6 +47,7 @@ function checkSearch(record: SwappedRepeatRun): void {
     settings: {
       ...hearingMethodConfig,
       capRelativeToAnchorDb: record.attempt.searchCapDb,
+      floorDb: record.attempt.searchFloorDb ?? hearingMethodConfig.floorDb,
     },
     random: createSeededRandom(record.attempt.engineSeed),
   });

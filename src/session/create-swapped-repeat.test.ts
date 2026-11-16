@@ -29,6 +29,7 @@ import type {
 import { createSwappedRepeat } from "./create-swapped-repeat";
 import { earpieceOnEar } from "./earpiece-on-ear";
 import { roomSearchCapDb } from "./room-search-cap";
+import { roomSearchFloorDb } from "./room-search-floor";
 import { summarizeVisit } from "./summarize-visit";
 import type {
   Ear,
@@ -65,8 +66,11 @@ const floorIndex = 1;
 const floor = rooms[floorIndex]!;
 const swapped = earpieceOnEar("swapped");
 
-/** A step listener's true thresholds, by ear: the first run's levels. */
-const thresholdsDb: Readonly<Record<Ear, number>> = { left: -40, right: -20 };
+/**
+ * A step listener's true thresholds, by ear: the first run's levels. Both lie above the Search_Floor
+ * at the Keep_Minimum (audible-start R12.5).
+ */
+const thresholdsDb: Readonly<Record<Ear, number>> = { left: -25, right: -5 };
 
 /** As room-runner.test.ts: a shell on the fake backend, running and calibrated. */
 async function calibratedShell() {
@@ -153,6 +157,9 @@ function visitAtResult(
     roomTopLevelDb: Object.fromEntries(
       ghostSoundIds.map((id) => [id, report.rooms[id].topLevelDb]),
     ) as Record<(typeof ghostSoundIds)[number], number>,
+    roomFloorLevelDb: Object.fromEntries(
+      ghostSoundIds.map((id) => [id, report.rooms[id].floorLevelDb]),
+    ) as Record<(typeof ghostSoundIds)[number], number>,
     keptAtMs: visitStartMs + 1000,
   });
   rooms.forEach((room, roomIndex) => {
@@ -168,6 +175,11 @@ function visitAtResult(
       engineSeed: 100 + roomIndex,
       calibrationIndex: 0,
       searchCapDb,
+      // The first run's Search_Floor, which the repeat must use (audible-start R12.7).
+      searchFloorDb: roomSearchFloorDb(
+        report.rooms[room.roomId].floorLevelDb,
+        hearingMethodConfig,
+      ),
       startedAtMs: visitStartMs + 2000 + roomIndex * 1000,
     });
     recorder.attemptEnded({
@@ -768,8 +780,14 @@ describe("createSwappedRepeat: the room run", () => {
       ending: "finished",
     });
     expect(record.earpieceOnEar).toEqual({ left: "right", right: "left" });
-    expect(record.left).toMatchObject({ state: "found", thresholdDb: -40 });
-    expect(record.right).toMatchObject({ state: "found", thresholdDb: -20 });
+    expect(record.left).toMatchObject({
+      state: "found",
+      thresholdDb: thresholdsDb.left,
+    });
+    expect(record.right).toMatchObject({
+      state: "found",
+      thresholdDb: thresholdsDb.right,
+    });
     expect(record.outcome).toBe("followsEar");
     expect(JSON.parse(JSON.stringify(record))).toEqual(record);
     const view = rig.viewIn("finished");
@@ -788,6 +806,7 @@ describe("createSwappedRepeat: the room run", () => {
       settings: {
         ...hearingMethodConfig,
         capRelativeToAnchorDb: record.attempt.searchCapDb,
+        floorDb: record.attempt.searchFloorDb ?? hearingMethodConfig.floorDb,
       },
       random: createSeededRandom(record.attempt.engineSeed),
     });

@@ -417,6 +417,8 @@ export interface LoggedCalibration {
   readonly keptAtMs: number;
   /** How the anchor was set. Absent in a calibration recorded before the audible-start spec, which was matched to the visitor's hands. */
   readonly anchor?: CalibrationAnchor;
+  /** The quietest level each room's sound could be played at with this calibration (the Playable_Floor). Absent before the audible-start spec. */
+  readonly roomFloorLevelDb?: Readonly<Record<GhostSoundId, number>>;
 }
 
 /** One answered headphone check. */
@@ -482,6 +484,8 @@ export interface LoggedRoomAttempt {
   readonly ending: "finished" | "abandoned";
   /** The search's result when finished, or null when abandoned. */
   readonly result: LoggedRoomResult | null;
+  /** The quietest level this run's search could ask for: the room's playable floor on the level grid. Absent before the audible-start spec, when it was `hearingMethodConfig.floorDb` then. */
+  readonly searchFloorDb?: number;
 }
 
 /** The fields of every logged trial. */
@@ -644,6 +648,8 @@ export interface RoomSummary {
   readonly rightMinusLeftDb: number | null;
   /** Whether this floor offers the swapped repeat: both found and at least 15 dB apart. */
   readonly swappedRepeatOffered: boolean;
+  /** The quietest level the search could ask for here. Always present for a visit recorded with the audible-start spec; absent before it. Never compared across floors. */
+  readonly searchFloorDb?: number;
 }
 
 /** The result of a visit. */

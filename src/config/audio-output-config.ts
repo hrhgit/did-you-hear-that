@@ -52,6 +52,16 @@ export interface AudioOutputConfig {
   readonly calibrationMusicGainStepMs: number;
   /** Longest wait for the calibration music to load before the hiss is used instead. */
   readonly calibrationMusicLoadMaxMs: number;
+  /**
+   * The quietest RMS, as a fraction of full scale, that counts as playable (the Playable_RMS). The
+   * house plays and counts on no ghost sound whose RMS would be lower.
+   */
+  readonly playableRmsMinFraction: number;
+  /**
+   * The least playable range a kept calibration must leave below the anchor in every room: every
+   * room's Search_Floor lies at least this far below 0 dB.
+   */
+  readonly playableRangeBelowAnchorMinDb: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -89,8 +99,9 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   calibrationSettingStepDb: 1,
   // D8: audio-safety rule 4 applied to the calibration noise. Guarded (D32)
   calibrationRiseMaxDb: 5,
-  // D10: a lower setting means a very high system volume. Guarded (D32)
-  calibrationSettingKeepMinDb: -40,
+  // D10: a lower setting means a very high system volume. Guarded (D32). Raised from -40 by
+  // audible-start D25: at -27 every room keeps 30 dB of playable range below the anchor
+  calibrationSettingKeepMinDb: -27,
   // D8: keeps the repeats distinct
   calibrationRepeatGapMs: 400,
   // D20: the anchor: the level the visitor just set. Guarded (D32)
@@ -106,4 +117,11 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   calibrationMusicGainStepMs: 100,
   // audible-start D4: after 10 s without the music, the hiss
   calibrationMusicLoadMaxMs: 10000,
+  // audible-start brief: "starting value 84 dB below full scale", about 6.31e-5: one bit above one
+  // step of a 16-bit output path (D24). Not a safety value; raising it is a method change
+  // (audio-output Q1), and the value on real Bluetooth headphones is for the owner (Q39)
+  playableRmsMinFraction: 10 ** (-84 / 20),
+  // audible-start brief: "at least 30 dB of playable range below the anchor". The Keep_Minimum is
+  // set so that every room keeps it
+  playableRangeBelowAnchorMinDb: 30,
 });

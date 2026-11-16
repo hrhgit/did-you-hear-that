@@ -6,7 +6,11 @@ import type { VisitEarResult } from "./visit-flow-types";
 export interface FloorScale {
   /** The loudest level the search could ask for on this floor (the room summary's `searchCapDb`). */
   readonly searchCapDb: number;
-  /** The quietest level the search could ask for (`hearingMethodConfig.floorDb`, or the one saved with a visit). */
+  /**
+   * The quietest level the search could ask for on this floor: the room summary's `searchFloorDb`,
+   * its playable floor on the level grid (audible-start R12.6), or, for a floor recorded before the
+   * audible-start spec, `hearingMethodConfig.floorDb` or the one saved with the visit.
+   */
   readonly floorDb: number;
 }
 

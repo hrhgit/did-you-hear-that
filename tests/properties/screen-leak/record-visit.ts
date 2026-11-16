@@ -100,11 +100,14 @@ export function visitorScriptOf(
   }
   // A visit without a repeat draws exactly what it drew before the repeat existed, in the same
   // order, so the fixed seeds of the predictor give the same visits.
-  const calibrationTargetDb = whole(-40, -10);
+  // From the Keep_Minimum (audible-start D25) up.
+  const calibrationTargetDb = whole(-27, -10);
   let trueThresholdDb: { left: number; right: number };
   if (withRepeat) {
-    const louderEarThresholdDb = between(-55, -25);
-    const quieterEarThresholdDb = louderEarThresholdDb + between(20, 30);
+    // Both ears above the Search_Floor and below the cap (audible-start R12.5), far enough apart
+    // for the floor to offer the repeat.
+    const louderEarThresholdDb = between(-28, -22);
+    const quieterEarThresholdDb = louderEarThresholdDb + between(15, 22);
     trueThresholdDb =
       random.next() < 0.5
         ? { left: quieterEarThresholdDb, right: louderEarThresholdDb }
