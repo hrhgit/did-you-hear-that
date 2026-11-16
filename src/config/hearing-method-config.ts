@@ -1,4 +1,7 @@
-/** The two visits that walk through rooms: the 3 minute visit and the 7 minute visit. */
+/**
+ * The two visits that walk through rooms: the visit of about 7 minutes and the visit of about 12
+ * minutes.
+ */
 export type VisitType = "quick" | "full";
 
 /**

@@ -9,11 +9,11 @@ export const frontDoorCopy = Object.freeze({
   choicesLabel: "Ways in",
   choices: Object.freeze({
     quick: Object.freeze({
-      button: "Enter for 3 minutes",
+      button: "Enter for about 7 minutes",
       note: "Three rooms.",
     }),
     full: Object.freeze({
-      button: "Enter for 7 minutes",
+      button: "Enter for about 12 minutes",
       note: "Five rooms.",
     }),
     replay: Object.freeze({
