@@ -1,5 +1,6 @@
 import type { HouseSection } from "../house/draw-house-section";
 import type { MotionLayer } from "../house/motion-layer";
+import { repeatComparisonBlock } from "../result/show-repeat-comparison";
 import type { Sheet, VisitPage } from "./build-visit-page";
 import { leadSentence } from "./lead-sentence";
 import type { ScreenReaction } from "./reaction-of-event";
@@ -21,13 +22,18 @@ export interface ScreenView {
   restButtonIsMeant(): boolean;
   /** The same for the buttons of the sheet that comes before the replay of missed sounds. */
   replayButtonIsMeant(): boolean;
+  /**
+   * The same for the control that leads back from a swapped repeat to the picture. Only the sheet
+   * that follows the repeat's room makes it wait.
+   */
+  swapBackIsMeant(): boolean;
 }
 
 /**
  * How long the button of the rest between rooms ignores presses after it appears. A visitor who
  * is still answering the last sound of a room must not walk on to the next room by accident. The
  * buttons that start or skip the replay of missed sounds appear after the last room in the same
- * way, and wait as long.
+ * way, and wait as long. So does the way back to the picture after the room of a swapped repeat.
  */
 const restButtonGuardMs = 700;
 
@@ -61,6 +67,7 @@ export function createScreenView(options: {
     rules: page.rules,
     notice: page.notice,
     replay: page.replay,
+    swap: page.swap,
     result,
   };
   let shown: Screen | null = null;
@@ -68,6 +75,11 @@ export function createScreenView(options: {
   let restShownAtMs: number | null = null;
   let replaySheetShownAtMs: number | null = null;
   let replayLinesShown = "";
+  let swapLinesShown = "";
+  let swapComparisonShown: unknown = null;
+  let swapPhaseKey: string | null = null;
+  /** When the sheet that follows the room of a swapped repeat appeared, or null. */
+  let swapEndShownAtMs: number | null = null;
 
   const focus = (element: HTMLElement): void => {
     element.focus({ preventScroll: true });
@@ -220,6 +232,111 @@ export function createScreenView(options: {
     }
   };
 
+  const showSwap = (screen: Screen): void => {
+    const swap = screen.sheet === "swap" ? screen.swap : null;
+    const phase = swap?.phase ?? null;
+    if (phase === "finished") {
+      swapEndShownAtMs ??= view.performance.now();
+    } else {
+      swapEndShownAtMs = null;
+    }
+    if (swap === null || phase === null) {
+      swapPhaseKey = null;
+      return;
+    }
+    const sheet = page.swap;
+    const answers = Object.entries(sheet.answerButtons);
+    const answerHadFocus = answers.some(
+      ([, button]) => doc.activeElement === button,
+    );
+    const primaryHadFocus = doc.activeElement === sheet.primaryButton;
+
+    setText(sheet.heading, swap.heading);
+    setText(sheet.floorName, swap.floor.roomName);
+    setText(sheet.floorPitch, swap.floor.pitchLabel);
+    setText(sheet.floorDifference, swap.floor.firstDifferenceLabel);
+    sheet.sketch.toggleAttribute("hidden", swap.headphones === null);
+    if (swap.headphones !== null) {
+      sheet.sketch.setAttribute("data-state", swap.headphones);
+    }
+
+    const lines = swap.lines.join("\n");
+    if (lines !== swapLinesShown) {
+      swapLinesShown = lines;
+      sheet.lines.replaceChildren(
+        ...swap.lines.map((line) => {
+          const paragraph = doc.createElement("p");
+          paragraph.className = "visit-voice";
+          paragraph.textContent = line;
+          return paragraph;
+        }),
+      );
+    }
+    sheet.lines.hidden = swap.lines.length === 0;
+
+    // Both runs side by side. Drawn again only when the comparison itself is another one.
+    if (swap.comparison !== swapComparisonShown) {
+      swapComparisonShown = swap.comparison;
+      sheet.comparison.replaceChildren(
+        ...(swap.comparison === null
+          ? []
+          : [
+              repeatComparisonBlock(doc, swap.comparison, {
+                idPrefix: "visit-swap-repeat",
+                headingLevel: 2,
+              }),
+            ]),
+      );
+    }
+    sheet.comparison.hidden = swap.comparison === null;
+    setLine(sheet.turnBackLine, swap.turnBackLine);
+    setLine(sheet.againLine, swap.againLine);
+
+    // During the check the line keeps its place while it is empty, so that no button moves away
+    // from under a press when a line appears.
+    const statusLine = screen.soundNotStartedLine ?? swap.statusLine;
+    setText(sheet.statusLine, statusLine ?? "");
+    sheet.statusLine.hidden = statusLine === null && swap.check === null;
+
+    sheet.primaryButton.hidden = swap.primary === null;
+    if (swap.primary !== null) {
+      setText(sheet.primaryButton, swap.primary.label);
+    }
+    sheet.question.hidden = swap.check === null;
+    sheet.answerList.hidden = swap.check === null;
+    if (swap.check !== null) {
+      setText(sheet.question, swap.check.question);
+      for (const [answer, button] of answers) {
+        setText(
+          button,
+          swap.check.answers[answer as keyof typeof swap.check.answers],
+        );
+        button.disabled = !swap.check.awaitingAnswer;
+      }
+    }
+    setText(sheet.backButton, swap.backLabel);
+    // With nothing else to press, the way back is the lit one.
+    sheet.backButton.classList.toggle(
+      "visit-button-lit",
+      swap.primary === null,
+    );
+
+    // The focus follows the sheet from one step to the next: to the button of the new step, or
+    // to the heading where the step has none. The first step is focused as every new sheet is.
+    const stepChanged = swapPhaseKey !== null && swapPhaseKey !== phase;
+    swapPhaseKey = phase;
+    if (stepChanged) {
+      focus(swap.primary !== null ? sheet.primaryButton : sheet.heading);
+    } else if (
+      swap.check !== null &&
+      !swap.check.awaitingAnswer &&
+      (answerHadFocus || (primaryHadFocus && sheet.primaryButton.hidden))
+    ) {
+      // The answer that was pressed can no longer hold the focus.
+      focus(sheet.primaryButton);
+    }
+  };
+
   return {
     show(screen) {
       const first = shown === null;
@@ -234,6 +351,7 @@ export function createScreenView(options: {
       page.stopButton.hidden = !screen.stopShown;
       setText(page.stopButton, screen.stopLabel);
       page.pauseButton.hidden = !screen.pauseShown;
+      setText(page.pauseButton, screen.pauseLabel);
       page.room.hidden = screen.room === null;
       if (screen.room !== null) {
         setText(page.roomName, screen.room.name);
@@ -263,6 +381,7 @@ export function createScreenView(options: {
       showHeadphoneCheck(screen);
       showNotice(screen);
       showReplay(screen);
+      showSwap(screen);
       for (const [name, sheet] of Object.entries(sheets)) {
         sheet.element.hidden = name !== screen.sheet;
       }
@@ -313,5 +432,8 @@ export function createScreenView(options: {
     replayButtonIsMeant: () =>
       replaySheetShownAtMs !== null &&
       view.performance.now() - replaySheetShownAtMs >= restButtonGuardMs,
+    swapBackIsMeant: () =>
+      swapEndShownAtMs === null ||
+      view.performance.now() - swapEndShownAtMs >= restButtonGuardMs,
   };
 }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { calibrationCopy } from "../../copy/calibration-copy";
+import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import { replayCopy } from "../../copy/replay-copy";
+import { roomCopy } from "../../copy/room-copy";
+import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
   CalibrationSnapshot,
@@ -19,6 +22,8 @@ import type {
   ReplaySound,
   ResultSnapshot,
   SnapshotBase,
+  SwappedRepeat,
+  SwappedRepeatComparison,
   SwappedRepeatSnapshot,
   VisitLog,
   VisitRoom,
@@ -27,6 +32,12 @@ import type {
   VisitSummary,
 } from "../../session/visit-flow-types";
 import { screenOfSnapshot } from "./screen-of-snapshot";
+import { hearingMethodConfig } from "../../config/hearing-method-config";
+import {
+  swappedRepeatView,
+  type SwappedRepeatViewInput,
+} from "../../session/swapped-repeat-view";
+import type { RoomSummary } from "../../session/visit-flow-types";
 
 const quickRooms: readonly VisitRoom[] = [
   { roomIndex: 0, roomId: "corridor", frequencyHz: 1000 },
@@ -504,23 +515,274 @@ describe("screenOfSnapshot", () => {
     expect(JSON.stringify(screen)).not.toContain("summary");
   });
 
-  it("says that the swapped repeat is not built and leads back to the picture", () => {
-    // The cast lets this literal stand while the swapped repeat adds fields to the snapshot.
-    const screen = screenOfSnapshot({
-      ...base("swappedRepeat", 3),
-      room: stairs,
-      visitLog: {} as VisitLog,
-      summary: {} as VisitSummary,
-    } as SwappedRepeatSnapshot);
-    expect(screen.sheet).toBe("notice");
-    expect(screen.stopShown).toBe(false);
-    expect(screen.notice).toEqual({
-      heading: leavingCopy.swappedRoomNotBuilt.heading,
-      line: leavingCopy.swappedRoomNotBuilt.line,
-      button: {
-        label: leavingCopy.swappedRoomNotBuilt.button,
-        action: "proceed",
-      },
+  describe("in a swapped repeat", () => {
+    const repeatBase = {
+      heading: swappedRepeatCopy.heading,
+      roomName: "Stairs",
+      pitchLabel: "4 kHz",
+      firstDifferenceLabel: "20 dB quieter on the left",
+      stopLabel: swappedRepeatCopy.stopButton,
+      backLabel: swappedRepeatCopy.backButton,
+    } as const;
+    const floor = {
+      roomName: "Stairs",
+      pitchLabel: "4 kHz",
+      firstDifferenceLabel: "20 dB quieter on the left",
+    };
+    const checkView = {
+      ...repeatBase,
+      phase: "check",
+      earpieces: "unknown",
+      question: swappedRepeatCopy.question,
+      answers: headphoneCheckCopy.answers,
+      playLabel: swappedRepeatCopy.playCheckButton,
+      awaitingAnswer: false,
+      playRefusal: null,
+      playRefusalLine: null,
+      judgement: null,
+      judgementLine: null,
+      cutLine: null,
+    } as const;
+    const roomView = {
+      ...repeatBase,
+      phase: "room",
+      earpieces: "swapped",
+      runNumber: 1,
+      answers: roomCopy.answers,
+      pauseLabel: "Pause this room",
+      pauseLine: null,
+      resumeLabel: "Go on with this room",
+    } as const;
+
+    function repeatSnapshot(
+      repeat: SwappedRepeat,
+      pause: PauseReason | null = null,
+    ): SwappedRepeatSnapshot {
+      return {
+        ...base("swappedRepeat", 3),
+        canProceed: true,
+        pause: pause === null ? null : { reason: pause },
+        room: stairs,
+        visitLog: {} as VisitLog,
+        summary: {} as VisitSummary,
+        repeat,
+      };
+    }
+
+    it("asks for the swap on a sheet of its own, with the stop control and the way back", () => {
+      const screen = screenOfSnapshot(
+        repeatSnapshot({
+          ...repeatBase,
+          phase: "instruction",
+          earpieces: "unknown",
+          lines: swappedRepeatCopy.instructionLines,
+          againLine: null,
+          confirmLabel: swappedRepeatCopy.confirmButton,
+        }),
+      );
+      expect(screen.sheet).toBe("swap");
+      expect(screen.notice).toBeNull();
+      expect(screen.stopShown).toBe(true);
+      expect(screen.stopLabel).toBe(swappedRepeatCopy.stopButton);
+      expect(screen.pauseShown).toBe(false);
+      expect(screen.answersShown).toBe(false);
+      expect(screen.litRoom).toBeNull();
+      expect(screen.room).toBeNull();
+      expect(screen.swap).toEqual({
+        phase: "instruction",
+        heading: swappedRepeatCopy.heading,
+        floor,
+        headphones: "asked",
+        lines: swappedRepeatCopy.instructionLines,
+        check: null,
+        againLine: null,
+        statusLine: null,
+        primary: {
+          label: swappedRepeatCopy.confirmButton,
+          action: "confirmSwap",
+        },
+        backLabel: swappedRepeatCopy.backButton,
+        comparison: null,
+        turnBackLine: null,
+      });
+    });
+
+    it("says the swap again after a check that found the headphones as they were", () => {
+      const screen = screenOfSnapshot(
+        repeatSnapshot({
+          ...repeatBase,
+          phase: "instruction",
+          earpieces: "asMarked",
+          lines: swappedRepeatCopy.instructionLines,
+          againLine: swappedRepeatCopy.againLine,
+          confirmLabel: swappedRepeatCopy.confirmButton,
+        }),
+      );
+      expect(screen.swap?.againLine).toBe(swappedRepeatCopy.againLine);
+      expect(screen.swap?.statusLine).toBeNull();
+      expect(screen.swap?.headphones).toBe("asked");
+    });
+
+    it("offers the check and takes an answer only while the flow awaits one", () => {
+      const before = screenOfSnapshot(repeatSnapshot(checkView));
+      expect(before.sheet).toBe("swap");
+      expect(before.swap?.phase).toBe("check");
+      expect(before.swap?.lines).toEqual([]);
+      expect(before.swap?.check).toEqual({
+        question: swappedRepeatCopy.question,
+        answers: headphoneCheckCopy.answers,
+        awaitingAnswer: false,
+      });
+      expect(before.swap?.primary).toEqual({
+        label: swappedRepeatCopy.playCheckButton,
+        action: "playSwapCheck",
+      });
+      expect(before.swap?.statusLine).toBeNull();
+
+      const after = screenOfSnapshot(
+        repeatSnapshot({ ...checkView, awaitingAnswer: true }),
+      );
+      expect(after.swap?.check?.awaitingAnswer).toBe(true);
+    });
+
+    it("says what the check came to, and a check that did not play before anything else", () => {
+      const judged = {
+        ...checkView,
+        judgement: "bothSides",
+        judgementLine: swappedRepeatCopy.judgementLines.bothSides,
+      } as const;
+      expect(screenOfSnapshot(repeatSnapshot(judged)).swap?.statusLine).toBe(
+        swappedRepeatCopy.judgementLines.bothSides,
+      );
+      expect(
+        screenOfSnapshot(
+          repeatSnapshot({ ...judged, cutLine: swappedRepeatCopy.cutLine }),
+        ).swap?.statusLine,
+      ).toBe(swappedRepeatCopy.cutLine);
+      expect(
+        screenOfSnapshot(
+          repeatSnapshot({
+            ...judged,
+            cutLine: swappedRepeatCopy.cutLine,
+            playRefusal: "busy",
+            playRefusalLine: swappedRepeatCopy.playRefusedLine,
+          }),
+        ).swap?.statusLine,
+      ).toBe(swappedRepeatCopy.playRefusedLine);
+    });
+
+    it("leads into the room once the check has confirmed the swap", () => {
+      const screen = screenOfSnapshot(
+        repeatSnapshot({
+          ...repeatBase,
+          phase: "ready",
+          earpieces: "swapped",
+          judgementLine: swappedRepeatCopy.judgementLines.confirmed,
+          lines: ["A line about the room."],
+          startLabel: swappedRepeatCopy.startButton,
+        }),
+      );
+      expect(screen.swap?.phase).toBe("ready");
+      expect(screen.swap?.headphones).toBe("swapped");
+      expect(screen.swap?.lines).toEqual([
+        swappedRepeatCopy.judgementLines.confirmed,
+        "A line about the room.",
+      ]);
+      expect(screen.swap?.primary).toEqual({
+        label: swappedRepeatCopy.startButton,
+        action: "startSwappedRoom",
+      });
+      expect(screen.answersShown).toBe(false);
+    });
+
+    it("shows the room like every other room, lit, answered and with its own pause", () => {
+      const screen = screenOfSnapshot(repeatSnapshot(roomView));
+      expect(screen.sheet).toBeNull();
+      expect(screen.swap).toBeNull();
+      expect(screen.stopShown).toBe(true);
+      expect(screen.pauseShown).toBe(true);
+      expect(screen.pauseLabel).toBe("Pause this room");
+      expect(screen.answersShown).toBe(true);
+      expect(screen.litRoom).toBe("stairs");
+      expect(screen.roomStates.stairs).toBe("lit");
+      expect(screen.room).toEqual({
+        id: "stairs",
+        name: "Stairs",
+        progress: "4 kHz",
+      });
+      expect(screen.restLine).toBeNull();
+    });
+
+    it("holds nothing in the room that changes with a sound", () => {
+      const first = screenOfSnapshot(repeatSnapshot(roomView));
+      const later = screenOfSnapshot({
+        ...repeatSnapshot(roomView),
+        visitLog: { trials: [1, 2, 3] } as unknown as VisitLog,
+      });
+      expect(later).toEqual(first);
+    });
+
+    it("pauses the room with the repeat's own line and way on", () => {
+      const screen = screenOfSnapshot(
+        repeatSnapshot(
+          { ...roomView, pauseLine: swappedRepeatCopy.pauseLines.visitor },
+          "visitor",
+        ),
+      );
+      expect(screen.sheet).toBe("notice");
+      expect(screen.notice).toEqual({
+        heading: leavingCopy.pauseHeading,
+        line: swappedRepeatCopy.pauseLines.visitor,
+        button: { label: "Go on with this room", action: "resume" },
+      });
+      expect(screen.stopShown).toBe(true);
+      expect(screen.pauseShown).toBe(false);
+      expect(screen.answersShown).toBe(false);
+      expect(screen.litRoom).toBeNull();
+    });
+
+    it("sets both runs beside each other when the room is finished", () => {
+      const comparison = { roomIndex: 2 } as SwappedRepeatComparison;
+      const screen = screenOfSnapshot(
+        repeatSnapshot({
+          ...repeatBase,
+          phase: "finished",
+          earpieces: "unknown",
+          ending: "finished",
+          endLine: swappedRepeatCopy.endLines.finished,
+          comparison,
+          turnBackLine: swappedRepeatCopy.turnBackLine,
+        }),
+      );
+      expect(screen.sheet).toBe("swap");
+      expect(screen.swap?.phase).toBe("finished");
+      expect(screen.swap?.headphones).toBeNull();
+      expect(screen.swap?.lines).toEqual([swappedRepeatCopy.endLines.finished]);
+      expect(screen.swap?.comparison).toBe(comparison);
+      expect(screen.swap?.turnBackLine).toBe(swappedRepeatCopy.turnBackLine);
+      expect(screen.swap?.primary).toBeNull();
+      expect(screen.stopShown).toBe(true);
+    });
+
+    it("says why a floor cannot be visited again and offers only the way back", () => {
+      const screen = screenOfSnapshot(
+        repeatSnapshot({
+          ...repeatBase,
+          phase: "unavailable",
+          earpieces: "asMarked",
+          reason: "calibrationGone",
+          line: swappedRepeatCopy.unavailableLines.calibrationGone,
+        }),
+      );
+      expect(screen.sheet).toBe("swap");
+      expect(screen.swap?.phase).toBe("unavailable");
+      expect(screen.swap?.lines).toEqual([
+        swappedRepeatCopy.unavailableLines.calibrationGone,
+      ]);
+      expect(screen.swap?.headphones).toBeNull();
+      expect(screen.swap?.primary).toBeNull();
+      expect(screen.swap?.check).toBeNull();
+      expect(screen.swap?.backLabel).toBe(swappedRepeatCopy.backButton);
     });
   });
 
@@ -548,5 +810,141 @@ describe("screenOfSnapshot", () => {
   it("gives the same screen for the same snapshot", () => {
     const snapshot: VisitSnapshot = { ...base("room", 1), room: nursery };
     expect(screenOfSnapshot(snapshot)).toEqual(screenOfSnapshot(snapshot));
+  });
+
+  describe("with the views the session gives", () => {
+    const counts = {
+      presentationCount: 10,
+      catchCount: 5,
+      wrongSideCount: 0,
+      missCount: 5,
+    };
+    const roomSummary: RoomSummary = {
+      room: { roomIndex: 2, roomId: "stairs", frequencyHz: 4000 },
+      left: { ...counts, state: "found", thresholdDb: -40 },
+      right: { ...counts, state: "found", thresholdDb: -60 },
+      searchCapDb: 0,
+      noSoundTrialCount: 0,
+      falseAlarmCount: 0,
+      rightMinusLeftDb: -20,
+      swappedRepeatOffered: true,
+    };
+    const input: SwappedRepeatViewInput = {
+      roomSummary,
+      phase: "instruction",
+      earpieces: "unknown",
+      unavailable: null,
+      again: false,
+      awaitingAnswer: false,
+      playRefusal: null,
+      judgement: null,
+      cut: false,
+      runNumber: 1,
+      pauseReason: null,
+      ending: null,
+      record: null,
+      floorDb: hearingMethodConfig.floorDb,
+    };
+    function screenOf(
+      changes: Partial<SwappedRepeatViewInput>,
+      pause: PauseReason | null = null,
+    ) {
+      const repeat = swappedRepeatView({ ...input, ...changes });
+      const snapshot: SwappedRepeatSnapshot = {
+        ...base("swappedRepeat", 3),
+        canProceed: true,
+        pause: pause === null ? null : { reason: pause },
+        room: stairs,
+        visitLog: {} as VisitLog,
+        summary: {} as VisitSummary,
+        repeat,
+      };
+      return screenOfSnapshot(snapshot);
+    }
+    function words(screen: ReturnType<typeof screenOfSnapshot>): string[] {
+      const found: string[] = [];
+      const walk = (value: unknown): void => {
+        if (typeof value === "string") {
+          found.push(value);
+        } else if (Array.isArray(value)) {
+          value.forEach(walk);
+        } else if (value !== null && typeof value === "object") {
+          Object.values(value).forEach(walk);
+        }
+      };
+      walk(screen);
+      return found;
+    }
+
+    it("puts every phase before the room on the sheet of the swap, with only text that is there", () => {
+      const cases: Partial<SwappedRepeatViewInput>[] = [
+        { phase: "unavailable", unavailable: "calibrationGone" },
+        { phase: "unavailable", unavailable: "calibrationChanged" },
+        { phase: "instruction" },
+        { phase: "instruction", again: true },
+        { phase: "check" },
+        { phase: "check", awaitingAnswer: true },
+        { phase: "check", judgement: "notSwapped" },
+        { phase: "check", judgement: "bothSides" },
+        { phase: "check", judgement: "notHeard" },
+        { phase: "check", playRefusal: "busy" },
+        { phase: "check", cut: true },
+        { phase: "ready", earpieces: "swapped" },
+        { phase: "finished", ending: "deviceChanged", earpieces: "swapped" },
+        { phase: "finished", ending: "soundRefused", earpieces: "swapped" },
+      ];
+      for (const changes of cases) {
+        const screen = screenOf(changes);
+        const label = JSON.stringify(changes);
+        expect(screen.sheet, label).toBe("swap");
+        expect(screen.swap, label).not.toBeNull();
+        expect(screen.answersShown, label).toBe(false);
+        expect(screen.stopShown, label).toBe(true);
+        for (const text of words(screen)) {
+          expect(text.trim(), label).toBe(text);
+        }
+        expect(screen.swap?.heading, label).toBe(swappedRepeatCopy.heading);
+        expect(screen.swap?.backLabel, label).toBe(
+          swappedRepeatCopy.backButton,
+        );
+      }
+      expect(screenOf({ phase: "check" }).swap?.check?.awaitingAnswer).toBe(
+        false,
+      );
+      expect(
+        screenOf({ phase: "check", awaitingAnswer: true }).swap?.check
+          ?.awaitingAnswer,
+      ).toBe(true);
+      expect(
+        screenOf({ phase: "instruction", again: true }).swap?.againLine,
+      ).not.toBeNull();
+      expect(screenOf({ phase: "instruction" }).swap?.againLine).toBeNull();
+    });
+
+    it("lights, answers and pauses the room as every other room, with the same answer labels", () => {
+      const room = screenOf({ phase: "room", earpieces: "swapped" });
+      expect(room.sheet).toBeNull();
+      expect(room.answersShown).toBe(true);
+      expect(room.pauseShown).toBe(true);
+      expect(room.litRoom).toBe("stairs");
+      expect(room.room?.name).toBe("Stairs");
+      const repeat = swappedRepeatView({
+        ...input,
+        phase: "room",
+        earpieces: "swapped",
+      });
+      expect(repeat.phase === "room" && repeat.answers).toEqual(
+        roomCopy.answers,
+      );
+      for (const reason of ["visitor", "hidden", "interrupted"] as const) {
+        const paused = screenOf(
+          { phase: "room", earpieces: "swapped", pauseReason: reason },
+          reason,
+        );
+        expect(paused.answersShown, reason).toBe(false);
+        expect(paused.notice?.button?.action, reason).toBe("resume");
+        expect(paused.notice?.line, reason).toBeTruthy();
+      }
+    });
   });
 });

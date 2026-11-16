@@ -3,6 +3,7 @@ import { roomCopy } from "../../copy/room-copy";
 import type {
   ReplaySound,
   ScoredVisitTrial,
+  SwappedTrialScoredEvent,
   TrialScoredEvent,
   VisitRoom,
 } from "../../session/visit-flow-types";
@@ -114,6 +115,68 @@ describe("reactionOfEvent", () => {
     expect(reactionOfEvent(scored(silence, "noSoundLine"))).toEqual({
       kind: "say",
       line: roomCopy.noSoundLine,
+    });
+  });
+
+  describe("in the room of a swapped repeat", () => {
+    const swapped = (
+      trial: ScoredVisitTrial,
+      reaction: SwappedTrialScoredEvent["reaction"],
+      line: string | null,
+    ): SwappedTrialScoredEvent => ({
+      kind: "swappedTrialScored",
+      room,
+      runNumber: 1,
+      trial: {
+        ...trial,
+        earpiece:
+          trial.kind === "sound"
+            ? trial.ear === "left"
+              ? "right"
+              : "left"
+            : null,
+      } as unknown as SwappedTrialScoredEvent["trial"],
+      reaction,
+      line,
+    });
+
+    it.each(["left", "right"] as const)(
+      "draws a ripple from the %s ear for a caught sound, with the words the event brings",
+      (ear) => {
+        expect(
+          reactionOfEvent(
+            swapped(soundTrial(ear, "caught"), "ripple", "The event's words."),
+          ),
+        ).toEqual({ kind: "ripple", side: ear, line: "The event's words." });
+      },
+    );
+
+    it("says the line the event brings for an answer to silence", () => {
+      const silence = {
+        ...common,
+        kind: "noSound",
+        ear: null,
+        response: "left",
+        outcome: "falseAlarm",
+      } as unknown as ScoredVisitTrial;
+      expect(
+        reactionOfEvent(swapped(silence, "noSoundLine", "No sound there.")),
+      ).toEqual({ kind: "say", line: "No sound there." });
+    });
+
+    it.each(["missed", "wrongSide"] as const)(
+      "shows nothing for a sound that was %s",
+      (outcome) => {
+        expect(
+          reactionOfEvent(swapped(soundTrial("left", outcome), "none", null)),
+        ).toBeNull();
+      },
+    );
+
+    it("shows nothing without a line, whatever the reaction", () => {
+      expect(
+        reactionOfEvent(swapped(soundTrial("left", "caught"), "ripple", null)),
+      ).toBeNull();
     });
   });
 

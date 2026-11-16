@@ -13,6 +13,7 @@ import { startMotionLayer } from "../house/motion-layer";
 import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
 import { joinReplayButtons } from "./join-replay-buttons";
+import { joinSwapButtons } from "./join-swap-buttons";
 import { listenForAnswers } from "./listen-for-answers";
 import type { VisitSnapshot } from "../../session/visit-flow-types";
 import { reactionOfEvent } from "./reaction-of-event";
@@ -157,6 +158,28 @@ export function startVisit(
       flow.proceed();
     },
   });
+  joinSwapButtons(
+    page,
+    () => screenView.current(),
+    () => screenView.swapBackIsMeant(),
+    {
+      confirmSwap: () => {
+        flow.confirmSwap();
+      },
+      playSwapCheck: () => {
+        flow.playSwapCheck();
+      },
+      answerSwapCheck: (answer) => {
+        flow.answerSwapCheck(answer);
+      },
+      startSwappedRoom: () => {
+        flow.startSwappedRoom();
+      },
+      backToPicture: () => {
+        flow.proceed();
+      },
+    },
+  );
   press(page.notice.button, () => {
     const action = screenView.current()?.notice?.button?.action;
     if (action === "resume") {
@@ -188,7 +211,7 @@ export function startVisit(
     // The picture is drawn before its sheet appears, and forgotten once the visit has left it.
     // During a swapped repeat it is only out of sight.
     if (snapshot.stage === "result") {
-      resultView.show(snapshot);
+      resultView.show(snapshot, snapshot.turnBackLine);
     } else if (snapshot.stage !== "swappedRepeat") {
       resultView.clear();
     }

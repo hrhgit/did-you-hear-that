@@ -583,6 +583,116 @@ p.visit-status {
   text-align: right;
 }
 
+/*
+ * The swapped repeat of one floor. Its last sheet holds a drawing and can be taller than the
+ * window, so the sheet starts at the top and its body keeps to the middle only while it fits.
+ */
+.visit-sheet-swap {
+  /* The sheet scrolls, so it ends under the bar: nothing of it passes behind the stop control. */
+  inset: var(--visit-bar) 0 0;
+  align-items: start;
+  padding-top: 0.5rem;
+}
+
+.visit-sheet-swap .visit-sheet-body {
+  margin-block: auto;
+}
+
+/* The floor that is visited again, and what its first run found between left and right. */
+p.visit-swap-floor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.75rem;
+  margin-bottom: 1.4rem;
+  color: var(--color-graphite);
+  font-variant-numeric: lining-nums;
+}
+
+.visit-swap-floor-name {
+  color: var(--color-moonlight);
+  font-size: 1.3125rem;
+  font-style: italic;
+}
+
+.visit-swap-floor-difference::before {
+  content: "";
+  display: inline-block;
+  width: 1.1rem;
+  margin: 0 0.75rem 0.3em 0;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+/*
+ * The headphones the other way round. Dashed while the house has only asked for the swap, drawn
+ * through in lamp colour once a check has confirmed it.
+ */
+.swap-sketch {
+  display: block;
+  width: 13.5rem;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 240 / 130;
+  margin: 0 0 1.4rem;
+}
+
+.swap-sketch-head {
+  fill: none;
+  stroke: var(--color-graphite-faint);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.swap-sketch-band,
+.swap-sketch-cup {
+  fill: none;
+  stroke: var(--color-graphite);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 5 5;
+  transition: stroke 0.6s ease;
+}
+
+.swap-sketch[data-state="swapped"] .swap-sketch-band,
+.swap-sketch[data-state="swapped"] .swap-sketch-cup {
+  stroke: var(--color-lamp);
+  stroke-dasharray: none;
+}
+
+.swap-sketch-mark {
+  fill: var(--color-moonlight);
+  font-size: 19px;
+  font-variant-numeric: lining-nums;
+}
+
+.swap-sketch-ear {
+  fill: var(--color-graphite);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.visit-swap-comparison {
+  margin: 0 0 1.5rem;
+}
+
+/*
+ * The headphones may still be the other way round, or are not swapped yet. Ruled in lamp colour
+ * so neither line is passed over.
+ */
+p.visit-swap-again,
+p.visit-swap-turn-back {
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-lamp);
+}
+
+.visit-sheet-swap p.visit-status {
+  margin: 1.25rem 0 0;
+}
+
+.visit-sheet-swap .visit-controls {
+  margin-top: 1.4rem;
+}
+
 .visit-controls {
   display: flex;
   flex-wrap: wrap;

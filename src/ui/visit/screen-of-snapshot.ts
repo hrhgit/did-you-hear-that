@@ -10,7 +10,10 @@ import {
 } from "../../copy/room-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
+  HeadphoneCheckAnswer,
   MissedSoundReplaySnapshot,
+  SwappedRepeatComparison,
+  SwappedRepeatSnapshot,
   VisitRoom,
   VisitSnapshot,
 } from "../../session/visit-flow-types";
@@ -26,6 +29,7 @@ export type SheetName =
   | "rules"
   | "notice"
   | "replay"
+  | "swap"
   | "result";
 
 /** What the button of the notice sheet does. `proceed` is the flow's own next step. */
@@ -92,6 +96,59 @@ export interface ReplayScreen {
   readonly proceedLabel: string | null;
 }
 
+/** What the lit button of the swapped repeat's sheet asks the visit flow for. */
+export type SwapAction = "confirmSwap" | "playSwapCheck" | "startSwappedRoom";
+
+/**
+ * The swapped repeat of one floor, outside its room: a sheet of text that says how to swap the
+ * earpieces, checks the swap, leads into the room and, afterwards, sets both runs of the room
+ * side by side. While the room runs there is no sheet, as in every room.
+ */
+export interface SwapScreen {
+  /** The step of the repeat the sheet shows. */
+  readonly phase:
+    "unavailable" | "instruction" | "check" | "ready" | "finished";
+  readonly heading: string;
+  /** The floor that is visited again, and what its first run found between left and right. */
+  readonly floor: {
+    readonly roomName: string;
+    readonly pitchLabel: string;
+    readonly firstDifferenceLabel: string;
+  };
+  /**
+   * How the sketch of the headphones is drawn: `asked` while the house has only asked for the
+   * swap, `swapped` once a check has confirmed it, or null where the sheet shows no sketch.
+   */
+  readonly headphones: "asked" | "swapped" | null;
+  /** What the house says, in order. */
+  readonly lines: readonly string[];
+  /** The question of the check and its four answers, or null outside the check. */
+  readonly check: {
+    readonly question: string;
+    readonly answers: Readonly<Record<HeadphoneCheckAnswer, string>>;
+    /** Whether the answers can be pressed: from a played check until its answer. */
+    readonly awaitingAnswer: boolean;
+  } | null;
+  /**
+   * Said above the lit button when a check found the headphones the way they were, so that the
+   * swap is asked for again; otherwise null.
+   */
+  readonly againLine: string | null;
+  /** What the house says about the last press of the check: why it must be made again, or null. */
+  readonly statusLine: string | null;
+  /** The lit button, or null where the only way on is back to the picture. */
+  readonly primary: {
+    readonly label: string;
+    readonly action: SwapAction;
+  } | null;
+  /** The label of the control that leads back to the picture. */
+  readonly backLabel: string;
+  /** Both runs of the room side by side, once the repeat has run to its end. */
+  readonly comparison: SwappedRepeatComparison | null;
+  /** The line that asks the visitor to turn the headphones back, or null. */
+  readonly turnBackLine: string | null;
+}
+
 /**
  * Everything the page shows for one snapshot of the visit, as plain data. It is made from the
  * snapshot alone, and a snapshot holds nothing about a trial, so a screen cannot either. The
@@ -101,12 +158,17 @@ export interface ReplayScreen {
 export interface Screen {
   /** The sheet over the drawing, or null inside a room and between two rooms. */
   readonly sheet: SheetName | null;
-  /** Whether the stop control is shown: from the first sound until the picture. */
+  /**
+   * Whether the stop control is shown: from the first sound until the picture, and all through a
+   * swapped repeat.
+   */
   readonly stopShown: boolean;
   /** What the stop control says. */
   readonly stopLabel: string;
   /** Whether the pause control is shown: inside a room. */
   readonly pauseShown: boolean;
+  /** What the pause control says. */
+  readonly pauseLabel: string;
   /** Whether the two halves of the screen take answers: inside a room. */
   readonly answersShown: boolean;
   /** The room named in the bar, or null. */
@@ -124,6 +186,7 @@ export interface Screen {
   readonly headphoneCheck: HeadphoneCheckScreen | null;
   readonly notice: NoticeScreen | null;
   readonly replay: ReplayScreen | null;
+  readonly swap: SwapScreen | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
@@ -211,25 +274,111 @@ function replayScreenOf(snapshot: MissedSoundReplaySnapshot): ReplayScreen {
   }
 }
 
+/**
+ * The sheet of the swapped repeat. Every word comes from the snapshot. The phase `room` has no
+ * sheet, so it gives null.
+ */
+function swapScreenOf(snapshot: SwappedRepeatSnapshot): SwapScreen | null {
+  const view = snapshot.repeat;
+  const base = {
+    heading: view.heading,
+    floor: {
+      roomName: view.roomName,
+      pitchLabel: view.pitchLabel,
+      firstDifferenceLabel: view.firstDifferenceLabel,
+    },
+    headphones: view.earpieces === "swapped" ? "swapped" : "asked",
+    check: null,
+    againLine: null,
+    statusLine: null,
+    primary: null,
+    backLabel: view.backLabel,
+    comparison: null,
+    turnBackLine: null,
+  } satisfies Partial<SwapScreen>;
+  switch (view.phase) {
+    case "unavailable":
+      return {
+        ...base,
+        phase: view.phase,
+        headphones: null,
+        lines: [view.line],
+      };
+    case "instruction":
+      return {
+        ...base,
+        phase: view.phase,
+        lines: view.lines,
+        againLine: view.againLine,
+        primary: { label: view.confirmLabel, action: "confirmSwap" },
+      };
+    case "check":
+      return {
+        ...base,
+        phase: view.phase,
+        lines: [],
+        check: {
+          question: view.question,
+          answers: view.answers,
+          awaitingAnswer: view.awaitingAnswer,
+        },
+        // A check that did not play is said first: it is what the last press came to.
+        statusLine: view.playRefusalLine ?? view.cutLine ?? view.judgementLine,
+        primary: { label: view.playLabel, action: "playSwapCheck" },
+      };
+    case "ready":
+      return {
+        ...base,
+        phase: view.phase,
+        lines: [view.judgementLine, ...view.lines],
+        primary: { label: view.startLabel, action: "startSwappedRoom" },
+      };
+    case "room":
+      return null;
+    case "finished":
+      return {
+        ...base,
+        phase: view.phase,
+        headphones: null,
+        lines: [view.endLine],
+        comparison: view.comparison,
+        turnBackLine: view.turnBackLine,
+      };
+  }
+}
+
 /** The screen for a snapshot. A pure function: the same snapshot always gives the same screen. */
 export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
   // No sound can play at the front door, on the exit screen, on a device that cannot play, or
-  // once the picture is shown, so the stop control is not shown there.
+  // once the picture is shown, so the stop control is not shown there. A swapped repeat shows it
+  // from its first sheet to its last.
   const outside =
     snapshot.stage === "entry" ||
     snapshot.stage === "exit" ||
     snapshot.stage === "unsupported" ||
-    snapshot.stage === "result" ||
-    snapshot.stage === "swappedRepeat";
-  const inRoom = snapshot.stage === "room" && snapshot.pause === null;
-  const litRoom = inRoom ? snapshot.room : null;
+    snapshot.stage === "result";
+  // The room of a swapped repeat is a room like every other: lit, answered and paused the same.
+  const repeatRoom =
+    snapshot.stage === "swappedRepeat" && snapshot.repeat.phase === "room"
+      ? snapshot.repeat
+      : null;
+  const inRoom =
+    (snapshot.stage === "room" || repeatRoom !== null) &&
+    snapshot.pause === null;
+  const litRoom =
+    inRoom && (snapshot.stage === "room" || snapshot.stage === "swappedRepeat")
+      ? snapshot.room
+      : null;
   const base = {
     stopShown: !outside,
     stopLabel:
       snapshot.stage === "missedSoundReplay"
         ? snapshot.replay.stopLabel
-        : roomCopy.stopButton,
+        : snapshot.stage === "swappedRepeat"
+          ? snapshot.repeat.stopLabel
+          : roomCopy.stopButton,
     pauseShown: inRoom,
+    pauseLabel: repeatRoom?.pauseLabel ?? roomCopy.pauseButton,
     answersShown: inRoom,
     room: null,
     litRoom: litRoom === null ? null : litRoom.roomId,
@@ -239,6 +388,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     headphoneCheck: null,
     notice: null,
     replay: null,
+    swap: null,
     soundNotStartedLine: snapshot.activationRefused
       ? visitCopy.soundNotStartedLine
       : null,
@@ -258,6 +408,18 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
           heading: leavingCopy.pauseHeading,
           line: snapshot.replay.pauseLine,
           button: { label: snapshot.replay.resumeLabel, action: "resume" },
+        },
+      };
+    }
+    if (repeatRoom !== null && repeatRoom.pauseLine !== null) {
+      // So does the room of a swapped repeat.
+      return {
+        ...base,
+        sheet: "notice",
+        notice: {
+          heading: leavingCopy.pauseHeading,
+          line: repeatRoom.pauseLine,
+          button: { label: repeatRoom.resumeLabel, action: "resume" },
         },
       };
     }
@@ -355,20 +517,22 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     }
     case "result":
       return { ...base, sheet: "result" };
-    case "swappedRepeat":
-      // The swapped repeat has its own spec. Until it is built, a line says so and leads back.
-      return {
-        ...base,
-        sheet: "notice",
-        notice: {
-          heading: leavingCopy.swappedRoomNotBuilt.heading,
-          line: leavingCopy.swappedRoomNotBuilt.line,
-          button: {
-            label: leavingCopy.swappedRoomNotBuilt.button,
-            action: "proceed",
+    case "swappedRepeat": {
+      const swap = swapScreenOf(snapshot);
+      if (swap === null) {
+        // Inside the room the bar names the floor and its pitch. Neither changes with a sound.
+        return {
+          ...base,
+          sheet: null,
+          room: {
+            id: snapshot.room.roomId,
+            name: snapshot.repeat.roomName,
+            progress: snapshot.repeat.pitchLabel,
           },
-        },
-      };
+        };
+      }
+      return { ...base, sheet: "swap", swap };
+    }
     case "exit":
       return {
         ...base,

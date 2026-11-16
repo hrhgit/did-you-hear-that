@@ -5,8 +5,11 @@ import { leavingCopy } from "../../copy/leaving-copy";
 import { replayCopy } from "../../copy/replay-copy";
 import { roomCopy } from "../../copy/room-copy";
 import { rulesCopy } from "../../copy/rules-copy";
+import { resultPageCopy } from "../../copy/result-page-copy";
 import { siteTitle } from "../../copy/site-title";
+import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
+import { drawSwappedHeadphones } from "./draw-swapped-headphones";
 
 /** A sheet of text laid over the faint drawing. Only one is shown at a time. */
 export interface Sheet {
@@ -80,6 +83,32 @@ export interface VisitPage {
     readonly startButton: HTMLButtonElement;
     readonly proceedButton: HTMLButtonElement;
   };
+  /**
+   * The swapped repeat of one floor outside its room: how to swap, the check of the swap, the way
+   * into the room and, afterwards, both runs side by side. Its words come with each snapshot.
+   */
+  readonly swap: Sheet & {
+    /** The floor that is visited again: its name, its pitch and what its first run found. */
+    readonly floorName: HTMLElement;
+    readonly floorPitch: HTMLElement;
+    readonly floorDifference: HTMLElement;
+    /** The sketch of the headphones the other way round. Only its `data-state` changes. */
+    readonly sketch: SVGElement;
+    /** Holds one paragraph for each line the house says. */
+    readonly lines: HTMLElement;
+    /** Holds both runs of the room side by side, once the repeat has run to its end. */
+    readonly comparison: HTMLElement;
+    readonly turnBackLine: HTMLElement;
+    /** Said when a check found the headphones the way they were. Stands above the lit button. */
+    readonly againLine: HTMLElement;
+    readonly primaryButton: HTMLButtonElement;
+    readonly question: HTMLElement;
+    readonly answerList: HTMLElement;
+    readonly answerButtons: Readonly<Record<CheckAnswer, HTMLButtonElement>>;
+    /** What the last press came to. Stands under the buttons it is about, so none of them moves. */
+    readonly statusLine: HTMLElement;
+    readonly backButton: HTMLButtonElement;
+  };
   /** The replay while its sounds play: words beside the house, which stays in full view. */
   readonly replaying: {
     readonly element: HTMLElement;
@@ -93,7 +122,7 @@ export interface VisitPage {
   };
 }
 
-type Children = readonly (HTMLElement | string)[];
+type Children = readonly (Node | string)[];
 
 /** Builds the visit's elements inside `main` and returns handles to the ones that change. */
 export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
@@ -319,6 +348,60 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     replayStatus,
   ]);
 
+  // The swapped repeat. Its words come with each snapshot too.
+  const swapHeading = heading("");
+  const swapFloorName = make("span", "visit-swap-floor-name");
+  const swapFloorPitch = make("span", "visit-swap-floor-pitch");
+  const swapFloorDifference = make("span", "visit-swap-floor-difference");
+  const swapSketch = drawSwappedHeadphones(doc, {
+    marks: swappedRepeatCopy.earpieceMarks,
+    earLabels: {
+      left: resultPageCopy.leftLabel,
+      right: resultPageCopy.rightLabel,
+    },
+  });
+  const swapLines = make("div", "visit-swap-lines");
+  const swapComparison = make("div", "visit-swap-comparison");
+  swapComparison.hidden = true;
+  const swapTurnBackLine = make("p", "visit-swap-turn-back");
+  swapTurnBackLine.hidden = true;
+  const swapAgainLine = make("p", "visit-swap-again");
+  swapAgainLine.setAttribute("role", "status");
+  swapAgainLine.hidden = true;
+  const swapStatus = make("p", "visit-status");
+  swapStatus.setAttribute("role", "status");
+  const swapPrimaryButton = button("", "visit-button-lit");
+  const swapPrimary = controls([swapPrimaryButton]);
+  const swapQuestion = make("p", "visit-voice");
+  swapQuestion.id = "visit-swap-question";
+  const swapAnswers: Record<CheckAnswer, HTMLButtonElement> = {
+    left: button(""),
+    right: button(""),
+    bothSides: button(""),
+    nothingHeard: button(""),
+  };
+  const swapAnswerList = controls(Object.values(swapAnswers));
+  swapAnswerList.setAttribute("role", "group");
+  swapAnswerList.setAttribute("aria-labelledby", swapQuestion.id);
+  const swapBackButton = button("");
+  const swap = sheet("swap", swapHeading, [
+    make("p", "visit-swap-floor", [
+      swapFloorName,
+      swapFloorPitch,
+      swapFloorDifference,
+    ]),
+    swapSketch,
+    swapLines,
+    swapComparison,
+    swapTurnBackLine,
+    swapAgainLine,
+    swapPrimary,
+    swapQuestion,
+    swapAnswerList,
+    swapStatus,
+    controls([swapBackButton], "visit-swap-leave"),
+  ]);
+
   const soundLead = make("span", "visit-replay-sound-lead");
   const soundRest = make("span", "visit-replay-sound-rest");
   // The space keeps the two sentences apart for anything that reads the text and not the layout.
@@ -361,6 +444,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     rules,
     notice,
     replay,
+    swap,
   );
 
   return {
@@ -423,6 +507,24 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       statusLine: replayStatus,
       startButton: replayStartButton,
       proceedButton: replayProceedButton,
+    },
+    swap: {
+      element: swap,
+      heading: swapHeading,
+      floorName: swapFloorName,
+      floorPitch: swapFloorPitch,
+      floorDifference: swapFloorDifference,
+      sketch: swapSketch,
+      lines: swapLines,
+      comparison: swapComparison,
+      turnBackLine: swapTurnBackLine,
+      againLine: swapAgainLine,
+      primaryButton: swapPrimaryButton,
+      question: swapQuestion,
+      answerList: swapAnswerList,
+      answerButtons: swapAnswers,
+      statusLine: swapStatus,
+      backButton: swapBackButton,
     },
     replaying: {
       element: replaying,

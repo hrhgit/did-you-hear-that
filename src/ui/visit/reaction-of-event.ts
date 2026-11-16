@@ -28,6 +28,7 @@ export type ScreenReaction =
  * scored and not before. A missed sound, a wrong side and an unanswered silence give null: the
  * page stays as it was. After the rooms, a sound that is played again gives a ripple as it
  * starts. By then every answer has been given, so the ripple tells nothing that could be used.
+ * The room of a swapped repeat is a room like every other: only its scored trials give a reaction.
  */
 export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
   if (event.kind === "replaySoundStarted") {
@@ -36,6 +37,21 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
       side: event.sound.ear,
       roomId: event.sound.room.roomId,
     };
+  }
+  if (event.kind === "swappedTrialScored") {
+    // A trial of a swapped repeat brings its own words, which name the ear and the earpiece.
+    // The ripple comes from the side of the ear, as the visitor heard it.
+    const { trial, reaction, line } = event;
+    if (line === null) {
+      return null;
+    }
+    if (reaction === "ripple" && trial.kind === "sound") {
+      return { kind: "ripple", side: trial.ear, line };
+    }
+    if (reaction === "noSoundLine") {
+      return { kind: "say", line };
+    }
+    return null;
   }
   if (event.kind !== "trialScored") {
     return null;

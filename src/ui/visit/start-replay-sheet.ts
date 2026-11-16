@@ -5,6 +5,7 @@ import { drawHouseSection } from "../house/draw-house-section";
 import { startMotionLayer } from "../house/motion-layer";
 import { buildVisitPage } from "./build-visit-page";
 import { joinReplayButtons } from "./join-replay-buttons";
+import { joinSwapButtons } from "./join-swap-buttons";
 import { reactionOfEvent } from "./reaction-of-event";
 import { screenOfSnapshot } from "./screen-of-snapshot";
 import { createCaption } from "./show-caption";
@@ -19,7 +20,11 @@ export interface ReplaySheet {
   show(snapshot: VisitSnapshot): void;
   /** Gives the page an event of the visit flow, as the page gets one when a sound starts. */
   event(event: VisitEvent): void;
-  /** Every request the page made of the flow, in order: `startReplay`, `proceed`, `resume`, `stop`. */
+  /**
+   * Every request the page made of the flow, in order: `startReplay`, `proceed`, `resume`, `stop`,
+   * `pause` and, from a swapped repeat, `confirmSwap`, `playSwapCheck`, `answerSwapCheck:` with
+   * the answer, and `startSwappedRoom`.
+   */
   readonly requests: string[];
 }
 
@@ -30,8 +35,9 @@ const ambientSeed = 20261115;
 /**
  * The development replay sheet (`replay-sheet.html`): the page of the visit with no visit flow
  * and no sound. The browser tests hand it the snapshots and events a simulated visit gave in
- * Node, to draw the replay of missed sounds, which a visit in a browser would take minutes to
- * reach. It is built from the same parts as the real page, joined in the same way.
+ * Node, to draw the replay of missed sounds and the swapped repeat of a floor, which a visit in a
+ * browser would take minutes to reach. It is built from the same parts as the real page, joined
+ * in the same way.
  */
 function startReplaySheet(
   doc: Document,
@@ -83,6 +89,31 @@ function startReplaySheet(
       requests.push("proceed");
     },
   });
+  page.pauseButton.addEventListener("click", () => {
+    requests.push("pause");
+  });
+  joinSwapButtons(
+    page,
+    () => screenView.current(),
+    () => screenView.swapBackIsMeant(),
+    {
+      confirmSwap: () => {
+        requests.push("confirmSwap");
+      },
+      playSwapCheck: () => {
+        requests.push("playSwapCheck");
+      },
+      answerSwapCheck: (answer) => {
+        requests.push(`answerSwapCheck:${answer}`);
+      },
+      startSwappedRoom: () => {
+        requests.push("startSwappedRoom");
+      },
+      backToPicture: () => {
+        requests.push("proceed");
+      },
+    },
+  );
   page.notice.button.addEventListener("click", () => {
     requests.push(screenView.current()?.notice?.button?.action ?? "none");
   });
