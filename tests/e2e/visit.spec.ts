@@ -1,8 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { calibrationCopy } from "../../src/copy/calibration-copy";
-import { frontDoorCopy } from "../../src/copy/front-door-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import {
@@ -15,6 +13,15 @@ import { siteTitle } from "../../src/copy/site-title";
 import { visitCopy } from "../../src/copy/visit-copy";
 import { expectNoHorizontalScroll, openPage } from "./page-checks";
 import { previewServers } from "./preview-servers";
+import {
+  button,
+  calibrate,
+  checkHeadphones,
+  enterFirstRoom,
+  heading,
+  playCheck,
+  quickVisit,
+} from "./visit-steps";
 
 // A visit in a real browser, from the front door into the first room and out again (brief 05).
 // The browser is muted: these tests check what the page shows and that its controls work, not
@@ -27,18 +34,8 @@ if (server === undefined) {
 }
 const address = `http://localhost:${String(server.port)}${server.basePath}`;
 
-const { calibrationSettingMinDb, calibrationSettingKeepMinDb } =
-  audioOutputConfig;
-
-const heading = (page: Page, name: string) =>
-  page.getByRole("heading", { level: 1, name });
-const button = (page: Page, name: string) =>
-  page.getByRole("button", { name, exact: true });
 const answerButton = (page: Page, side: "left" | "right") =>
   page.getByRole("button", { name: roomCopy.answers[side].hint });
-// The name of a way in is its words and its note, so it is found by its words alone.
-const quickVisit = (page: Page) =>
-  page.getByRole("button", { name: frontDoorCopy.choices.quick.button });
 
 async function expectNoSeriousAccessibilityProblem(page: Page): Promise<void> {
   // Whatever is fading in or out is checked once it has arrived or gone.
@@ -63,61 +60,6 @@ async function expectNoSeriousAccessibilityProblem(page: Page): Promise<void> {
           .join(", ")})`,
     ),
   ).toEqual([]);
-}
-
-/** Chooses the short visit, matches the hiss up to the lowest setting that can be kept. */
-async function calibrate(page: Page): Promise<void> {
-  await quickVisit(page).click();
-  await expect(heading(page, visitCopy.calibrationHeading)).toBeVisible();
-  await button(page, calibrationCopy.startButton).click();
-  const louder = button(page, calibrationCopy.louderButton);
-  await expect(louder).toBeVisible();
-  for (
-    let press = 0;
-    press < calibrationSettingKeepMinDb - calibrationSettingMinDb;
-    press += 1
-  ) {
-    await louder.click();
-  }
-  // The hiss rises a few decibels from one repeat to the next, so it takes a few repeats to
-  // reach the setting asked for. Until then the house does not keep the setting.
-  await expect(async () => {
-    await button(page, calibrationCopy.keepButton).click();
-    await expect(heading(page, visitCopy.headphoneCheckHeading)).toBeVisible({
-      timeout: 400,
-    });
-  }).toPass({ timeout: 30_000 });
-}
-
-/**
- * Plays the check hiss. The house refuses a play while a sound before it is still ending, and
- * asks for another press, so this presses until the answers can be given.
- */
-async function playCheck(page: Page): Promise<void> {
-  await expect(async () => {
-    await button(page, headphoneCheckCopy.playButton).click();
-    await expect(button(page, headphoneCheckCopy.answers.left)).toBeEnabled({
-      timeout: 400,
-    });
-  }).toPass({ timeout: 15_000 });
-}
-
-async function checkHeadphones(page: Page): Promise<void> {
-  await playCheck(page);
-  await button(page, headphoneCheckCopy.answers.left).click();
-  await expect(
-    page.getByText(headphoneCheckCopy.judgementLines.correct),
-  ).toBeVisible();
-  await button(page, visitCopy.goOnButton).click();
-  await expect(heading(page, rulesCopy.heading)).toBeVisible();
-}
-
-async function enterFirstRoom(page: Page): Promise<void> {
-  await calibrate(page);
-  await checkHeadphones(page);
-  await button(page, rulesCopy.enterButton).click();
-  await expect(page.getByText(roomProgressLine(1, 3))).toBeVisible();
-  await expect(button(page, roomCopy.pauseButton)).toBeVisible();
 }
 
 test.describe(`a visit at ${address}`, () => {
