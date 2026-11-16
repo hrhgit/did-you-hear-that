@@ -17,6 +17,15 @@ const stopCurve: Float32Array<ArrayBuffer> = (() => {
   return curve;
 })();
 
+/** Points of the calibration music's fade in: the raised-cosine rise of the output fade. */
+const fadeInCurve: Float32Array<ArrayBuffer> = (() => {
+  const curve = new Float32Array(stopCurvePointCount);
+  for (let point = 0; point < stopCurvePointCount; point += 1) {
+    curve[point] = raisedCosineRamp(point / (stopCurvePointCount - 1));
+  }
+  return curve;
+})();
+
 /** The output graph of one context (design.md, "The Web Audio backend"). */
 export interface OutputGraph {
   /**
@@ -37,8 +46,45 @@ export interface OutputGraph {
    * left as it is, because no source can have started since.
    */
   fadeToSilence(durationS: number): void;
+  /**
+   * Starts the calibration music's loop (audible-start design.md, "Playing"): one stereo buffer of
+   * the two channels, looping from `startS`, through its level gain at `levelGain`, a fade-in gain
+   * that rises from exact zero to 1 over `fadeInS`, and a fade-out gain at 1 until `stopLoop`,
+   * into the stop gain. Throws a `RangeError`, and plays nothing, as `play` does, and also if a
+   * loop is already playing or `levelGain` is not a finite number above 0.
+   */
+  startLoop(
+    left: Float32Array,
+    right: Float32Array,
+    sampleRateHz: number,
+    startS: number,
+    levelGain: number,
+    fadeInS: number,
+  ): void;
+  /**
+   * Ramps the loop's level gain exponentially from its value at `startS` to `levelGain` at `endS`.
+   * Does nothing without a loop.
+   */
+  rampLoopLevel(levelGain: number, startS: number, endS: number): void;
+  /**
+   * Fades the loop to exact zero over `durationS`, from now, with the raised cosine of the stop
+   * fade, and stops its source at the end. Does nothing without a loop.
+   */
+  stopLoop(durationS: number): void;
   /** How many sources are scheduled or playing. 0 between sounds (R6.6). */
   liveSourceCount(): number;
+}
+
+/** The calibration music's loop and its gains. */
+interface Loop {
+  readonly source: AudioBufferSourceNode;
+  readonly levelGain: GainNode;
+  readonly fadeInGain: GainNode;
+  readonly fadeOutGain: GainNode;
+  /** The level gain's value at the end of its last automation event. */
+  lastLevelGain: number;
+  /** Whether `stopLoop` has begun its fade. */
+  stopping: boolean;
 }
 
 /** A stop gain and the sources connected to it. */
@@ -55,13 +101,20 @@ interface Stage {
  *
  * Every source goes to one stop gain, and the stop gain to the destination. Nothing else is
  * connected, and between sounds there is no source at all (R3.4, R6.6). The graph never scales,
- * pans, mixes or resamples a sound: the stop gain is 1 until a stop, and its fade can only lower
- * a sample (R6.5).
+ * pans, mixes or resamples a sound given to `play`: the stop gain is 1 until a stop, and its fade
+ * can only lower a sample (R6.5).
  *
  * The stop fade is the only automation a stop gain ever carries. After a stop, the first sound
  * goes to a new stop gain at 1, and the old one is disconnected once its sources have ended
  * (D46). Bringing the old gain back to 1 would need its automation cancelled, which in Web Audio
  * can put back the value from before the fade at once, while a source may still be playing.
+ *
+ * The calibration music's loop is the one source with gains of its own, before the stop gain
+ * (audible-start design.md, "Playing"): its level gain, ramped exponentially between values the
+ * shell keeps within the ceiling, its fade-in gain from exact zero to 1, and its fade-out gain
+ * from 1 to exact zero. The two fades are separate gains, so a stop during the fade in never
+ * cancels an automation and never raises a gain. Every automation on the loop's path is added
+ * after the last, and none is cancelled.
  */
 export function createOutputGraph(context: BaseAudioContext): OutputGraph {
   const destination = context.destination;
@@ -84,6 +137,54 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
   let stage = createStage();
   /** Faded stop gains that still have a source that has not ended. */
   const retiredStages = new Set<Stage>();
+  let loop: Loop | null = null;
+
+  const checkChannels = (
+    left: Float32Array,
+    right: Float32Array,
+    sampleRateHz: number,
+  ): void => {
+    if (left.length === 0 || left.length !== right.length) {
+      throw new RangeError(
+        `The two channels must have the same length of at least one sample, but have ${left.length} and ${right.length}.`,
+      );
+    }
+    if (sampleRateHz !== context.sampleRate) {
+      throw new RangeError(
+        `The channels are at ${sampleRateHz} Hz, but the context runs at ${context.sampleRate} Hz.`,
+      );
+    }
+  };
+
+  /** The stop gain a sound starting at `startS` goes to: a new one after a stop fade. */
+  const stageForStart = (startS: number): Stage => {
+    if (stage.fadeEndS !== null) {
+      if (!(startS >= stage.fadeEndS)) {
+        throw new RangeError(
+          `A sound cannot start at ${startS} s, before the stop fade ends at ${stage.fadeEndS} s.`,
+        );
+      }
+      retire(stage);
+      stage = createStage();
+    }
+    return stage;
+  };
+
+  const stereoBuffer = (left: Float32Array, right: Float32Array) => {
+    const buffer = context.createBuffer(2, left.length, context.sampleRate);
+    buffer.copyToChannel(new Float32Array(left), channelIndex.left);
+    buffer.copyToChannel(new Float32Array(right), channelIndex.right);
+    return buffer;
+  };
+
+  const stereoGain = (value: number): GainNode => {
+    const gain = context.createGain();
+    gain.channelCount = 2;
+    gain.channelCountMode = "explicit";
+    gain.channelInterpretation = "discrete";
+    gain.gain.value = value;
+    return gain;
+  };
 
   const retire = (faded: Stage): void => {
     if (faded.sources.size === 0) {
@@ -95,33 +196,12 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
 
   const graph: OutputGraph = {
     play(left, right, sampleRateHz, startS) {
-      if (left.length === 0 || left.length !== right.length) {
-        throw new RangeError(
-          `The two channels must have the same length of at least one sample, but have ${left.length} and ${right.length}.`,
-        );
-      }
-      if (sampleRateHz !== context.sampleRate) {
-        throw new RangeError(
-          `The channels are at ${sampleRateHz} Hz, but the context runs at ${context.sampleRate} Hz.`,
-        );
-      }
-      if (stage.fadeEndS !== null) {
-        if (!(startS >= stage.fadeEndS)) {
-          throw new RangeError(
-            `A sound cannot start at ${startS} s, before the stop fade ends at ${stage.fadeEndS} s.`,
-          );
-        }
-        retire(stage);
-        stage = createStage();
-      }
+      checkChannels(left, right, sampleRateHz);
+      const owner = stageForStart(startS);
 
-      const buffer = context.createBuffer(2, left.length, context.sampleRate);
-      buffer.copyToChannel(new Float32Array(left), channelIndex.left);
-      buffer.copyToChannel(new Float32Array(right), channelIndex.right);
       const source = context.createBufferSource();
-      source.buffer = buffer;
-      source.connect(stage.gain);
-      const owner = stage;
+      source.buffer = stereoBuffer(left, right);
+      source.connect(owner.gain);
       owner.sources.add(source);
       source.onended = () => {
         source.disconnect();
@@ -132,6 +212,92 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
         }
       };
       source.start(startS);
+    },
+
+    startLoop(left, right, sampleRateHz, startS, levelGain, fadeInS) {
+      checkChannels(left, right, sampleRateHz);
+      if (!(Number.isFinite(levelGain) && levelGain > 0)) {
+        throw new RangeError(
+          `A loop's level gain must be a finite number above 0, but got ${String(levelGain)}.`,
+        );
+      }
+      if (!(Number.isFinite(fadeInS) && fadeInS > 0)) {
+        throw new RangeError(
+          `A fade in must last a finite time above 0 s, but got ${String(fadeInS)}.`,
+        );
+      }
+      if (loop !== null && !loop.stopping) {
+        throw new RangeError("A loop is already playing.");
+      }
+      const owner = stageForStart(startS);
+
+      const source = context.createBufferSource();
+      source.buffer = stereoBuffer(left, right);
+      source.loop = true;
+      const level = stereoGain(levelGain);
+      // Exact zero until the fade in begins at the loop's start.
+      const fadeIn = stereoGain(0);
+      const fadeOut = stereoGain(1);
+      source.connect(level);
+      level.connect(fadeIn);
+      fadeIn.connect(fadeOut);
+      fadeOut.connect(owner.gain);
+      fadeIn.gain.setValueCurveAtTime(fadeInCurve, startS, fadeInS);
+
+      const started: Loop = {
+        source,
+        levelGain: level,
+        fadeInGain: fadeIn,
+        fadeOutGain: fadeOut,
+        lastLevelGain: levelGain,
+        stopping: false,
+      };
+      loop = started;
+      owner.sources.add(source);
+      source.onended = () => {
+        source.disconnect();
+        level.disconnect();
+        fadeIn.disconnect();
+        fadeOut.disconnect();
+        owner.sources.delete(source);
+        if (loop === started) {
+          loop = null;
+        }
+        if (retiredStages.has(owner) && owner.sources.size === 0) {
+          owner.gain.disconnect();
+          retiredStages.delete(owner);
+        }
+      };
+      source.start(startS);
+    },
+
+    rampLoopLevel(levelGain, startS, endS) {
+      if (loop === null || loop.stopping) {
+        return;
+      }
+      if (!(Number.isFinite(levelGain) && levelGain > 0) || !(endS > startS)) {
+        throw new RangeError(
+          `A level ramp needs a finite gain above 0 and an end after its start, but got ${String(levelGain)} from ${startS} s to ${endS} s.`,
+        );
+      }
+      loop.levelGain.gain.setValueAtTime(loop.lastLevelGain, startS);
+      loop.levelGain.gain.exponentialRampToValueAtTime(levelGain, endS);
+      loop.lastLevelGain = levelGain;
+    },
+
+    stopLoop(durationS) {
+      if (!(Number.isFinite(durationS) && durationS > 0)) {
+        throw new RangeError(
+          `A stop fade must last a finite time above 0 s, but got ${String(durationS)}.`,
+        );
+      }
+      if (loop === null || loop.stopping) {
+        return;
+      }
+      const nowS = context.currentTime;
+      loop.stopping = true;
+      loop.fadeOutGain.gain.setValueCurveAtTime(stopCurve, nowS, durationS);
+      loop.source.stop(nowS + durationS);
     },
 
     fadeToSilence(durationS) {
@@ -149,6 +315,10 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
       stage.fadeEndS = fadeEndS;
       for (const source of stage.sources) {
         source.stop(fadeEndS);
+      }
+      if (loop !== null) {
+        // Its source is one of the stage's and stops with them; no further ramp is wanted.
+        loop.stopping = true;
       }
     },
 

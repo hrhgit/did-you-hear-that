@@ -1,11 +1,21 @@
 import { audioOutputConfig } from "../../config/audio-output-config";
+import { audioSafetyConfig } from "../../config/audio-safety-config";
+import { calibrationMusicConfig } from "../../config/calibration-music-config";
 import type { RandomSource } from "../../config/seeded-random";
 import type { SoundId } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import type { Timer, TimerHandle } from "../../config/timer";
 import { decibelsToGain } from "../synth/decibels-to-gain";
-import type { AudioBackend, TimestampPair } from "./audio-backend";
+import type {
+  AudioBackend,
+  DecodedCalibrationMusic,
+  TimestampPair,
+} from "./audio-backend";
+import { calibrationControlTopDb as musicControlTopDb } from "./calibration-music-top";
 import { calibrationSettingTopDb } from "./calibration-setting-top";
+import { gainToDecibels } from "./gain-to-decibels";
+import { measureCalibrationMusic } from "./measure-calibration-music";
+import { nextCalibrationMusicSettingDb } from "./next-calibration-music-setting";
 import { nextCalibrationSettingDb } from "./next-calibration-setting";
 import type {
   ClampLimit,
@@ -57,6 +67,29 @@ export type CalibrationRepeatOutcome =
       readonly startMs: number;
       readonly endMs: number;
       readonly clampLimit: ClampLimit | null;
+    };
+
+/**
+ * What a calibration plays (audible-start design.md). `loading`: the music is not ready yet;
+ * `music`: the calibration music; `hiss`: the music could not be loaded. The session has the same
+ * type; the output stage may not import it, so it is declared again here, and a type-level test in
+ * `src/session/` checks that the two are the same.
+ */
+export type CalibrationSound = "loading" | "music" | "hiss";
+
+/** Why the calibration music did not start (audible-start design.md, "Playing"). */
+export type CalibrationMusicRefusal =
+  "notRunning" | "notCalibrating" | "notReady" | "busy" | "unsupported";
+
+/** What `startCalibrationMusic` returns. Times are on the audio clock. */
+export type CalibrationMusicOutcome =
+  | { readonly kind: "refused"; readonly reason: CalibrationMusicRefusal }
+  | {
+      readonly kind: "started";
+      /** When the fade in begins. */
+      readonly startMs: number;
+      /** The Played_Setting it starts at: the bottom of the control. */
+      readonly settingDb: number;
     };
 
 /** Why a calibration could not be kept (R16.5, R16.6). */
@@ -140,6 +173,42 @@ export interface AudioOutput {
   timestampPair(): TimestampPair | null;
 }
 
+/**
+ * The calibration music's calls of the Output_Shell (audible-start design.md, "Playing"). Apart
+ * from `AudioOutput`, so that a view of the shell that plays no calibration, as the swapped
+ * repeat's room runner has, need not offer them. `createAudioOutput` gives both.
+ */
+export interface CalibrationMusicOutput {
+  /**
+   * The calibration music (audible-start design.md, "Playing"). `loading` until the music loaded
+   * in the first `activate` that created the context has arrived; then `music`, or `hiss` for the
+   * life of the shell if it could not be loaded or used.
+   */
+  calibrationSound(): CalibrationSound;
+  /** Called on every change of the Calibration_Sound. Returns the function that removes it. */
+  onCalibrationSoundChange(
+    listener: (sound: CalibrationSound) => void,
+  ): () => void;
+  /** The Control_Top of the sound in use: the music's once it is `music`, the hiss's otherwise. */
+  calibrationControlTopDb(): number;
+  /**
+   * Starts the music looping in both ears at the bottom of the control, fading in from exact
+   * zero. While it plays, every other sound is refused `busy`.
+   */
+  startCalibrationMusic(): CalibrationMusicOutcome;
+  /** Where the music's level moves to, a step at a time. NaN changes nothing. */
+  setCalibrationMusicTarget(settingDb: number): void;
+  /** The Played_Setting the music has reached, or null when the music is not playing. */
+  calibrationMusicSettingDb(): number | null;
+  /**
+   * Called with the setting the music has reached, once each step's ramp has ended, at the next
+   * step. Returns the function that removes it.
+   */
+  onCalibrationMusicStep(listener: (settingDb: number) => void): () => void;
+  /** Fades the music to exact zero over the stop fade. Does nothing when it is not playing. */
+  stopCalibrationMusic(): void;
+}
+
 interface SoundToSchedule {
   readonly soundId: SoundId;
   readonly earChoice: EarChoice;
@@ -160,6 +229,21 @@ type ScheduleResult =
       readonly clampLimit: ClampLimit | null;
     };
 
+/** A setting this close above a grid setting still counts as that setting (as D36 of audio-output). */
+const gridToleranceSteps = 1e-9;
+
+/** The calibration music once it has been measured and found usable. */
+interface ReadyMusic {
+  readonly samples: Float32Array;
+  readonly sampleRateHz: number;
+  readonly rmsFraction: number;
+  readonly peakFraction: number;
+  /** The Control_Top with this music. */
+  readonly controlTopDb: number;
+  /** The largest level gain at which the music's peak stays within the ceiling. */
+  readonly ceilingGain: number;
+}
+
 const refused = <Reason extends string>(
   reason: Reason,
 ): { readonly kind: "refused"; readonly reason: Reason } =>
@@ -173,17 +257,32 @@ const refused = <Reason extends string>(
  * schedules the two channels it returns, one sound at a time (D16). It stops all sound on
  * `stopAll` and on every backend event, and suspends or closes the context after the stop fade
  * by the injected timer (D14, D18).
+ *
+ * It also loads, measures and loops the calibration music, the one sound that takes no Sound_Id
+ * and is not limited to the longest-sound duration (audible-start design.md, "The calibration
+ * music"; the exception to audio-safety rule 6). The music is loaded once, in the first
+ * `activate` that creates the context, and the hiss is used for the life of the shell if it
+ * cannot be. It starts at the bottom of the control with the output fade, rises by at most
+ * `calibrationRiseMaxDb` per `calibrationMusicRisePeriodMs` in steps of the injected timer that
+ * never overlap on the audio clock, stays within the ceiling on its measured peak, and stops with
+ * the stop fade. While it plays, and until its stop fade ends, every other sound is `busy`.
  */
 export function createAudioOutput(options: {
   backend: AudioBackend;
   timer: Timer;
-}): AudioOutput {
+}): AudioOutput & CalibrationMusicOutput {
   const { backend, timer } = options;
   const {
     scheduleLeadMs,
     stopFadeMs,
+    outputFadeMs,
     headphoneCheckLevelDb,
     calibrationSettingKeepMinDb,
+    calibrationSettingMinDb,
+    calibrationSettingStepDb,
+    calibrationSettingSpanMinDb,
+    calibrationMusicGainStepMs,
+    calibrationMusicLoadMaxMs,
   } = audioOutputConfig;
   const topSettingDb = calibrationSettingTopDb();
 
@@ -201,6 +300,26 @@ export function createAudioOutput(options: {
   let closeAfterStop = false;
   let activationCount = 0;
   let latestActivation: Promise<ActivateResult> | null = null;
+
+  // The calibration music (audible-start design.md, "Loading" and "Playing").
+  let sound: CalibrationSound = "loading";
+  let music: ReadyMusic | null = null;
+  let musicLoadBegun = false;
+  let musicLoadTimeoutHandle: TimerHandle | null = null;
+  const soundListeners = new Set<(sound: CalibrationSound) => void>();
+  const stepListeners = new Set<(settingDb: number) => void>();
+  let musicPlaying = false;
+  let musicTargetDb = calibrationSettingMinDb;
+  /** The setting the last level ramp ends at, or the start's while no ramp has run. */
+  let musicPlayedDb = calibrationSettingMinDb;
+  /** The setting the last level ramp began at, and when it ends on the audio clock. */
+  let musicRampFromDb = calibrationSettingMinDb;
+  let musicRampEndMs: number | null = null;
+  let musicStepHandle: TimerHandle | null = null;
+  /** The last setting the step listeners heard of. */
+  let musicNotifiedDb = calibrationSettingMinDb;
+  /** The Played_Setting the music last reached in this calibration, or null. */
+  let lastMusicSettingDb: number | null = null;
 
   const notifyAll = <Event>(
     listeners: ReadonlySet<(event: Event) => void>,
@@ -234,8 +353,211 @@ export function createAudioOutput(options: {
   const forgetCalibration = (): void => {
     keptSettingDb = null;
     lastRepeatSettingDb = null;
+    lastMusicSettingDb = null;
     previousGain = { left: null, right: null };
   };
+
+  const setSound = (next: CalibrationSound): void => {
+    if (sound === next) {
+      return;
+    }
+    sound = next;
+    if (next === "hiss") {
+      music = null;
+    }
+    notifyAll(soundListeners, next);
+  };
+
+  const clearMusicLoadTimeout = (): void => {
+    if (musicLoadTimeoutHandle !== null) {
+      timer.clearTimeout(musicLoadTimeoutHandle);
+      musicLoadTimeoutHandle = null;
+    }
+  };
+
+  /** The music measured and checked, or null when it cannot be used (R4.3, R4.4, D9). */
+  const readyMusicOf = (
+    decoded: DecodedCalibrationMusic,
+  ): ReadyMusic | null => {
+    if (
+      !(decoded.samples instanceof Float32Array) ||
+      !Number.isFinite(decoded.sampleRateHz) ||
+      decoded.sampleRateHz <= 0
+    ) {
+      return null;
+    }
+    const measure = measureCalibrationMusic(decoded.samples);
+    if (measure === null) {
+      return null;
+    }
+    const controlTopDb = musicControlTopDb(measure.crestDb);
+    if (
+      controlTopDb <
+      calibrationSettingKeepMinDb + calibrationSettingSpanMinDb
+    ) {
+      return null;
+    }
+    let ceilingGain = audioSafetyConfig.ceilingFraction / measure.peakFraction;
+    // Rounding may put the product a hair above the ceiling; never by any margin.
+    while (
+      ceilingGain * measure.peakFraction >
+      audioSafetyConfig.ceilingFraction
+    ) {
+      ceilingGain *= 1 - Number.EPSILON;
+    }
+    return Object.freeze({
+      samples: decoded.samples,
+      sampleRateHz: decoded.sampleRateHz,
+      rmsFraction: measure.rmsFraction,
+      peakFraction: measure.peakFraction,
+      controlTopDb,
+      ceilingGain,
+    });
+  };
+
+  /** Loads the music once, in the first `activate` that creates the context (R4.1, D4, D10). */
+  const beginMusicLoad = (): void => {
+    if (musicLoadBegun) {
+      return;
+    }
+    musicLoadBegun = true;
+    musicLoadTimeoutHandle = timer.setTimeout(() => {
+      musicLoadTimeoutHandle = null;
+      if (sound === "loading") {
+        setSound("hiss");
+      }
+    }, calibrationMusicLoadMaxMs);
+    let loading: Promise<DecodedCalibrationMusic>;
+    try {
+      loading = backend.loadCalibrationMusic(calibrationMusicConfig.filePath);
+    } catch {
+      clearMusicLoadTimeout();
+      setSound("hiss");
+      return;
+    }
+    loading.then(
+      (decoded) => {
+        // A result after the time-out is dropped (R4.4).
+        if (sound !== "loading") {
+          return;
+        }
+        clearMusicLoadTimeout();
+        const ready = readyMusicOf(decoded);
+        if (ready === null) {
+          setSound("hiss");
+          return;
+        }
+        music = ready;
+        setSound("music");
+      },
+      () => {
+        if (sound !== "loading") {
+          return;
+        }
+        clearMusicLoadTimeout();
+        setSound("hiss");
+      },
+    );
+  };
+
+  /** Music_Level_Gain within the ceiling, logging the ceiling if it ever acts (R5.5). */
+  const musicLevelGain = (ready: ReadyMusic, settingDb: number): number => {
+    const levelGain =
+      (decibelsToGain(settingDb) * soundRulesConfig.referenceRmsFraction) /
+      ready.rmsFraction;
+    if (levelGain <= ready.ceilingGain) {
+      return levelGain;
+    }
+    clampEntries.push(
+      Object.freeze({
+        startMs: backend.currentTimeMs(),
+        soundId: "calibration",
+        earChoice: "both",
+        purpose: "calibration",
+        requestedLevelDb: 0,
+        playedLevelDb: gainToDecibels(ready.ceilingGain / levelGain),
+        clampLimit: "ceiling",
+      }),
+    );
+    return ready.ceilingGain;
+  };
+
+  const musicTopDb = (): number =>
+    sound === "music" && music !== null ? music.controlTopDb : topSettingDb;
+
+  /** The Played_Setting reached: during a level ramp, the lower of its two ends. */
+  const reachedMusicSettingDb = (): number =>
+    musicRampEndMs !== null && backend.currentTimeMs() < musicRampEndMs
+      ? Math.min(musicRampFromDb, musicPlayedDb)
+      : musicPlayedDb;
+
+  const clearMusicStep = (): void => {
+    if (musicStepHandle !== null) {
+      timer.clearTimeout(musicStepHandle);
+      musicStepHandle = null;
+    }
+  };
+
+  /** Ends the music's own state; the caller fades it out. */
+  const endMusic = (): void => {
+    if (!musicPlaying) {
+      return;
+    }
+    lastMusicSettingDb = reachedMusicSettingDb();
+    musicPlaying = false;
+    musicRampEndMs = null;
+    clearMusicStep();
+  };
+
+  /**
+   * One step of the music's level (R5.3, R5.4, D6). It reads the audio clock first; while the last
+   * ramp has not ended there, it waits for the remainder and does nothing else, so that ramps
+   * never overlap.
+   */
+  const musicStep = (): void => {
+    musicStepHandle = null;
+    const ready = music;
+    if (!musicPlaying || ready === null) {
+      return;
+    }
+    const nowMs = backend.currentTimeMs();
+    if (musicRampEndMs !== null && nowMs < musicRampEndMs) {
+      musicStepHandle = timer.setTimeout(musicStep, musicRampEndMs - nowMs);
+      return;
+    }
+    // The last ramp has ended: its setting is reached, and the listeners hear of it now.
+    if (musicNotifiedDb !== musicPlayedDb) {
+      musicNotifiedDb = musicPlayedDb;
+      notifyAll(stepListeners, musicPlayedDb);
+      if (!musicPlaying || musicStepHandle !== null) {
+        // A listener stopped the music or started it again.
+        return;
+      }
+    }
+    const nextDb = nextCalibrationMusicSettingDb(
+      musicPlayedDb,
+      musicTargetDb,
+      ready.controlTopDb,
+    );
+    if (nextDb !== musicPlayedDb) {
+      const endMs = nowMs + calibrationMusicGainStepMs;
+      backend.rampLoopLevel(musicLevelGain(ready, nextDb), nowMs, endMs);
+      musicRampFromDb = musicPlayedDb;
+      musicPlayedDb = nextDb;
+      musicRampEndMs = endMs;
+      lastMusicSettingDb = reachedMusicSettingDb();
+    }
+    musicStepHandle = timer.setTimeout(musicStep, calibrationMusicGainStepMs);
+  };
+
+  /** A setting rounded down to the control's grid. */
+  const onGridDb = (settingDb: number): number =>
+    calibrationSettingMinDb +
+    Math.floor(
+      (settingDb - calibrationSettingMinDb) / calibrationSettingStepDb +
+        gridToleranceSteps,
+    ) *
+      calibrationSettingStepDb;
 
   const resultOfState = (): ActivateResult => {
     switch (state.kind) {
@@ -260,6 +582,7 @@ export function createAudioOutput(options: {
     sampleRateHz: number | null,
   ): ActivateResult => {
     cancelPendingSuspend();
+    endMusic();
     forgetCalibration();
     calibrating = false;
     rateHz = null;
@@ -278,7 +601,9 @@ export function createAudioOutput(options: {
     if (state.kind === "inactive" || state.kind === "unsupported") {
       return;
     }
+    // The fade stops the music's loop too (R5.6).
     backend.fadeToSilence(stopFadeMs);
+    endMusic();
     if (busyEndMs !== null) {
       busyEndMs = Math.min(busyEndMs, backend.currentTimeMs() + stopFadeMs);
     }
@@ -347,6 +672,7 @@ export function createAudioOutput(options: {
     }
     rateHz = sampleRateHz;
     state = Object.freeze({ kind: "starting" });
+    beginMusicLoad();
     activationCount += 1;
     const thisActivation = activationCount;
     const settle = (
@@ -450,7 +776,7 @@ export function createAudioOutput(options: {
     });
   };
 
-  const output: AudioOutput = {
+  const output: AudioOutput & CalibrationMusicOutput = {
     state: () => state,
     activate,
     stopAll: () => stop("control"),
@@ -469,6 +795,11 @@ export function createAudioOutput(options: {
     sampleRateHz: () => rateHz,
 
     beginCalibration() {
+      if (musicPlaying) {
+        backend.stopLoop(stopFadeMs);
+        endMusic();
+        busyEndMs = backend.currentTimeMs() + stopFadeMs;
+      }
       forgetCalibration();
       calibrating = true;
     },
@@ -497,6 +828,7 @@ export function createAudioOutput(options: {
         return result;
       }
       lastRepeatSettingDb = settingDb;
+      lastMusicSettingDb = null;
       return Object.freeze({
         kind: "scheduled",
         settingDb,
@@ -511,15 +843,29 @@ export function createAudioOutput(options: {
       if (!calibrating) {
         return refused("notCalibrating");
       }
-      if (lastRepeatSettingDb === null) {
+      // With the music, the Played_Setting reached, rounded down to the grid (R5.8).
+      const musicSettingDb = musicPlaying
+        ? reachedMusicSettingDb()
+        : lastMusicSettingDb;
+      const settingDb =
+        musicSettingDb !== null
+          ? onGridDb(musicSettingDb)
+          : lastRepeatSettingDb;
+      if (settingDb === null) {
         return refused("noRepeatPlayed");
       }
-      if (lastRepeatSettingDb < calibrationSettingKeepMinDb) {
+      if (settingDb < calibrationSettingKeepMinDb) {
         return refused("systemVolumeHigh");
       }
-      keptSettingDb = lastRepeatSettingDb;
+      if (musicPlaying) {
+        backend.stopLoop(stopFadeMs);
+        endMusic();
+        busyEndMs = backend.currentTimeMs() + stopFadeMs;
+      }
+      keptSettingDb = settingDb;
       calibrating = false;
       lastRepeatSettingDb = null;
+      lastMusicSettingDb = null;
       return Object.freeze({
         kind: "kept",
         settingDb: keptSettingDb,
@@ -548,6 +894,99 @@ export function createAudioOutput(options: {
         purpose: "headphoneCheck",
         random,
       });
+    },
+
+    calibrationSound: () => sound,
+
+    onCalibrationSoundChange(listener) {
+      soundListeners.add(listener);
+      return () => {
+        soundListeners.delete(listener);
+      };
+    },
+
+    calibrationControlTopDb: musicTopDb,
+
+    startCalibrationMusic(): CalibrationMusicOutcome {
+      const stateRefusal = refusalForState();
+      if (stateRefusal !== null) {
+        return refused(
+          stateRefusal === "unsupported" ? "unsupported" : "notRunning",
+        );
+      }
+      if (!calibrating) {
+        return refused("notCalibrating");
+      }
+      const ready = music;
+      if (sound !== "music" || ready === null) {
+        return refused("notReady");
+      }
+      if (ready.sampleRateHz !== rateHz) {
+        // Decoded for a context at another rate, which cannot play it: the hiss from now on.
+        setSound("hiss");
+        return refused("notReady");
+      }
+      if (
+        musicPlaying ||
+        (busyEndMs !== null &&
+          backend.currentTimeMs() + scheduleLeadMs < busyEndMs)
+      ) {
+        return refused("busy");
+      }
+      const startMs = backend.currentTimeMs() + scheduleLeadMs;
+      const settingDb = calibrationSettingMinDb;
+      backend.startLoop(
+        {
+          left: ready.samples,
+          right: ready.samples,
+          sampleRateHz: ready.sampleRateHz,
+        },
+        startMs,
+        musicLevelGain(ready, settingDb),
+        outputFadeMs,
+      );
+      musicPlaying = true;
+      musicTargetDb = settingDb;
+      musicPlayedDb = settingDb;
+      musicRampFromDb = settingDb;
+      musicRampEndMs = null;
+      musicNotifiedDb = settingDb;
+      lastMusicSettingDb = settingDb;
+      lastRepeatSettingDb = null;
+      // Every other sound is refused until the music's stop fade has ended (R5.7).
+      busyEndMs = Number.POSITIVE_INFINITY;
+      clearMusicStep();
+      musicStepHandle = timer.setTimeout(musicStep, calibrationMusicGainStepMs);
+      return Object.freeze({ kind: "started", startMs, settingDb });
+    },
+
+    setCalibrationMusicTarget(settingDb) {
+      if (typeof settingDb !== "number" || Number.isNaN(settingDb)) {
+        return;
+      }
+      musicTargetDb = Math.min(
+        Math.max(settingDb, calibrationSettingMinDb),
+        musicTopDb(),
+      );
+    },
+
+    calibrationMusicSettingDb: () =>
+      musicPlaying ? reachedMusicSettingDb() : null,
+
+    onCalibrationMusicStep(listener) {
+      stepListeners.add(listener);
+      return () => {
+        stepListeners.delete(listener);
+      };
+    },
+
+    stopCalibrationMusic() {
+      if (!musicPlaying) {
+        return;
+      }
+      backend.stopLoop(stopFadeMs);
+      endMusic();
+      busyEndMs = backend.currentTimeMs() + stopFadeMs;
     },
 
     beginRoom() {

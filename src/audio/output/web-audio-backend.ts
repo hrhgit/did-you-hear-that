@@ -1,6 +1,7 @@
 import type {
   AudioBackend,
   BackendEvent,
+  DecodedCalibrationMusic,
   ScheduledChannels,
   TimestampPair,
 } from "./audio-backend";
@@ -27,6 +28,10 @@ type RequestedState = "running" | "suspended" | "closed";
  * `visibilitychange` to hidden gives `hidden`, `pagehide` gives `pageLeft`, the media devices'
  * `devicechange` gives `deviceChanged`, and a context that leaves the running state without
  * being asked to gives `interrupted`.
+ *
+ * It fetches the calibration music from the site's own files, relative to `document.baseURI`,
+ * and decodes it with the context, so its samples are at the rate they are played at
+ * (audible-start design.md, "Loading").
  */
 export function createWebAudioBackend(
   browserWindow: BrowserWindow,
@@ -184,6 +189,56 @@ export function createWebAudioBackend(
 
     fadeToSilence(durationMs) {
       graph?.fadeToSilence(durationMs / 1000);
+    },
+
+    async loadCalibrationMusic(
+      filePath: string,
+    ): Promise<DecodedCalibrationMusic> {
+      const decoder = context;
+      if (decoder === null) {
+        throw new Error("No audio context has been created.");
+      }
+      // Resolved against the page's own address, and refused anywhere else (tech.md).
+      const pageUrl = new URL(document.baseURI);
+      const fileUrl = new URL(filePath, pageUrl);
+      if (fileUrl.origin !== pageUrl.origin) {
+        throw new Error(
+          `The calibration music must come from the site's own files, not ${fileUrl.origin}.`,
+        );
+      }
+      const response = await browserWindow.fetch(fileUrl, {
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `The calibration music could not be fetched: ${response.status}.`,
+        );
+      }
+      const encoded = await response.arrayBuffer();
+      const decoded = await decoder.decodeAudioData(encoded);
+      return Object.freeze({
+        samples: decoded.getChannelData(0).slice(),
+        sampleRateHz: decoded.sampleRate,
+      });
+    },
+
+    startLoop(channels: ScheduledChannels, startMs, levelGain, fadeInMs) {
+      graph?.startLoop(
+        channels.left,
+        channels.right,
+        channels.sampleRateHz,
+        startMs / 1000,
+        levelGain,
+        fadeInMs / 1000,
+      );
+    },
+
+    rampLoopLevel(levelGain, startMs, endMs) {
+      graph?.rampLoopLevel(levelGain, startMs / 1000, endMs / 1000);
+    },
+
+    stopLoop(fadeOutMs) {
+      graph?.stopLoop(fadeOutMs / 1000);
     },
 
     suspend() {

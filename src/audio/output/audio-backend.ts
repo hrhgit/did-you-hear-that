@@ -13,6 +13,12 @@ export interface ScheduledChannels {
   readonly sampleRateHz: number;
 }
 
+/** The calibration music as decoded by the context: its first channel at the context's rate. */
+export interface DecodedCalibrationMusic {
+  readonly samples: Float32Array;
+  readonly sampleRateHz: number;
+}
+
 /** An audio clock time and a page clock time read together (R13.2, D17). */
 export interface TimestampPair {
   readonly audioClockMs: number;
@@ -50,9 +56,41 @@ export interface AudioBackend {
   schedule(channels: ScheduledChannels, startMs: number): void;
   /**
    * Fades every channel to exact zero over `durationMs` with a raised cosine, from now, and stops
-   * every source at the end of the fade (R10.6, D14).
+   * every source at the end of the fade (R10.6, D14). The calibration music's loop is one of them.
    */
   fadeToSilence(durationMs: number): void;
+  /**
+   * Fetches the calibration music from `filePath`, relative to the page's own address, and decodes
+   * it with the context (audible-start design.md, "Loading"). Resolves with a copy of its first
+   * channel at the context's rate. Rejects when there is no context, when the fetch fails or
+   * answers with a status that is not OK, and when the decoding fails. Called at most once by the
+   * shell.
+   */
+  loadCalibrationMusic(filePath: string): Promise<DecodedCalibrationMusic>;
+  /**
+   * Starts the calibration music's loop (audible-start design.md, "Playing"): the two channels,
+   * which the shell makes equal, looping without a break from `startMs` on the audio clock, at the
+   * linear `levelGain`, behind a fade gain that rises from exact zero to 1 over `fadeInMs` with the
+   * raised cosine of the output fade. The loop goes through the stop gain, so `fadeToSilence`
+   * stops it with every other sound. The shell starts at most one loop at a time.
+   */
+  startLoop(
+    channels: ScheduledChannels,
+    startMs: number,
+    levelGain: number,
+    fadeInMs: number,
+  ): void;
+  /**
+   * Ramps the loop's level gain exponentially from its value at `startMs` to `levelGain` at
+   * `endMs`, on the audio clock. The shell never asks for a ramp that begins before the last one
+   * has ended. Does nothing without a loop.
+   */
+  rampLoopLevel(levelGain: number, startMs: number, endMs: number): void;
+  /**
+   * Fades the loop to exact zero over `fadeOutMs` with a raised cosine, from now, and stops its
+   * source at the end of the fade. Does nothing without a loop.
+   */
+  stopLoop(fadeOutMs: number): void;
   /** Suspends the context. A change of state the shell asked for is not an `interrupted` event. */
   suspend(): void;
   /** Closes the context. A change of state the shell asked for is not an `interrupted` event. */
