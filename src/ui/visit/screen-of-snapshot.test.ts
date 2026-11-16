@@ -4,6 +4,7 @@ import { calibrationCopy } from "../../copy/calibration-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
+import { notHeardLines, practiceCopy } from "../../copy/practice-copy";
 import { replayCopy } from "../../copy/replay-copy";
 import { roomCopy } from "../../copy/room-copy";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
@@ -370,7 +371,9 @@ describe("screenOfSnapshot", () => {
       expect(screen.notice).toEqual({
         heading: leavingCopy.pauseHeading,
         line: leavingCopy.pauseLines[reason],
+        moreLines: [],
         button: { label: leavingCopy.goOnButton, action: "resume" },
+        secondButton: null,
       });
     },
   );
@@ -383,10 +386,108 @@ describe("screenOfSnapshot", () => {
       expect(screen.notice).toEqual({
         heading: leavingCopy.exitHeading,
         line: leavingCopy.exitLines[reason],
+        moreLines: [],
         button: { label: leavingCopy.backButton, action: "backToFrontDoor" },
+        secondButton: null,
       });
     },
   );
+
+  describe("in a room's practice (audible-start, light plan)", () => {
+    const practice = (
+      phase: "practice" | "notHeard" | "counting",
+      soundPlaying: boolean,
+    ) => ({
+      phase,
+      soundPlaying,
+      heading: practiceCopy.heading,
+      lines:
+        phase === "counting" ? practiceCopy.countingLines : practiceCopy.lines,
+      soundPlayingLine: practiceCopy.soundPlayingLine,
+      notHeardEars: phase === "notHeard" ? (["left"] as const) : [],
+      notHeardLines: phase === "notHeard" ? notHeardLines(["left"]) : [],
+      tryAgainLabel: practiceCopy.tryAgainLabel,
+      goOnLabel: practiceCopy.goOnLabel,
+    });
+
+    it("shows the practice beside the house, and says a sound is playing only while one plays", () => {
+      const quiet = screenOfSnapshot({
+        ...base("room", 2),
+        room: stairs,
+        practice: practice("practice", false),
+      });
+      expect(quiet.sheet).toBeNull();
+      expect(quiet.answersShown).toBe(true);
+      expect(quiet.practice).toEqual({
+        heading: practiceCopy.heading,
+        lines: practiceCopy.lines,
+        soundPlayingLine: null,
+      });
+      const playing = screenOfSnapshot({
+        ...base("room", 2),
+        room: stairs,
+        practice: practice("practice", true),
+      });
+      expect(playing.practice?.soundPlayingLine).toBe(
+        practiceCopy.soundPlayingLine,
+      );
+      expect(playing.practice?.soundPlayingLine).not.toMatch(/left|right/i);
+    });
+
+    it("keeps one still line through the counting", () => {
+      const counting = screenOfSnapshot({
+        ...base("room", 2),
+        room: stairs,
+        practice: practice("counting", true),
+      });
+      expect(counting.practice).toEqual({
+        heading: null,
+        lines: practiceCopy.countingLines,
+        soundPlayingLine: null,
+      });
+      expect(
+        screenOfSnapshot({
+          ...base("room", 2),
+          room: stairs,
+          practice: practice("counting", false),
+        }),
+      ).toEqual(counting);
+    });
+
+    it("offers to try again or to go on when a practice sound was not heard", () => {
+      const screen = screenOfSnapshot({
+        ...base("room", 2),
+        room: stairs,
+        pause: { reason: "practiceNotHeard" },
+        practice: practice("notHeard", false),
+      });
+      const [first, ...rest] = notHeardLines(["left"]);
+      expect(screen.sheet).toBe("notice");
+      expect(screen.answersShown).toBe(false);
+      expect(screen.practice).toBeNull();
+      expect(screen.notice).toEqual({
+        heading: practiceCopy.heading,
+        line: first,
+        moreLines: rest,
+        button: { label: practiceCopy.tryAgainLabel, action: "resume" },
+        secondButton: {
+          label: practiceCopy.goOnLabel,
+          action: "goOnWithoutPractice",
+        },
+      });
+    });
+
+    it("has no practice outside a room", () => {
+      expect(
+        screenOfSnapshot({
+          ...base("betweenRooms", 1),
+          canProceed: true,
+          finishedRoom: corridor,
+          nextRoom: nursery,
+        }).practice,
+      ).toBeNull();
+    });
+  });
 
   describe("in the replay of missed sounds", () => {
     it("asks before the first sound, with the stop control and both ways on", () => {
@@ -497,7 +598,9 @@ describe("screenOfSnapshot", () => {
         expect(screen.notice).toEqual({
           heading: leavingCopy.pauseHeading,
           line: replayCopy.pauseLines[reason],
+          moreLines: [],
           button: { label: replayCopy.resumeButton, action: "resume" },
+          secondButton: null,
         });
       },
     );
@@ -792,7 +895,9 @@ describe("screenOfSnapshot", () => {
       expect(screen.notice).toEqual({
         heading: leavingCopy.pauseHeading,
         line: swappedRepeatCopy.pauseLines.visitor,
+        moreLines: [],
         button: { label: "Go on with this room", action: "resume" },
+        secondButton: null,
       });
       expect(screen.stopShown).toBe(true);
       expect(screen.pauseShown).toBe(false);
@@ -854,7 +959,9 @@ describe("screenOfSnapshot", () => {
     expect(screen.notice).toEqual({
       heading: visitCopy.cannotPlayHeading,
       line: outputStateCopy.unsupportedLines.monoOutput,
+      moreLines: [],
       button: null,
+      secondButton: null,
     });
   });
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { practiceCopy } from "../../copy/practice-copy";
 import { roomCopy } from "../../copy/room-copy";
 import type {
+  PracticeSoundScoredEvent,
   ReplaySound,
   ScoredVisitTrial,
   SwappedTrialScoredEvent,
@@ -185,5 +187,61 @@ describe("reactionOfEvent", () => {
       reactionOfEvent({ kind: "roomStarted", room, attempt: 1 }),
     ).toBeNull();
     expect(reactionOfEvent({ kind: "roomFinished", room })).toBeNull();
+  });
+});
+
+describe("reactionOfEvent for a practice sound (audible-start, light plan)", () => {
+  const practiceEvent = (
+    ear: "left" | "right",
+    outcome: "caught" | "missed" | "wrongSide",
+  ): PracticeSoundScoredEvent => ({
+    kind: "practiceSoundScored",
+    room,
+    trial: {
+      order: 1,
+      roomIndex: 1,
+      attempt: 1,
+      round: 1,
+      practiceNumber: 1,
+      ear,
+      requestedLevelDb: 0,
+      playedLevelDb: 0,
+      clampLimit: null,
+      gapBeforeMs: 2000,
+      presentedAtMs: 40_000,
+      windowStartMs: 40_050,
+      status: "scored",
+      response:
+        outcome === "caught"
+          ? ear
+          : outcome === "wrongSide"
+            ? ear === "left"
+              ? "right"
+              : "left"
+            : "none",
+      outcome,
+      answeredAtMs: outcome === "missed" ? null : 40_900,
+      responseTimeMs: outcome === "missed" ? null : 850,
+      scoredAtMs: 41_000,
+    },
+    reaction: outcome === "caught" ? "ripple" : "none",
+    line: outcome === "caught" ? practiceCopy.caughtLine : null,
+  });
+
+  it("ripples from the side of a caught practice sound, with its line", () => {
+    expect(reactionOfEvent(practiceEvent("right", "caught"))).toEqual({
+      kind: "ripple",
+      side: "right",
+      line: practiceCopy.caughtLine,
+    });
+  });
+
+  it("shows nothing for a practice sound missed or answered on the other side", () => {
+    expect(reactionOfEvent(practiceEvent("left", "missed"))).toBeNull();
+    expect(reactionOfEvent(practiceEvent("left", "wrongSide"))).toBeNull();
+  });
+
+  it("shows nothing when the counting starts", () => {
+    expect(reactionOfEvent({ kind: "countingStarted", room })).toBeNull();
   });
 });

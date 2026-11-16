@@ -276,6 +276,56 @@
 }
 
 /*
+ * A room's practice, and the still line through its counting: under the bar, over the sky of the
+ * drawing, so the house and both answers stay in view. The line said while a practice sound plays
+ * keeps its height when empty, so the words above it never move.
+ */
+.visit-practice {
+  position: absolute;
+  inset: var(--visit-bar) 0 auto;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 1.5rem 1.5rem;
+  text-align: center;
+  background: linear-gradient(to bottom, var(--color-night) 50%, transparent);
+  pointer-events: none;
+}
+
+.visit-practice p {
+  max-width: 34rem;
+  margin: 0;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.visit-practice-heading {
+  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
+  font-style: italic;
+}
+
+.visit-practice-lines p {
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+}
+
+.visit-practice-heading + .visit-practice-lines {
+  margin-top: 0.35rem;
+}
+
+.visit-practice-sound {
+  min-height: 1.4em;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* A notice with more to say than one line: the further lines follow it, a little quieter. */
+.visit-notice-lines p {
+  color: var(--color-graphite);
+}
+
+/*
  * The replay of missed sounds. While the sounds play, the house stays in full view and gives up
  * the strip under it: what is said of the playing sound, the count of each side under the side it
  * belongs to, and the way out. Every block has a fixed height, so nothing jumps from one sound to
@@ -881,6 +931,15 @@ p.visit-swap-turn-back {
     flex-direction: column;
     align-items: flex-start;
     width: calc(50% - 22vh);
+    background: none;
+  }
+
+  .visit-practice {
+    inset: var(--visit-bar) auto auto 0;
+    align-items: flex-start;
+    width: calc(50% - 22vh);
+    padding: 0 1rem;
+    text-align: left;
     background: none;
   }
 

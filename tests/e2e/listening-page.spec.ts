@@ -22,8 +22,12 @@ const address = `http://localhost:${devServer.port}${devServer.listeningPagePath
 const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 
 const { ceilingFraction } = audioSafetyConfig;
-const { calibrationSettingMinDb, calibrationSettingKeepMinDb, stopFadeMs } =
-  audioOutputConfig;
+const {
+  calibrationSettingMinDb,
+  calibrationSettingKeepMinDb,
+  outputFadeMs,
+  stopFadeMs,
+} = audioOutputConfig;
 const { referenceRmsFraction } = soundRulesConfig;
 
 /** The level tolerance of the ghost-sounds spec, the one R21.2 asks for. */
@@ -56,6 +60,12 @@ interface ProbeState {
   buffers: { sampleRate: number; channels: (Float32Array | null)[] }[];
   bufferRecords: Map<AudioBuffer, number>;
   started: { when: number; bufferIndex: number }[];
+  /**
+   * The calibration music's loops as they started: the buffer and the value of the level gain the
+   * loop's source is connected to (audible-start design.md, "Playing").
+   */
+  loops: { bufferIndex: number; levelGain: number }[];
+  loopTargets: WeakMap<AudioBufferSourceNode, AudioNode>;
   endedCount: number;
   stopped: { when: number }[];
   curves: {
@@ -81,6 +91,8 @@ function installListeningProbes(): void {
     buffers: [],
     bufferRecords: new Map(),
     started: [],
+    loops: [],
+    loopTargets: new WeakMap(),
     endedCount: 0,
     stopped: [],
     curves: [],
@@ -138,11 +150,37 @@ function installListeningProbes(): void {
     const bufferIndex =
       this.buffer === null ? -1 : (probe.bufferRecords.get(this.buffer) ?? -1);
     probe.started.push({ when: when ?? 0, bufferIndex });
+    if (this.loop) {
+      const target = probe.loopTargets.get(this);
+      probe.loops.push({
+        bufferIndex,
+        levelGain: target instanceof GainNode ? target.gain.value : Number.NaN,
+      });
+    }
     this.addEventListener("ended", () => {
       probe.endedCount += 1;
     });
     originalStart.call(this, when, offset, duration);
   };
+
+  // A source's first connection is to the gain that sets its level, for the music's loop.
+  const originalConnect = AudioBufferSourceNode.prototype.connect as (
+    this: AudioBufferSourceNode,
+    destination: AudioNode,
+    output?: number,
+    input?: number,
+  ) => AudioNode;
+  AudioBufferSourceNode.prototype.connect = function (
+    this: AudioBufferSourceNode,
+    destination: AudioNode,
+    output?: number,
+    input?: number,
+  ): AudioNode {
+    if (!probe.loopTargets.has(this)) {
+      probe.loopTargets.set(this, destination);
+    }
+    return originalConnect.call(this, destination, output, input);
+  } as typeof AudioBufferSourceNode.prototype.connect;
 
   const originalStop = AudioBufferSourceNode.prototype.stop;
   AudioBufferSourceNode.prototype.stop = function (
@@ -248,6 +286,7 @@ async function probeCounts(page: Page) {
       contextStates: probe.contexts.map((context) => context.state),
       buffers: probe.buffers.length,
       started: probe.started.length,
+      loops: [...probe.loops],
       ended: probe.endedCount,
       stopped: [...probe.stopped],
       curves: [...probe.curves],
@@ -347,7 +386,7 @@ test.describe(`listening page on the development server (${address})`, () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("hands Web Audio only buffers within the ceiling, the first a quiet calibration repeat, one-ear sounds with an exactly silent other channel (R21.2)", async ({
+  test("hands Web Audio only buffers within the ceiling, the first the calibration music at the bottom of the control, one-ear sounds with an exactly silent other channel (R21.2)", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -391,37 +430,42 @@ test.describe(`listening page on the development server (${address})`, () => {
           .contexts[0]?.sampleRate,
     );
 
-    // The first buffer is a calibration repeat at the bottom of the control, in both ears.
+    // The first buffer is the calibration music's loop, in both ears, starting at the bottom of
+    // the control: the music is handed over as it is, and its level gain brings its RMS there
+    // (audible-start Q34, "Playing").
     const first = buffers[0];
     expect(first?.channelsEqual).toBe(true);
-    const expectedFirstRms =
-      referenceRmsFraction * 10 ** (calibrationSettingMinDb / 20);
-    for (const channel of first?.channels ?? []) {
-      expect(
-        rmsDifferenceDb(channel?.rms ?? 0, expectedFirstRms),
-      ).toBeLessThanOrEqual(rmsToleranceDb);
-    }
+    expect(counts.loops).toHaveLength(1);
+    expectLoopAtBottom(buffers, counts.loops[0]);
 
-    // No sample of any buffer is beyond the ceiling; every buffer is at the context's rate.
+    // No sample that reaches the ears is beyond the ceiling; every buffer is at the context's
+    // rate. The music's loop is handed over as it was decoded and its level gain sets what plays,
+    // so its peak is checked as it plays, through that gain. Its fade in only rises from 0 to 1.
+    // Every other buffer is checked as it is handed over.
+    const loopGains = new Map(
+      counts.loops.map((loop) => [loop.bufferIndex, loop.levelGain]),
+    );
     for (const [index, buffer] of buffers.entries()) {
       expect(buffer.sampleRate, `buffer ${index}`).toBe(contextRate);
       expect(buffer.channels, `buffer ${index}`).toHaveLength(2);
+      const playedGain = loopGains.get(index) ?? 1;
       for (const channel of buffer.channels) {
         expect(channel?.anyNotFinite, `buffer ${index}`).toBe(false);
         expect(
-          channel?.peakAbs ?? Number.NaN,
+          (channel?.peakAbs ?? Number.NaN) * playedGain,
           `buffer ${index}`,
         ).toBeLessThanOrEqual(ceilingFraction);
       }
     }
 
-    // The calibration repeats come first, in both ears; then the one-ear sounds, in order.
+    // The music's loop comes first, in both ears, and is the only such buffer; then the one-ear
+    // sounds, in order.
     const oneEar = buffers.filter((buffer) => !buffer.channelsEqual);
-    const repeats = buffers.slice(0, buffers.length - oneEar.length);
-    expect(repeats.length).toBeGreaterThanOrEqual(5);
-    for (const repeat of repeats) {
-      expect(repeat.channelsEqual).toBe(true);
-      expect(repeat.channels[0]?.allPositiveZero).toBe(false);
+    const calibration = buffers.slice(0, buffers.length - oneEar.length);
+    expect(calibration).toHaveLength(1);
+    for (const sound of calibration) {
+      expect(sound.channelsEqual).toBe(true);
+      expect(sound.channels[0]?.allPositiveZero).toBe(false);
     }
     expect(oneEar).toHaveLength(expectedSides.length);
     for (const [index, buffer] of oneEar.entries()) {
@@ -610,14 +654,11 @@ test.describe(`listening page on the development server (${address})`, () => {
 
     await part(page, "calibration-start").click();
     await waitForStarts(page, 2);
+    // The calibration starts again at the bottom of the control.
     const buffers = await bufferSummaries(page);
-    const restartRepeat = buffers[buffers.length - 1];
-    expect(
-      rmsDifferenceDb(
-        restartRepeat?.channels[0]?.rms ?? 0,
-        referenceRmsFraction * 10 ** (calibrationSettingMinDb / 20),
-      ),
-    ).toBeLessThanOrEqual(rmsToleranceDb);
+    const { loops } = await probeCounts(page);
+    expect(loops).toHaveLength(2);
+    expectLoopAtBottom(buffers, loops[1]);
     expect(pageErrors).toEqual([]);
   });
 
@@ -678,9 +719,33 @@ test.describe(`listening page on the development server (${address})`, () => {
 });
 
 /**
+ * Checks that a loop of the calibration music starts at the bottom of the control: its buffer
+ * holds the music in both ears, and its RMS times its level gain is the RMS of the bottom setting,
+ * to the tolerance of R21.2.
+ */
+function expectLoopAtBottom(
+  buffers: readonly BufferSummary[],
+  loop: { bufferIndex: number; levelGain: number } | undefined,
+): void {
+  expect(loop).toBeDefined();
+  const buffer = buffers[loop?.bufferIndex ?? -1];
+  expect(buffer?.channelsEqual).toBe(true);
+  const levelGain = loop?.levelGain ?? Number.NaN;
+  expect(levelGain).toBeGreaterThan(0);
+  const expectedRms =
+    referenceRmsFraction * 10 ** (calibrationSettingMinDb / 20);
+  for (const channel of buffer?.channels ?? []) {
+    expect(
+      rmsDifferenceDb((channel?.rms ?? 0) * levelGain, expectedRms),
+    ).toBeLessThanOrEqual(rmsToleranceDb);
+  }
+}
+
+/**
  * Checks what a stop did to the live page: one stop fade from 1 to exactly 0 over `stopFadeMs`,
  * every source stopped by the end of the fade, the context suspended, and no new source for a
- * while, although the calibration loop would otherwise have played the next repeat.
+ * while. The calibration music's loop has its own fade in from exact zero to 1 over
+ * `outputFadeMs`; it is the only other curve, and it never raises the stop gain.
  */
 async function expectStopped(page: Page, timeAtStop: number): Promise<void> {
   await page.waitForFunction(
@@ -689,8 +754,16 @@ async function expectStopped(page: Page, timeAtStop: number): Promise<void> {
         .contexts[0]?.state === "suspended",
   );
   const counts = await probeCounts(page);
-  expect(counts.curves).toHaveLength(1);
-  const [curve] = counts.curves;
+  const fadeIns = counts.curves.filter(
+    (curve) => curve.first === 0 && curve.last === 1,
+  );
+  expect(fadeIns).toHaveLength(counts.loops.length);
+  for (const fadeIn of fadeIns) {
+    expect(fadeIn.duration).toBeCloseTo(outputFadeMs / 1000, 9);
+  }
+  const stops = counts.curves.filter((curve) => !fadeIns.includes(curve));
+  expect(stops).toHaveLength(1);
+  const [curve] = stops;
   expect(curve?.first).toBe(1);
   expect(curve?.last).toBe(0);
   expect(curve?.duration).toBeCloseTo(stopFadeMs / 1000, 9);

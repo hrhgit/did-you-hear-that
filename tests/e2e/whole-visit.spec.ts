@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { practiceCopy } from "../../src/copy/practice-copy";
 import { replayCopy } from "../../src/copy/replay-copy";
 import { resultPageCopy } from "../../src/copy/result-page-copy";
 import { roomCopy } from "../../src/copy/room-copy";
@@ -40,17 +41,22 @@ test("walks a short visit that nobody answers, through the replay of every misse
   const record = await openPage(page, address);
   await enterFirstRoom(page);
 
-  // Nobody answers. Between two rooms the house waits for a press; after the last room it asks
-  // whether to play the missed sounds again.
+  // Nobody answers. Each room's practice is then not heard, and the house asks whether to try
+  // again; this goes on without it. Between two rooms the house waits for a press; after the last
+  // room it asks whether to play the missed sounds again.
   const replayHeading = heading(page, replayCopy.heading);
   const goOn = page.locator(".visit-rest").getByRole("button", {
     name: roomCopy.goOnButton,
     exact: true,
   });
+  const goOnWithoutPractice = button(page, practiceCopy.goOnLabel);
   const startedAt = Date.now();
   await expect(async () => {
     if (await goOn.isVisible()) {
       await goOn.click();
+    }
+    if (await goOnWithoutPractice.isVisible()) {
+      await goOnWithoutPractice.click();
     }
     await expect(replayHeading).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 12 * 60_000, intervals: [1_000] });

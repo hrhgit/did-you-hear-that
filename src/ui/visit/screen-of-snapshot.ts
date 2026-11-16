@@ -33,8 +33,12 @@ export type SheetName =
   | "swap"
   | "result";
 
-/** What the button of the notice sheet does. `proceed` is the flow's own next step. */
-export type NoticeAction = "resume" | "backToFrontDoor" | "proceed";
+/**
+ * What a button of the notice sheet does. `proceed` is the flow's own next step;
+ * `goOnWithoutPractice` starts a room's counting after a practice sound was not heard.
+ */
+export type NoticeAction =
+  "resume" | "backToFrontDoor" | "proceed" | "goOnWithoutPractice";
 
 /** The calibration sheet. */
 export interface CalibrationScreen {
@@ -74,11 +78,32 @@ export interface HeadphoneCheckScreen {
 export interface NoticeScreen {
   readonly heading: string;
   readonly line: string;
+  /** Lines said after the first, quieter, in order. Empty for most notices. */
+  readonly moreLines: readonly string[];
   /** The button's label and what it does, or null where nothing more can happen. */
   readonly button: {
     readonly label: string;
     readonly action: NoticeAction;
   } | null;
+  /** A second choice beside the button, or null. */
+  readonly secondButton: {
+    readonly label: string;
+    readonly action: NoticeAction;
+  } | null;
+}
+
+/**
+ * The words of a room's practice and counting, beside the house, which stays in full view
+ * (audible-start, light plan). The line that a sound is playing is shown only for a practice
+ * sound, which counts for nothing, and never names its side. Through the counting the line that it
+ * counts stands still, so it changes with no trial.
+ */
+export interface PracticeScreen {
+  /** Over the practice, or null once the room counts. */
+  readonly heading: string | null;
+  readonly lines: readonly string[];
+  /** Said while a practice sound plays, or null. */
+  readonly soundPlayingLine: string | null;
 }
 
 /**
@@ -198,6 +223,8 @@ export interface Screen {
   readonly notice: NoticeScreen | null;
   readonly replay: ReplayScreen | null;
   readonly swap: SwapScreen | null;
+  /** The words of the practice and the counting in a room, or null. */
+  readonly practice: PracticeScreen | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
@@ -400,6 +427,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     notice: null,
     replay: null,
     swap: null,
+    practice: null,
     soundNotStartedLine: snapshot.activationRefused
       ? visitCopy.soundNotStartedLine
       : null,
@@ -418,7 +446,9 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         notice: {
           heading: leavingCopy.pauseHeading,
           line: snapshot.replay.pauseLine,
+          moreLines: [],
           button: { label: snapshot.replay.resumeLabel, action: "resume" },
+          secondButton: null,
         },
       };
     }
@@ -430,7 +460,34 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         notice: {
           heading: leavingCopy.pauseHeading,
           line: repeatRoom.pauseLine,
+          moreLines: [],
           button: { label: repeatRoom.resumeLabel, action: "resume" },
+          secondButton: null,
+        },
+      };
+    }
+    if (
+      snapshot.stage === "room" &&
+      snapshot.pause.reason === "practiceNotHeard" &&
+      snapshot.practice !== undefined &&
+      snapshot.practice.notHeardLines.length > 0
+    ) {
+      // A practice sound was not caught: the house says on which side, and offers to practise
+      // again or to go on to the counting.
+      const { practice } = snapshot;
+      const [first = "", ...rest] = practice.notHeardLines;
+      return {
+        ...base,
+        sheet: "notice",
+        notice: {
+          heading: practice.heading ?? leavingCopy.pauseHeading,
+          line: first,
+          moreLines: rest,
+          button: { label: practice.tryAgainLabel, action: "resume" },
+          secondButton: {
+            label: practice.goOnLabel,
+            action: "goOnWithoutPractice",
+          },
         },
       };
     }
@@ -440,7 +497,9 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
       notice: {
         heading: leavingCopy.pauseHeading,
         line: leavingCopy.pauseLines[snapshot.pause.reason],
+        moreLines: [],
         button: { label: leavingCopy.goOnButton, action: "resume" },
+        secondButton: null,
       },
     };
   }
@@ -508,6 +567,22 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         ...base,
         sheet: null,
         room: roomLabelOf(snapshot, snapshot.room),
+        practice:
+          snapshot.practice === undefined
+            ? null
+            : {
+                heading:
+                  snapshot.practice.phase === "counting"
+                    ? null
+                    : snapshot.practice.heading,
+                lines: snapshot.practice.lines,
+                // Never while counting: the line would tell when a counted sound plays.
+                soundPlayingLine:
+                  snapshot.practice.soundPlaying &&
+                  snapshot.practice.phase !== "counting"
+                    ? snapshot.practice.soundPlayingLine
+                    : null,
+              },
       };
     case "betweenRooms":
       return {
@@ -565,7 +640,9 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         notice: {
           heading: leavingCopy.exitHeading,
           line: leavingCopy.exitLines[snapshot.reason],
+          moreLines: [],
           button: { label: leavingCopy.backButton, action: "backToFrontDoor" },
+          secondButton: null,
         },
       };
     case "unsupported":
@@ -575,7 +652,9 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         notice: {
           heading: visitCopy.cannotPlayHeading,
           line: outputStateCopy.unsupportedLines[snapshot.reason],
+          moreLines: [],
           button: null,
+          secondButton: null,
         },
       };
   }

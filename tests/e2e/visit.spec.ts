@@ -4,6 +4,7 @@ import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { calibrationCopy } from "../../src/copy/calibration-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
+import { notHeardLines, practiceCopy } from "../../src/copy/practice-copy";
 import {
   roomCopy,
   roomNames,
@@ -37,8 +38,10 @@ if (server === undefined) {
 }
 const address = `http://localhost:${String(server.port)}${server.basePath}`;
 
+// A room's answer button. Its name begins with the side's word, which the headphone check's
+// answer buttons share, so it is found by its own class.
 const answerButton = (page: Page, side: "left" | "right") =>
-  page.getByRole("button", { name: roomCopy.answers[side].hint });
+  page.locator(`.visit-answer-${side}`);
 
 async function expectNoSeriousAccessibilityProblem(page: Page): Promise<void> {
   // Whatever is fading in or out is checked once it has arrived or gone.
@@ -147,13 +150,57 @@ test.describe(`a visit at ${address}`, () => {
       });
     }).toPass({ timeout: 90_000, intervals: [50] });
 
+    // The room starts with its practice, where a catch has a line of its own.
     const line = (await caption.textContent()) ?? "";
     expect(
       line === roomCopy.noSoundLine ||
+        line === practiceCopy.caughtLine ||
         line.startsWith("You caught it on your "),
       `the house said: ${line}`,
     ).toBe(true);
     expect(record.pageErrors).toEqual([]);
+  });
+
+  test("practises before it counts, and offers to try again or go on when nobody answers", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const record = await openPage(page, address);
+    await enterFirstRoom(page);
+
+    // The practice is said beside the house, and the answers stay in view.
+    const practice = page.locator(".visit-practice");
+    await expect(practice).toBeVisible();
+    await expect(practice).toContainText(practiceCopy.lines[0] ?? "");
+    await expect(answerButton(page, "left")).toBeVisible();
+
+    // Nobody answers, so neither side catches the practice sound, even a little louder.
+    const notice = heading(page, practiceCopy.heading);
+    const [firstLine] = notHeardLines(["left", "right"]);
+    await expect(notice).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(firstLine ?? "")).toBeVisible();
+    await expect(answerButton(page, "left")).toBeHidden();
+    await expect(button(page, practiceCopy.tryAgainLabel)).toBeVisible();
+    await expect(button(page, practiceCopy.goOnLabel)).toBeVisible();
+    await expectNoSeriousAccessibilityProblem(page);
+
+    // Trying again plays the practice once more.
+    await button(page, practiceCopy.tryAgainLabel).click();
+    await expect(notice).toBeHidden();
+    await expect(practice).toContainText(practiceCopy.lines[0] ?? "");
+    await expect(notice).toBeVisible({ timeout: 90_000 });
+
+    // Going on starts the counting, and the practice says only that it now counts.
+    await button(page, practiceCopy.goOnLabel).click();
+    await expect(notice).toBeHidden();
+    await expect(practice).toHaveText(practiceCopy.countingLines.join(""));
+    await expect(page.getByText(roomProgressLine(1, 3))).toBeVisible();
+    await expect(answerButton(page, "left")).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    expect(record, "requests to other origins and uncaught errors").toEqual({
+      otherOriginRequests: [],
+      pageErrors: [],
+    });
   });
 
   test("pauses and goes on, then stops, leaves and comes back to the front door", async ({

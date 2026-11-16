@@ -29,6 +29,7 @@ export type ScreenReaction =
  * page stays as it was. After the rooms, a sound that is played again gives a ripple as it
  * starts. By then every answer has been given, so the ripple tells nothing that could be used.
  * The room of a swapped repeat is a room like every other: only its scored trials give a reaction.
+ * A practice sound before a room counts gives a ripple only when it is caught.
  */
 export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
   if (event.kind === "replaySoundStarted") {
@@ -52,6 +53,14 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
       return { kind: "say", line };
     }
     return null;
+  }
+  if (event.kind === "practiceSoundScored") {
+    // A caught practice sound ripples from its side, with its own line. Nothing of the practice
+    // counts, and the side is the one the visitor just answered.
+    const { trial, reaction, line } = event;
+    return reaction === "ripple" && line !== null
+      ? { kind: "ripple", side: trial.ear, line }
+      : null;
   }
   if (event.kind !== "trialScored") {
     return null;

@@ -169,11 +169,49 @@ export function createScreenView(options: {
     const sheet = page.notice;
     setText(sheet.heading, notice.heading);
     setText(sheet.line, notice.line);
+    showLines(sheet.moreLines, notice.moreLines, "notice");
     sheet.button.hidden = notice.button === null;
     if (notice.button !== null) {
       setText(sheet.button, notice.button.label);
     }
+    sheet.secondButton.hidden = notice.secondButton === null;
+    if (notice.secondButton !== null) {
+      setText(sheet.secondButton, notice.secondButton.label);
+    }
     setLine(sheet.statusLine, screen.soundNotStartedLine);
+  };
+
+  /** The lines shown in each holder, so that a holder is filled again only when they change. */
+  const linesShown = new Map<string, string>();
+  const showLines = (
+    holder: HTMLElement,
+    lines: readonly string[],
+    key: string,
+  ): void => {
+    const joined = lines.join("\n");
+    if (linesShown.get(key) === joined) {
+      return;
+    }
+    linesShown.set(key, joined);
+    holder.replaceChildren(
+      ...lines.map((line) => {
+        const paragraph = doc.createElement("p");
+        paragraph.textContent = line;
+        return paragraph;
+      }),
+    );
+  };
+
+  const showPractice = (screen: Screen): void => {
+    const practice = screen.practice;
+    const panel = page.practice;
+    panel.element.hidden = practice === null;
+    if (practice === null) {
+      return;
+    }
+    setLine(panel.heading, practice.heading);
+    showLines(panel.lines, practice.lines, "practice");
+    setLine(panel.soundLine, practice.soundPlayingLine);
   };
 
   const showReplay = (screen: Screen): void => {
@@ -406,6 +444,7 @@ export function createScreenView(options: {
       showCalibration(screen);
       showHeadphoneCheck(screen);
       showNotice(screen);
+      showPractice(screen);
       showReplay(screen);
       showSwap(screen);
       for (const [name, sheet] of Object.entries(sheets)) {

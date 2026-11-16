@@ -204,6 +204,14 @@ export function startVisit(
       flow.proceed();
     }
   });
+  press(page.notice.secondButton, () => {
+    if (
+      screenView.current()?.notice?.secondButton?.action ===
+      "goOnWithoutPractice"
+    ) {
+      flow.goOnWithoutPractice();
+    }
+  });
 
   listenForAnswers({
     doc,

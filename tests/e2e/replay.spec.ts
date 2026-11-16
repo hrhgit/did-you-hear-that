@@ -30,9 +30,11 @@ let replay: SimulatedReplay;
 let nothingMissed: SimulatedReplay;
 
 test.beforeAll(async () => {
+  // Inside the playable range: with the calibration these visits keep, every room's search floor
+  // is −35 dB (audible-start, the playable floor), and this visitor misses more than 20 sounds.
   replay = await simulatedReplay("quick", {
     kind: "thresholds",
-    leftDb: -35,
+    leftDb: -30,
     rightDb: -20,
   });
   nothingMissed = await simulatedReplay("quick", {

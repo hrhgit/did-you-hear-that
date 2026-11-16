@@ -24,19 +24,22 @@ const address = `http://localhost:${String(devServer.port)}${devServer.resultShe
 
 /** A visitor whose right ear needs louder sounds than the left, with even headphones. */
 let earVisit: SimulatedRepeatedResult;
-/** A visitor with even ears, whose right earpiece plays 25 dB quieter than the left. */
+/** A visitor with even ears, whose right earpiece plays 15 dB quieter than the left. */
 let earpieceVisit: SimulatedRepeatedResult;
 
 test.beforeAll(async () => {
   earVisit = await simulatedRepeatedResult(
     "quick",
-    { kind: "thresholds", leftDb: -45, rightDb: -20 },
+    // Inside the playable range, whose floor is −35 dB with this calibration (audible-start).
+    { kind: "thresholds", leftDb: -30, rightDb: -15 },
     { floor: { kind: "firstOffered" }, swaps: true, imbalanceDb: 0 },
   );
   earpieceVisit = await simulatedRepeatedResult(
     "quick",
-    { kind: "thresholds", leftDb: -30, rightDb: -30 },
-    { floor: { kind: "lastOffered" }, swaps: true, imbalanceDb: 25 },
+    // Inside the playable range with the louder earpiece too: at −30 the left ear, on the louder
+    // earpiece, would hear the floor itself and offer no repeat (audible-start).
+    { kind: "thresholds", leftDb: -25, rightDb: -25 },
+    { floor: { kind: "lastOffered" }, swaps: true, imbalanceDb: 15 },
   );
 });
 

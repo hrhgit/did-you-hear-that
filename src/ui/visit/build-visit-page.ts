@@ -78,8 +78,11 @@ export interface VisitPage {
   readonly rules: Sheet & { readonly enterButton: HTMLButtonElement };
   readonly notice: Sheet & {
     readonly line: HTMLElement;
+    /** Holds one paragraph for each line said after the first. */
+    readonly moreLines: HTMLElement;
     readonly statusLine: HTMLElement;
     readonly button: HTMLButtonElement;
+    readonly secondButton: HTMLButtonElement;
   };
   /** The replay of missed sounds, before its sounds and after them. */
   readonly replay: Sheet & {
@@ -117,6 +120,15 @@ export interface VisitPage {
     /** What the last press came to. Stands under the buttons it is about, so none of them moves. */
     readonly statusLine: HTMLElement;
     readonly backButton: HTMLButtonElement;
+  };
+  /** A room's practice and counting: words beside the house, which stays in full view. */
+  readonly practice: {
+    readonly element: HTMLElement;
+    readonly heading: HTMLElement;
+    /** Holds one paragraph for each line. */
+    readonly lines: HTMLElement;
+    /** Said while a practice sound plays. */
+    readonly soundLine: HTMLElement;
   };
   /** The replay while its sounds play: words beside the house, which stays in full view. */
   readonly replaying: {
@@ -344,13 +356,30 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   // One sheet for everything else the house has to say: paused, stopped, ended, cannot play.
   const noticeHeading = heading(leavingCopy.pauseHeading);
   const noticeLine = make("p", "visit-voice");
+  const noticeMoreLines = make("div", "visit-notice-lines");
   const noticeStatus = status();
   const noticeButton = button(leavingCopy.goOnButton, "visit-button-lit");
+  const noticeSecondButton = button("");
+  noticeSecondButton.hidden = true;
   const notice = sheet("notice", noticeHeading, [
     noticeLine,
-    controls([noticeButton]),
+    noticeMoreLines,
+    controls([noticeButton, noticeSecondButton]),
     noticeStatus,
   ]);
+
+  // A room's practice and counting. Its words come with each snapshot, so they start empty.
+  const practiceHeading = make("p", "visit-practice-heading");
+  const practiceLines = make("div", "visit-practice-lines");
+  const practiceSound = make("p", "visit-practice-sound");
+  practiceSound.setAttribute("role", "status");
+  practiceSound.setAttribute("aria-live", "polite");
+  const practice = make("div", "visit-practice", [
+    practiceHeading,
+    practiceLines,
+    practiceSound,
+  ]);
+  practice.hidden = true;
 
   // The replay of missed sounds. Its words come with each snapshot, so they start empty.
   const replayHeading = heading(replayCopy.heading);
@@ -464,6 +493,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     answerButtons.right,
     caption,
     rest,
+    practice,
     replaying,
     frontDoor,
     calibration,
@@ -524,8 +554,16 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       element: notice,
       heading: noticeHeading,
       line: noticeLine,
+      moreLines: noticeMoreLines,
       statusLine: noticeStatus,
       button: noticeButton,
+      secondButton: noticeSecondButton,
+    },
+    practice: {
+      element: practice,
+      heading: practiceHeading,
+      lines: practiceLines,
+      soundLine: practiceSound,
     },
     replay: {
       element: replay,
