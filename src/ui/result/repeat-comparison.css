@@ -1,0 +1,202 @@
+/*
+ * A floor's first run and its swapped repeat, side by side: the room drawn twice, one strip above
+ * the other, and between them one line for each earpiece that runs from where it sat the first
+ * time to where it sat the second. The two lines cross, and that crossing is the swap. The block
+ * stands at the end of a repeat and beside its floor on the result, so this sheet needs no other
+ * style sheet of the result and comes after them.
+ */
+.repeat-comparison {
+  margin: 1.5rem 0 0;
+  text-align: left;
+}
+
+.repeat-comparison p {
+  max-width: 31rem;
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+.repeat-comparison .repeat-heading {
+  margin: 0 0 0.9rem;
+  font-size: 1.1875rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.repeat-figure {
+  max-width: 23rem;
+  margin: 0 0 1.25rem;
+}
+
+.repeat-drawing {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 340 / 318;
+}
+
+.repeat-room {
+  fill: none;
+  stroke: var(--color-moonlight);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.repeat-lamp {
+  fill: none;
+  stroke: var(--color-moonlight);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.repeat-bulb {
+  fill: var(--color-lamp);
+}
+
+.repeat-light-near {
+  stop-color: var(--color-lamp);
+  stop-opacity: 0.58;
+}
+
+.repeat-light-far {
+  stop-color: var(--color-lamp);
+  stop-opacity: 0.2;
+}
+
+/* Where a wing's light ends. */
+.repeat-reach {
+  fill: none;
+  stroke: var(--color-lamp);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* A wing with no level to draw. */
+.repeat-doubt-line {
+  fill: none;
+  stroke: var(--color-graphite);
+  stroke-width: 1;
+  stroke-opacity: 0.75;
+}
+
+.repeat-ear-label {
+  fill: var(--color-graphite);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.repeat-run-label {
+  fill: var(--color-moonlight);
+  font-size: 14px;
+}
+
+.repeat-earpiece-label {
+  fill: var(--color-graphite);
+  font-size: 13.5px;
+}
+
+/* One earpiece from the first run to the repeat. Dashed: it is a path, not a wall. */
+.repeat-crossing {
+  fill: none;
+  stroke: var(--color-moonlight);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 5;
+}
+
+.repeat-crossing-end {
+  fill: var(--color-moonlight);
+}
+
+/* What the two runs come to. Ruled at the left in lamp colour, like the house's other notices. */
+.repeat-outcome {
+  margin: 0 0 1.1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-lamp);
+}
+
+.repeat-comparison p.repeat-outcome-label {
+  margin-bottom: 0.4rem;
+  font-size: 1.1875rem;
+  line-height: 1.35;
+}
+
+.repeat-outcome p + p {
+  margin-top: 0.5rem;
+}
+
+.repeat-runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repeat-run-words {
+  padding: 0.9rem 0 1rem;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.repeat-run-words:last-child {
+  padding-bottom: 0;
+}
+
+.repeat-comparison p.repeat-run-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+.repeat-run-difference {
+  color: var(--color-graphite);
+  font-variant-numeric: lining-nums;
+}
+
+.repeat-wings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.5rem;
+}
+
+.repeat-wing-side {
+  display: block;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+}
+
+/* The ear and the earpiece on it, set side by side with a short drawn stroke between them. */
+.repeat-wing-earpiece::before {
+  content: "";
+  display: inline-block;
+  width: 0.9rem;
+  margin: 0 0.45rem 0.3em;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.repeat-comparison .repeat-wing p + p {
+  margin-top: 0.35rem;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+}
+
+/* A narrow screen: the earpiece stands under the ear, so neither breaks in the middle. */
+@media (max-width: 30rem) {
+  .repeat-wing-earpiece {
+    display: block;
+  }
+
+  .repeat-wing-earpiece::before {
+    content: none;
+  }
+}
+
+/* A very narrow screen: one wing under the other. */
+@media (max-width: 22rem) {
+  .repeat-wings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
