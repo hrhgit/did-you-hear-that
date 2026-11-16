@@ -6,7 +6,7 @@
  *
  * The same server serves the development result sheet, `result-sheet.html`, which
  * `result-page.spec.ts` opens, and the development replay sheet, `replay-sheet.html`, which
- * `replay.spec.ts` opens. The build holds neither of those pages.
+ * `replay.spec.ts` and `swapped-repeat.spec.ts` open. The build holds neither of those pages.
  */
 export const devServer: Readonly<{
   port: number;
