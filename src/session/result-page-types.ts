@@ -342,6 +342,12 @@ export interface PictureFloor {
   readonly swappedRepeat: SwappedRepeatOffer | null;
   /** This floor's swapped repeat beside its first run, or null when the visit has none for it. */
   readonly repeat: SwappedRepeatComparison | null;
+  /**
+   * The Floor_Line naming each side whose result is `betterThanFloor`, or `found` at most one
+   * `upwardStepDb` above the floor's Search_Floor; null when no side is (audible-start R22). Also
+   * the last sentence of `description` when there is one.
+   */
+  readonly playableFloorLine: string | null;
   /** Everything about this floor in words, for a visitor who cannot see the picture. */
   readonly description: string;
 }

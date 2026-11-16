@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { limitsStatement } from "../copy/limits-statement";
+import { playableFloorLine } from "../copy/result-lines";
 import { resultPageCopy } from "../copy/result-page-copy";
 import { lightDepthFraction } from "./light-depth-fraction";
 import type {
@@ -715,6 +716,78 @@ describe("resultPicture", () => {
       expect(picture.floors[0]?.left.lightDepthFraction).not.toBe(
         live(visit).floors[0]?.left.lightDepthFraction,
       );
+    });
+  });
+
+  describe("the line at the quietest the house can play (audible-start R22)", () => {
+    /** A quick visit whose first floor has these results, its attempt with this Search_Floor. */
+    const firstFloor = (
+      left: LoggedEarResult,
+      right: LoggedEarResult,
+      searchFloorDb?: number,
+    ): VisitToSave => {
+      const visit = visitOf("quick", [
+        { left, right },
+        { left: found(-40), right: found(-40) },
+        { left: found(-40), right: found(-40) },
+      ]);
+      if (searchFloorDb === undefined) {
+        return visit;
+      }
+      const visitLog: VisitLog = {
+        ...visit.visitLog,
+        roomAttempts: visit.visitLog.roomAttempts.map((attempt) => ({
+          ...attempt,
+          searchFloorDb,
+        })),
+      };
+      return { visitLog, summary: summarizeVisit(visitLog) };
+    };
+
+    it("names a side better than the floor, and ends the floor's description with it", () => {
+      const floor = live(firstFloor(betterThanFloor, worseThanCap)).floors[0];
+      expect(floor?.playableFloorLine).toBe(playableFloorLine(["left"]));
+      expect(floor?.playableFloorLine).toMatch(/^On your left side, /);
+      expect(
+        floor?.description.endsWith(` ${String(floor.playableFloorLine)}`),
+      ).toBe(true);
+    });
+
+    it("names a side found at most one upward step above the Search_Floor, and no side above that", () => {
+      const step = hearingMethodConfig.upwardStepDb;
+      const floor = live(
+        firstFloor(found(-30 + step), found(-30 + step + 1), -30),
+      ).floors[0];
+      expect(floor?.playableFloorLine).toBe(playableFloorLine(["left"]));
+      const both = live(firstFloor(found(-30), betterThanFloor, -30)).floors[0];
+      expect(both?.playableFloorLine).toMatch(/^On both sides, /);
+    });
+
+    it("is null when no side reached it, and leaves the description as it was", () => {
+      const floor = live(firstFloor(found(-20), unreliable("trialLimit"), -30))
+        .floors[0];
+      expect(floor?.playableFloorLine).toBeNull();
+      expect(floor?.description).not.toContain(
+        "as quiet as the house can play",
+      );
+      expect(
+        live(visitOf("quick", mixedQuick)).floors[0]?.playableFloorLine,
+      ).toBeNull();
+    });
+
+    it("uses the saved visit's quietest level for a floor saved without a Search_Floor", () => {
+      // Found at -68 dB: within a step of the live config's floor, far above the saved -80 dB.
+      const visit = firstFloor(found(-68), worseThanCap);
+      expect(
+        hearingMethodConfig.floorDb + hearingMethodConfig.upwardStepDb,
+      ).toBeGreaterThanOrEqual(-68);
+      expect(live(visit).floors[0]?.playableFloorLine).toBe(
+        playableFloorLine(["left"]),
+      );
+      expect(
+        saved(savedVisitOf(visit, { floorDb: -80 })).floors[0]
+          ?.playableFloorLine,
+      ).toBeNull();
     });
   });
 

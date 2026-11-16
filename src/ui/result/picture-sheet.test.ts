@@ -36,6 +36,7 @@ const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
   differenceLine: "difference line",
   swappedRepeat: null,
   repeat: null,
+  playableFloorLine: null,
   description: `description of the ${roomId}`,
 });
 

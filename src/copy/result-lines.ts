@@ -1,5 +1,10 @@
 import type { GhostSoundId } from "../config/sound-id";
-import { pitchLabel, relativeLevelLabel, roomNames } from "./room-copy";
+import {
+  pitchLabel,
+  relativeLevelLabel,
+  roomNames,
+  type AnswerSide,
+} from "./room-copy";
 
 // Every sentence of the result page about a floor, a wing and the false alarms (result-page
 // design.md, "`src/copy/result-lines.ts`"). Decibels are rounded to whole numbers for every line,
@@ -231,4 +236,25 @@ export function floorDescription(
     );
   }
   return `${roomNames[roomId]}, ${pitchLabel(frequencyHz)}. Left: ${wingDescription(left)} Right: ${wingDescription(right)} ${differenceLine(rightMinusLeftDb)}`;
+}
+
+/**
+ * The Floor_Line (audible-start R22): said under a floor when a side's result reached the quietest
+ * the house can play there, so that the visitor knows the house stopped, not their hearing. It
+ * names each such side, or null for none. It never asks what headphones the visitor wears
+ * (R22.4).
+ */
+export function playableFloorLine(sides: readonly AnswerSide[]): string | null {
+  const left = sides.includes("left");
+  const right = sides.includes("right");
+  if (!left && !right) {
+    return null;
+  }
+  const where =
+    left && right
+      ? "On both sides"
+      : left
+        ? "On your left side"
+        : "On your right side";
+  return `${where}, this is as quiet as the house can play through these headphones at this volume. Wireless headphones in particular stop around here.`;
 }

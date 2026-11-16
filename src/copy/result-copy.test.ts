@@ -24,6 +24,7 @@ import {
   differenceLine,
   falseAlarmLine,
   floorDescription,
+  playableFloorLine,
   swappedRepeatLine,
   unreliableReasonLine,
   visitNoticeLine,
@@ -775,6 +776,31 @@ describe("the output of every function for the representative inputs", () => {
           text,
         ).toBe(true);
       }
+    }
+  });
+});
+
+describe("playableFloorLine (audible-start R22)", () => {
+  it("names each side, in either order, and is null for none", () => {
+    expect(playableFloorLine([])).toBeNull();
+    expect(playableFloorLine(["left"])).toMatch(/^On your left side, /);
+    expect(playableFloorLine(["right"])).toMatch(/^On your right side, /);
+    expect(playableFloorLine(["right", "left"])).toBe(
+      playableFloorLine(["left", "right"]),
+    );
+    expect(playableFloorLine(["left", "right"])).toMatch(/^On both sides, /);
+  });
+
+  it("says the house stops there at this volume, names wireless headphones, and asks nothing", () => {
+    for (const sides of [["left"], ["right"], ["left", "right"]] as const) {
+      const line = playableFloorLine(sides) ?? "";
+      expect(line).toContain(
+        "as quiet as the house can play through these headphones at this volume",
+      );
+      expect(line).toContain("Wireless headphones");
+      expect(line).not.toMatch(/Bluetooth|\?/);
+      expect(findBannedTerms(line, bannedTerms)).toEqual([]);
+      expect(line.trim()).toBe(line);
     }
   });
 });

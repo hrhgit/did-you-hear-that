@@ -13,6 +13,7 @@ import {
   differenceLine,
   falseAlarmLine,
   floorDescription,
+  playableFloorLine,
   swappedRepeatLine,
   unreliableReasonLine,
   visitNoticeLine,
@@ -160,6 +161,18 @@ function floor(
     searchCapDb: roomSummary.searchCapDb,
     floorDb: roomSummary.searchFloorDb ?? floorDb,
   };
+  const floorLine = playableFloorLine(
+    (["left", "right"] as const).filter((ear) =>
+      atPlayableFloor(roomSummary[ear], scale.floorDb),
+    ),
+  );
+  const description = floorDescription(
+    room.roomId,
+    room.frequencyHz,
+    words(roomSummary.left),
+    words(roomSummary.right),
+    rightMinusLeftDb,
+  );
   return {
     room: {
       roomIndex: room.roomIndex,
@@ -188,14 +201,26 @@ function floor(
       repeatRun === null
         ? null
         : swappedRepeatComparison(roomSummary, repeatRun, floorDb),
-    description: floorDescription(
-      room.roomId,
-      room.frequencyHz,
-      words(roomSummary.left),
-      words(roomSummary.right),
-      rightMinusLeftDb,
-    ),
+    playableFloorLine: floorLine,
+    description:
+      floorLine === null ? description : `${description} ${floorLine}`,
   };
+}
+
+/**
+ * Whether a side's result reached the quietest the house can play on its floor: better than the
+ * floor, or found at most one upward step above the Search_Floor `searchFloorDb` (audible-start
+ * R22.1; for a floor saved before that spec, the visit's `floorDb`, R22.2).
+ */
+function atPlayableFloor(
+  result: VisitEarResult,
+  searchFloorDb: number,
+): boolean {
+  return (
+    result.state === "betterThanFloor" ||
+    (result.state === "found" &&
+      result.thresholdDb <= searchFloorDb + hearingMethodConfig.upwardStepDb)
+  );
 }
 
 /**

@@ -307,6 +307,11 @@ export function createResultView(options: ResultViewOptions): ResultView {
         make("span", "result-difference-label", [floor.differenceLabel]),
       ]),
     ]);
+    if (floor.playableFloorLine !== null) {
+      item.append(
+        make("p", "visit-quiet result-floor-line", [floor.playableFloorLine]),
+      );
+    }
     item.dataset.room = floor.room.roomId;
     const offer = floor.swappedRepeat;
     if (offer !== null) {
