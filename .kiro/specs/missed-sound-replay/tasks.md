@@ -10,9 +10,9 @@ The project owner builds the screen by hand in the same working tree. No task cr
 
 Q6 is decided: the owner takes option (a). Before task 1 runs, the owner changes the `MissedSoundReplaySnapshot` literal in `src/ui/visit/screen-of-snapshot.test.ts` so that it compiles with and without the field `replay`. That is why task 1 can make `replay` a required field. No task touches that file. If `npm run typecheck` fails on it after task 1, stop and report it to the owner.
 
-Q1, Q2, Q3, Q4, Q5 and Q7 stay open. Their values (`replaySoundsMaxCount` 20, `replayGapMs` 400, wrong sides not replayed, the running count over the whole visit so far, the room top as the cap, the run counts and the 45 second budget) are PROPOSED, NOT APPROVED. Describe them so wherever a task writes about them, and never change one to make a check hold. Never change a steering value. Visit-flow Q1 to Q4 stay open as well.
+Q1, Q2, Q3, Q4 and Q5 stay open. Their values (`replaySoundsMaxCount` 20, `replayGapMs` 400, wrong sides not replayed, the running count over the whole visit so far, the room top as the cap) are PROPOSED, NOT APPROVED. Q7 is decided: on 2026-11-15 the owner kept the run counts and set the budget to 90 seconds; until then it was 45 seconds, proposed. Describe them so wherever a task writes about them, and never change one to make a check hold. Never change a steering value. Visit-flow Q1 to Q4 stay open as well.
 
-Run counts of the properties are those of "Run counts and time" in `design.md`. No task lowers a run count. If this spec's property files take more than 45 seconds together, stop, write the times in `design.md` under "Run counts and time", and report them to the owner.
+Run counts of the properties are those of "Run counts and time" in `design.md`. No task lowers a run count. If this spec's property files take more than 90 seconds together (45 seconds before the owner's decision of 2026-11-15), stop, write the times in `design.md` under "Run counts and time", and report them to the owner.
 
 If a property finds a counterexample, add it to `tests/properties/missed-sound-replay-regressions.test.ts` as a named case with `it.fails`, as "Counterexamples" in `design.md` describes, write it in `design.md` under "Counterexamples", and stop the task there and report it, so that the case and the fix are committed separately.
 
@@ -104,10 +104,10 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 4.4, 4.6, 6.1, 6.2, 7.1 to 7.3, 11.2 to 11.5, 11.7 to 11.9, 12.1 to 12.3, 13.1, 13.2, 15.3, 15.4, 15.6, 17.3, 17.4, 17.5_
   - _Decisions: D8, D9, D15, D16, D18, D26_
 
-- [ ] 11. Write the properties of the counts and the wording
+- [x] 11. Write the properties of the counts and the wording
   - Create `tests/properties/missed-sound-replay-text.ts` as in "Correctness properties": every string of a view and an event with its place, and the allowed forms of CP9.
   - Create the files for CP2 and CP9 with the run counts of "Run counts and time", each with a timeout of 120 seconds. CP2's parser of the count lines knows the English number words independently of `countWords`, and CP2 checks the views of harness runs as well as `replayCounts`.
-  - Run `npm test` three times and write the time of each new property file under "Run counts and time". If this spec's property files take more than 45 seconds together, stop and report the times.
+  - Run `npm test` three times and write the time of each new property file under "Run counts and time". If this spec's property files take more than 90 seconds together, stop and report the times. The budget was 45 seconds when the task ran; the owner set it to 90 seconds on 2026-11-15 (Q7).
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 8.1 to 8.5, 16.3, 16.4, 17.2, 17.3, 17.4, 17.5_
   - _Decisions: D11, D12, D25, D26_
@@ -122,11 +122,11 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 1.5, 6.3, 6.4, 6.5, 9.2, 10.2, 10.3, 11.1 to 11.9, 12.1, 12.4, 13.3, 13.4, 13.5, 14.2, 15.1_
   - _Decisions: D8, D13, D14, D15, D17, D18, D19, D20, D21_
 
-- [ ] 13. Play the replay in whole visits
+- [x] 13. Play the replay in whole visits
   - Change `tests/listeners/simulated-visitor.ts` and `tests/properties/visit-flow-arbitraries.ts` by an optional replay behaviour (watch to the end, skip at a time, stop at a time, or the disturbances of a replay script), drawn by a new arbitrary that only this spec's files use. Without it the visitor calls `proceed` after a rest as now, and the existing arbitraries draw as before.
   - Create `tests/properties/missed-sound-replay-simulated-visits.test.ts`: a quick and a full visit played to the result through `tests/properties/visit-flow-harness.ts` and the simulated visitor, with fixed seeds and the worst-case renderers through `vi.mock`, the replay watched to its end, each playing exactly its plan with the Purpose `replay` and reaching `result` with the same log object; and the visit of CP4 with a listener who catches everything, through the flow.
   - Create the file for CP10 with its run count and a timeout of 120 seconds, including CP6's check that the seed drawn on entering equals `replayRenderSeed(log)` and that the draws before it equal the logged engine seeds.
-  - Run `npm test` three times and write the time of the new property file and of the simulated visits under "Run counts and time". If this spec's property files take more than 45 seconds together, stop and report the times.
+  - Run `npm test` three times and write the time of the new property file and of the simulated visits under "Run counts and time". If this spec's property files take more than 90 seconds together, stop and report the times. The budget was 45 seconds when the task ran; the owner set it to 90 seconds on 2026-11-15 (Q7).
   - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
   - _Requirements: 1.1, 7.1, 9.1, 9.2, 13.3, 13.4, 14.2, 15.1, 17.3, 17.4, 17.5, 17.6_
   - _Decisions: D2, D13, D18, D26_
@@ -142,12 +142,20 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 19.4_
   - _Decisions: D27_
 
-- [ ] 15. Final checks
+- [x] 15. Final checks
   - Run `npm run typecheck`, `npm test` (three times), `npm run lint`, `npm run check:copy` and `npm run build`.
   - Search the new and changed files in `src/session/` and `src/copy/` for numbers that set a level, a wait, a count or a limit outside `src/config`, apart from 0, 1 and the bound of the number words (R2.6). Confirm that the stand-in view of task 1 is gone.
   - Run `git status` and `git log` for this spec's commits: no file under `src/ui/`, `tests/e2e/`, `tests/properties/screen-leak/`, `src/engine/`, `src/audio/`, `src/storage/` or `.kiro/steering/`, nor any CSS or HTML file, `src/main.ts`, the root `README.md` or `src/session/result-page-types.ts` was changed by this spec; every file changed is in "Files"; and the diff of `src/session/visit-flow-types.ts` since before task 1 only adds, apart from the two rewritten lines of task 1.
-  - Review the work against `requirements.md` and the coverage table of `design.md`, requirement by requirement, and check R18 against "What this spec leaves to other specs". Confirm that Q6 is described as the owner's option (a), that Q1 to Q5 and Q7 and their values are still described as PROPOSED, NOT APPROVED, and that the times under "Run counts and time" add up to at most 45 seconds.
+  - Review the work against `requirements.md` and the coverage table of `design.md`, requirement by requirement, and check R18 against "What this spec leaves to other specs". Confirm that Q6 is described as the owner's option (a) and Q7 as the owner's decision of 2026-11-15, that Q1 to Q5 and their values are still described as PROPOSED, NOT APPROVED, and that the times under "Run counts and time" with every property file present add up to at most 90 seconds.
   - Report everything that does not fit, with the requirement or the row it concerns. Fix nothing in this task.
   - Check: every command above.
   - _Requirements: 1.4, 2.4, 2.6, 15.2, 15.7, 17.4, 18.1, 18.2, 19.1 to 19.4_
   - _Decisions: D27_
+
+- [x] 16. Do not count a first sound refused busy
+  - Change `src/session/create-missed-sound-replay.ts`: a `busy` refusal that comes before the first replayed sound of this replay has started is asked for again one gap later and is not counted towards the refusals that end the replay; it neither adds to nor resets the count. Every other refusal counts as before, a `busy` refusal after the first sound has started included (R12.3, D9). No number is added.
+  - Add examples to `src/session/create-missed-sound-replay.test.ts` and `src/session/create-visit-flow.test.ts`; the existing examples of three refusals in a row use refusals that count. In CP8, state the rule in the count of refusals and add one gap per uncounted refusal to the bound of a finished replay, and change nothing else. Add regression 4 to `tests/properties/missed-sound-replay-regressions.test.ts`.
+  - Correct R12.3; in `design.md` D9, D16, Q2, the controller's pseudo-code and the paragraph after it, the row "One sound at a time" of the limits table, the row of `busy` under "Error handling", CP8 and "Counterexamples"; and the sentence of `src/session/README.md` on a first sound refused busy. D9 says that the owner's coordinator chose this fix, not the owner.
+  - Check: `npm run typecheck`, `npm test`, `npm run lint`, `npm run check:copy`.
+  - _Requirements: 12.3_
+  - _Decisions: D9, D16_

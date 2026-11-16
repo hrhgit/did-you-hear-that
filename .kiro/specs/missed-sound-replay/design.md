@@ -421,7 +421,7 @@ The file has its own `deepFreeze`, as `visit-flow-config.ts` does. The test chec
 
 Existing values the replay reads and does not change: `hearingMethodConfig.capRelativeToAnchorDb` (15 dB, the anchor cap), `audioOutputConfig.scheduleLeadMs` (50 ms, to put a sound's start on the page clock when the backend gives no timestamp pair), `visitFlowConfig.refusedPlaysInARowMaxCount` (3, D16). The output stage reads its own limits (see "Which limits of the output stage act on a replayed sound").
 
-No other number is added. The bound below which `countWords` writes words (999) is a limit of English number words, not a tunable value, and affects no sound, wait or count (D12). The run counts and the time budget of the property files are test settings, stated in "Run counts and time" and put to the owner in Q7.
+No other number is added. The bound below which `countWords` writes words (999) is a limit of English number words, not a tunable value, and affects no sound, wait or count (D12). The run counts and the time budget of the property files are test settings, stated in "Run counts and time" and decided by the owner on 2026-11-15 in Q7.
 
 ## The replay plan
 
@@ -612,6 +612,7 @@ play():
   refused notRunning     → notRunning(the shell's stop reason, or "interrupted" when it gives none or `control`,
                                       as the room runner does); return
   refused notCalibrated  → end("deviceChanged"); return
+  refused busy, current null → ask after replayGapMs  (the same sound again; not counted, D9)
   refused anything else  → refusalsInARow += 1
                            refusalsInARow ≥ refusedPlaysInARowMaxCount → end("soundRefused")
                            otherwise ask after replayGapMs           (the same sound again)
@@ -637,7 +638,7 @@ end(e):    clear handle; underWay = false; phase = finished; ending = e
 cancel():  clear handle; underWay = false
 ```
 
-One timer at a time, so one sound at a time: the next request comes only after the end of the sound before, which also keeps the output stage from refusing it `busy` (audio-output D16). A sound's start and end are put on the page clock as the room runner puts a trial's window start (`soundWindowStartMs`, visit-flow D3), so the ripple appears when the sound starts and the next sound waits for the end of this one plus the gap.
+One timer at a time, so one sound at a time: the next request comes only after the end of the sound before, so no replayed sound is refused `busy` because of the replayed sound before it (audio-output D16). The first sound can still be refused `busy`, because the stage begins at the last answer while the last room's sound may still play; that refusal is asked for again one gap later and is not counted (D9). A sound's start and end are put on the page clock as the room runner puts a trial's window start (`soundWindowStartMs`, visit-flow D3), so the ripple appears when the sound starts and the next sound waits for the end of this one plus the gap.
 
 `replaySoundOf(planned, outcome, soundCount)` in `replay-sound.ts` gives the frozen `ReplaySound`: the planned fields; `position`; `positionLabel(position, soundCount)`; `roomNames[room.roomId]`; `pitchLabel(room.frequencyHz)`; `playedLevelDb` and `clampLimit` from the outcome; `capChangedLevel = heldByCap || outcome.clampLimit !== null`; and `rippleLabel(ear, frequencyHz, missedLevelDb, capChangedLevel)`. When the output stage names a clamp anyway, which audio-output R9.4 rules out at or below the room top, the label says the cap changed the level and the view gives the played level, so the label is never wrong about what played.
 
@@ -743,7 +744,7 @@ From `create-audio-output.ts`, `prepare-playback.ts` and `render-playable-buffer
 | Rise limit, one upward step (5 dB) per ear per Room_Span | step 7 | Does not act | The shell passes `previousAppliedGain: null` for the Purpose `replay` (audio-output R11.5, D15), because rule 4 makes the replay "the one place a larger rise is allowed" |
 | Ceiling, 0.25 of full scale, the whole sound turned down, then checked on every sample | steps 8 and 11 | Acts; never lowers a replayed sound | At or below the room top the ceiling never acts (audio-output R9.4). The output stage's CP6 checks that on the search's 5 dB grid up to the search's cap; a replay may ask for the exact top, so this spec's CP7 checks it there. If it ever acted, the outcome would name `ceiling` and the label would say the cap changed the level |
 | Exact zero on the other channel | step 10 | Acts | Rule 5 |
-| One sound at a time (`busy`) | `schedule` | Acts | The controller asks for the next sound only after the end of the last plus the gap (D9) |
+| One sound at a time (`busy`) | `schedule` | Acts | The controller asks for the next sound only after the end of the last plus the gap, so a replayed sound never finds the one before it still playing. The first replayed sound can find the last room's sound still playing, because the stage begins at the last answer; a `busy` refusal before the first replayed sound has started is asked for again one gap later and is not counted towards the refusals that end the replay (D9, R12.3) |
 | Previous gain recorded per ear | `schedule` | Acts | A replay's gain becomes the previous gain of its ear (audio-output R11.1). The flow called `beginRoom` on entering the stage, and the swapped repeat must call it before its room (R18) |
 | Clamp_Log | `schedule` | Acts | A clamped replay is logged with the Purpose `replay` (audio-output D22) |
 | Stop fade of 20 ms to exact zero; suspend or close after it | `stop` | Acts | Rule 7. `stopAll` from stop and skip, and every page event |
@@ -892,7 +893,7 @@ A replayed sound every 1.6 s or so means ripples overlap: one lasts 2880 ms (`ri
 | A left page | `result`, with the replay cancelled. The shell has stopped and will close its context |
 | `play` refused `notRunning` | As a stop report with the shell's reason, or `interrupted` when the shell gives none or `control` (R12.1) |
 | `play` refused `notCalibrated` | `finished` with `deviceChanged` (R12.2) |
-| `play` refused `busy`, a render refusal or a preparation refusal | The same sound again one gap later; three in a row end the replay with `soundRefused` (R12.3, D16) |
+| `play` refused `busy`, a render refusal or a preparation refusal | The same sound again one gap later; three in a row end the replay with `soundRefused` (R12.3, D16). A `busy` refusal before the first replayed sound has started is not counted (D9) |
 | The output stage lowers a replayed sound (audio-output R9.4 rules it out; handled all the same) | The played level and the clamp are in the view, and the label says the cap changed the level |
 | An unsupported report from `activate` inside `startReplay` or `resume` | As in every stage (visit-flow R15.1): the `unsupported` stage, and the visit is dropped. Not changed by this spec; listed under "Found in the existing code" at the end of "Questions for the project owner" |
 | A copy function given a value that does not fit | `RangeError`, as the existing copy functions do. The view never gives one for a plan and counts made from a log the flow produced |
@@ -947,8 +948,8 @@ CP7 checks the same of what was played.
 - while a pause holds, no `play` is made, `canSkip` and `canProceed` are false, and the view's `pauseLine` is the line of its reason;
 - after a `resume` that the shell accepts, the next `play` is the sound that was cut, or the next one when none was under way, one gap after the pause ended;
 - a `deviceChanged` report in `announcing` or `playing` gives `finished` with `deviceChanged` and no `play` after it;
-- after a refusal other than `notRunning` and `notCalibrated`, the next `play` is the same sound one gap later; the third refusal in a row gives `finished` with `soundRefused`; a scheduled play resets the count;
-- a run with no ending event and every pause resumed reaches `finished` within `start delay + Σ pauses + Σ over the sounds of (replayGapMs + scheduleLeadMs + 1500 ms) × refusedPlaysInARowMaxCount`;
+- after a refusal other than `notRunning` and `notCalibrated`, the next `play` is the same sound one gap later; the third refusal in a row gives `finished` with `soundRefused`; a scheduled play resets the count; a `busy` refusal that comes before the first replayed sound of the run has started is not counted and neither adds to nor resets the count (D9);
+- a run with no ending event and every pause resumed reaches `finished` within `start delay + Σ pauses + Σ over the sounds of (replayGapMs + scheduleLeadMs + 1500 ms) × refusedPlaysInARowMaxCount`, plus one `replayGapMs` for each `busy` refusal that is not counted;
 - every `finished` view has the end line of its ending and the counts of the whole log;
 - the log's `pauses` and every other list of the log are unchanged.
 
@@ -971,7 +972,7 @@ The controller-level properties (CP4 to CP9) use the replay harness: a real outp
 
 ### Run counts and time
 
-PROPOSED, NOT APPROVED (Q7):
+The owner's decision of 2026-11-15 (Q7):
 
 | Property | Runs |
 |---|---|
@@ -986,9 +987,9 @@ PROPOSED, NOT APPROVED (Q7):
 | CP9 | 500 |
 | CP10 | 30 |
 
-The property files of this spec must take at most 45 seconds together on the project machine (PROPOSED, NOT APPROVED, Q7). Estimate, not measured: CP1 to CP3 and the view part of CP9 are pure and take a second or two each. A controller run renders up to 20 worst-case sounds at 22050 Hz and measures their fades, a few milliseconds a sound, so CP4 to CP9 take roughly 3 to 8 seconds each. A whole visit of the visit flow's harness took about 130 to 150 ms in the result page's simulated visits, so CP10 takes about 5 to 10 seconds with its replays. The tasks that write the properties run `npm test` three times and write the time of each file here. If the files take more than the budget together, the task stops and reports the times to the owner; it changes no run count.
+The property files of this spec must take at most 90 seconds together on the project machine, the owner's decision of 2026-11-15 (Q7): the slowest of three runs of `npm test` with every property file of this spec present, plus about three tenths, rounded up to a multiple of 15 seconds. The three runs of task 13 are those runs (56.2, 61.0 and 61.9 seconds together), so the budget is 90 seconds. Until then the budget was 45 seconds, PROPOSED, NOT APPROVED, and the times below are compared with that budget of the time. The budget is for the project machine when nothing else heavy runs on it; on 2026-11-15, with other programs loading the machine, the same files took 96 to 161 seconds together in three runs by the coordinator and 89 to 115 seconds in the runs of task 15. Estimate made before the files existed, not measured: CP1 to CP3 and the view part of CP9 are pure and take a second or two each. A controller run renders up to 20 worst-case sounds at 22050 Hz and measures their fades, a few milliseconds a sound, so CP4 to CP9 take roughly 3 to 8 seconds each. A whole visit of the visit flow's harness took about 130 to 150 ms in the result page's simulated visits, so CP10 takes about 5 to 10 seconds with its replays. The tasks that write the properties run `npm test` three times and write the time of each file here. If the files take more than the budget together, the task stops and reports the times to the owner; it changes no run count.
 
-Times of task 4. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 4 present, gave these times per property file, in ms, as Vitest's JSON reporter gives them (the sum of the file's test durations, without the file's import). The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+Times of task 4. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 4 present, gave these times per property file, in ms, as Vitest's JSON reporter gives them (the sum of the file's test durations, without the file's import). The run counts and the 45 second budget were then PROPOSED, NOT APPROVED; since the owner's decision of 2026-11-15 the run counts are the same and the budget is 90 seconds (Q7).
 
 | File | Run 1 | Run 2 | Run 3 |
 |---|---|---|---|
@@ -996,9 +997,9 @@ Times of task 4. Three runs of `npm test` on 2026-11-15, with the files of tasks
 | CP3 | 1066 | 1046 | 1038 |
 | Together | 2997 | 2709 | 2841 |
 
-`missed-sound-replay-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 45 second budget. CP3's 1000 runs are two properties of 1000 runs each: the positions, and the inputs that throw a `RangeError`. The whole of `npm test` took 47.9, 50.8 and 53.7 seconds in these runs.
+`missed-sound-replay-regressions.test.ts` holds one `it.todo` and took 0 ms. Every run was under the 45 second budget of the time; the budget is 90 seconds since. CP3's 1000 runs are two properties of 1000 runs each: the positions, and the inputs that throw a `RangeError`. The whole of `npm test` took 47.9, 50.8 and 53.7 seconds in these runs.
 
-Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 9 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 9 present, measured the same way, in ms. The run counts and the 45 second budget were then PROPOSED, NOT APPROVED; since the owner's decision of 2026-11-15 the run counts are the same and the budget is 90 seconds (Q7).
 
 | File | Run 1 | Run 2 | Run 3 |
 |---|---|---|---|
@@ -1009,9 +1010,9 @@ Times of task 9. Three runs of `npm test` on 2026-11-15, with the files of tasks
 | CP6 | 6532 | 6990 | 7512 |
 | Together | 16081 | 17368 | 18166 |
 
-Every run was under the 45 second budget. In these three runs the regression file still held its `it.todo`; a fourth run with the two cases task 9 added to it took 49 ms for that file and 16604 ms for the property files together. CP6 runs two harnesses per run. The whole of `npm test` took 53.1, 58.7 and 59.0 seconds. Three earlier runs are not counted: CP5 failed in each of them, before its check of regression 1 was corrected, and in one of them CP5 spent 114 seconds shrinking the counterexample.
+Every run was under the 45 second budget of the time; the budget is 90 seconds since. In these three runs the regression file still held its `it.todo`; a fourth run with the two cases task 9 added to it took 49 ms for that file and 16604 ms for the property files together. CP6 runs two harnesses per run. The whole of `npm test` took 53.1, 58.7 and 59.0 seconds. Three earlier runs are not counted: CP5 failed in each of them, before its check of regression 1 was corrected, and in one of them CP5 spent 114 seconds shrinking the counterexample.
 
-Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 10 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 10 present, measured the same way, in ms. The run counts and the 45 second budget were then PROPOSED, NOT APPROVED; since the owner's decision of 2026-11-15 the run counts are the same and the budget is 90 seconds (Q7).
 
 | File | Run 1 | Run 2 | Run 3 |
 |---|---|---|---|
@@ -1024,9 +1025,9 @@ Times of task 10. Three runs of `npm test` on 2026-11-15, with the files of task
 | CP8 | 5155 | 5394 | 6163 |
 | Together | 27120 | 29263 | 31728 |
 
-Every run was under the 45 second budget. The regression file took 38, 42 and 46 ms. The whole of `npm test` took 52.9, 58.7 and 62.3 seconds.
+Every run was under the 45 second budget of the time; the budget is 90 seconds since. The regression file took 38, 42 and 46 ms. The whole of `npm test` took 52.9, 58.7 and 62.3 seconds.
 
-Times of task 11. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 11 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+Times of task 11. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 11 present, measured the same way, in ms. The run counts and the 45 second budget were then PROPOSED, NOT APPROVED; since the owner's decision of 2026-11-15 the run counts are the same and the budget is 90 seconds (Q7).
 
 | File | Run 1 | Run 2 | Run 3 |
 |---|---|---|---|
@@ -1041,11 +1042,11 @@ Times of task 11. Three runs of `npm test` on 2026-11-15, with the files of task
 | CP9 | 11374 | 12588 | 14802 |
 | Together | 53530 | 56667 | 69383 |
 
-**Every run was over the 45 second budget**, so task 11 stopped here and reports the times to the owner (Q7). No run count was changed. The regression file took 50, 72 and 61 ms. The whole of `npm test` took 58.4, 63.0 and 80.3 seconds; the third run was slower throughout, not only in these files.
+**Every run was over the 45 second budget**, so task 11 stopped here and reports the times to the owner (Q7). No run count was changed. The budget is 90 seconds since the owner's decision of 2026-11-15, and these runs are under it. The regression file took 50, 72 and 61 ms. The whole of `npm test` took 58.4, 63.0 and 80.3 seconds; the third run was slower throughout, not only in these files.
 
 Where the time goes. CP2 runs 1000 times and CP9 500 times, and each run of both plays its drawn script on the replay harness, because CP2 checks the counts of every view of a replay and CP9 every string of one. Run alone, CP2 took 8.2 seconds and CP9 6.5 seconds; in `npm test` the other files run in parallel workers, and both took about twice as long. Over 300 drawn runs, one harness took about 3.8 ms to build (most of it the calibration) and 3.3 ms to play its script and the minute after it. The two files together add about 26 to 31 seconds to the 27 to 32 seconds of task 10.
 
-Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 13 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 13 present, measured the same way, in ms. The run counts and the 45 second budget were then PROPOSED, NOT APPROVED; since the owner's decision of 2026-11-15 the run counts are the same and the budget is 90 seconds (Q7).
 
 | File | Run 1 | Run 2 | Run 3 |
 |---|---|---|---|
@@ -1061,11 +1062,13 @@ Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of task
 | CP10 | 3422 | 3308 | 3631 |
 | Together | 56248 | 60963 | 61889 |
 
-**Every run was over the 45 second budget.** The owner's coordinator asked for task 13 to be finished in spite of the times of task 11, so it was finished and the times are written here; the budget and the run counts are still the owner's to settle in Q7, and no run count was changed. CP10 adds 3.3 to 3.6 seconds to the files of task 11. `missed-sound-replay-simulated-visits.test.ts` took 303, 382 and 358 ms, and the regression file 59, 40 and 47 ms. The whole of `npm test` took 60.0, 66.0 and 70.6 seconds. `src/session/create-visit-flow.test.ts`, which is not a property file, took 46.6, 51.6 and 55.0 seconds in these runs: each example of task 12 plays a quick visit to the replay, about 0.46 seconds alone.
+**Every run was over the 45 second budget.** The owner's coordinator asked for task 13 to be finished in spite of the times of task 11, so it was finished and the times are written here; the budget and the run counts were then still the owner's to settle in Q7, and no run count was changed. The owner settled Q7 on 2026-11-15 from these three runs: the run counts stay, and the budget is 90 seconds, under which every run of task 13 is. CP10 adds 3.3 to 3.6 seconds to the files of task 11. `missed-sound-replay-simulated-visits.test.ts` took 303, 382 and 358 ms, and the regression file 59, 40 and 47 ms. The whole of `npm test` took 60.0, 66.0 and 70.6 seconds. `src/session/create-visit-flow.test.ts`, which is not a property file, took 46.6, 51.6 and 55.0 seconds in these runs: each example of task 12 plays a quick visit to the replay, about 0.46 seconds alone.
 
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/missed-sound-replay-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a proposed value of Q1 or Q2, or a steering value, stays an expected break, with a decision giving the case.
+
+Regression 4 was not found by a property but by reading the code in task 12, so its name gives no seed: the first replayed sound refused `busy` three times while the last room's sound still played, which ended the replay with `soundRefused`. Its fix is the rule of D9, and task 16 wrote the case and the fix in one run, so the case is an ordinary `it`. CP8 did not find it because its count of refusals followed R12.3 as it was written then; it now states the rule of D9.
 
 ### Requirement coverage
 
@@ -1082,7 +1085,7 @@ A counterexample becomes a named case in `tests/properties/missed-sound-replay-r
 | R9 | CP4; the simulated visit that catches everything |
 | R10 | `create-visit-flow.test.ts`; CP5 |
 | R11 | `create-visit-flow.test.ts` (each row of "What each phase accepts"); CP5; CP8; CP10 |
-| R12 | `create-missed-sound-replay.test.ts`; CP8 |
+| R12 | `create-missed-sound-replay.test.ts`; `create-visit-flow.test.ts`; CP8; regression 4 |
 | R13 | `create-visit-flow.test.ts`; CP6; CP8; CP10 |
 | R14 | `replay-render-seed.test.ts`; `npm run lint` (no clock in `src/session`); CP6; CP10 |
 | R15 | CP7; "Which limits of the output stage act on a replayed sound"; the output stage's own CP1 to CP3 and CP7, unchanged |
@@ -1144,7 +1147,7 @@ Outside this spec's tasks, by hand:
 
 ## Questions for the project owner
 
-None of these is decided here. The design uses the proposed answer of each so that it is complete, and every proposed number is marked PROPOSED, NOT APPROVED in `src/config` and in this document.
+None of these is decided here. The design uses the proposed answer of each so that it is complete, and every proposed number is marked PROPOSED, NOT APPROVED in `src/config` and in this document. The owner has since decided Q6 and, on 2026-11-15, Q7; Q1 to Q5 stay open.
 
 **Q1. The most sounds one replay plays (`replaySoundsMaxCount`). Proposed: 20, PROPOSED, NOT APPROVED.** The brief asks for a brief replay and an evenly spread selection "if there are more missed sounds than the configured maximum". The search makes misses common: a quick visit misses a median of 33 to 37 sounds, a full one 56 to 60 ("Measurements"). So the maximum decides both how long the replay is and whether a selection is the rule or the exception. With the proposed gap of 400 ms:
 
@@ -1164,23 +1167,23 @@ None of these is decided here. The design uses the proposed answer of each so th
 | **400 ms, proposed** | about 30.3 s | The same silence the calibration repeats leave between them (400 ms, a separate value); ripples still overlap |
 | 600 ms | about 34.2 s | Each sound stands apart; with a larger Q1 the replay grows by 0.2 s a sound |
 
-Any value above 0 keeps the output stage from refusing a sound as `busy`, because the next request always comes after the end of the last sound.
+Any value above 0 keeps the output stage from refusing a replayed sound as `busy` because of the replayed sound before it, because the next request always comes after the end of the last sound. It does not keep the first replayed sound from finding the last room's sound still playing; a `busy` refusal then is asked for again one gap later and is not counted (D9).
 
-**Q3. Answers on the wrong side.** The brief replays "every trial scored as missed", and the log names the outcome `missed`. A wrong side is a separate outcome: the visitor answered, on the other side. The hearing method counts it as a miss for the ear and records it separately, and visit-flow D6 expected that "the replay will show it". Plausible listeners give a median of 7 (quick) to 13 (full) wrong sides; attentive ones almost none. Options:
+**Q3. Answers on the wrong side. Proposed: (a), not replayed, PROPOSED, NOT APPROVED.** The brief replays "every trial scored as missed", and the log names the outcome `missed`. A wrong side is a separate outcome: the visitor answered, on the other side. The hearing method counts it as a miss for the ear and records it separately, and visit-flow D6 expected that "the replay will show it". Plausible listeners give a median of 7 (quick) to 13 (full) wrong sides; attentive ones almost none. Options:
 
-- (a) **Proposed.** Not replayed. The count line adds "Once you named the other side." or "Three times you named the other side." when there were any, so that made = caught + wrong side + missed can be read. Cost: a sound the visitor did not place correctly is not heard again; one more sentence in the count.
+- (a) **Proposed, PROPOSED, NOT APPROVED.** Not replayed. The count line adds "Once you named the other side." or "Three times you named the other side." when there were any, so that made = caught + wrong side + missed can be read. Cost: a sound the visitor did not place correctly is not heard again; one more sentence in the count.
 - (b) Replayed with the misses, in order. Cost: the replay includes sounds the visitor heard, which weakens "how much went by unheard"; the ripple label would need its own wording ("You named the other side"); the replay grows by a fifth for plausible listeners. The plan's filter and the label change; nothing else.
 - (c) Not replayed and not mentioned. Cost: "On your right I made seven sounds. You caught three." with three replayed sounds instead of four reads as a wrong count, although each number is true.
 
-**Q4. What the running count covers.** The brief: "A running count is shown in words, for example 'On your right I made seven sounds. You caught three.'" Options:
+**Q4. What the running count covers. Proposed: (a), both sides over the whole visit so far, PROPOSED, NOT APPROVED.** The brief: "A running count is shown in words, for example 'On your right I made seven sounds. You caught three.'" Options:
 
-- (a) **Proposed.** Both sides over the whole visit so far: every scored sound trial of a finished room run up to and including the sound being replayed, so the numbers climb as the replay moves through the visit and reach the visit's totals at the end. Cost: with a selection, the numbers jump between replayed sounds; the counts pool every floor, which is a count of answers and not a level, as the pooled false alarm line is (result-page Q3).
+- (a) **Proposed, PROPOSED, NOT APPROVED.** Both sides over the whole visit so far: every scored sound trial of a finished room run up to and including the sound being replayed, so the numbers climb as the replay moves through the visit and reach the visit's totals at the end. Cost: with a selection, the numbers jump between replayed sounds; the counts pool every floor, which is a count of answers and not a level, as the pooled false alarm line is (result-page Q3).
 - (b) The room of the current sound only, up to that sound. Cost: the counts start again in each room; the line would name the room; per-floor counts of catches are easy to read as a measure of that floor, which the staircase does not make them.
 - (c) The visit's totals, shown from the announcement on. Cost: it does not run; the replay adds nothing to it.
 
-**Q5. The cap of a replayed sound.** The brief: "20 dB above the level at which it was missed, clamped to the cap". The design reads "the cap" as audio-safety rule 2's cap for that sound with the calibration in use: the room's top, the lower of the anchor cap and the ceiling (D5). Rule 2 and the initial values allow a stricter cap at any time. Options:
+**Q5. The cap of a replayed sound. Proposed: (a), the room's top under the last kept calibration, PROPOSED, NOT APPROVED.** The brief: "20 dB above the level at which it was missed, clamped to the cap". The design reads "the cap" as audio-safety rule 2's cap for that sound with the calibration in use: the room's top, the lower of the anchor cap and the ceiling (D5). Rule 2 and the initial values allow a stricter cap at any time. Options:
 
-- (a) **Proposed.** The room's top under the last kept calibration. Cost: a replayed sound can be up to one 5 dB step louder than any trial of its room, because the search's cap is the top rounded down to its grid; the louder end of the replay is the loudest moment of the product.
+- (a) **Proposed, PROPOSED, NOT APPROVED.** The room's top under the last kept calibration. Cost: a replayed sound can be up to one 5 dB step louder than any trial of its room, because the search's cap is the top rounded down to its grid; the louder end of the replay is the loudest moment of the product.
 - (b) The search's cap of the trial's room run (`searchCapDb` of its attempt). The replay is never louder than the loudest level the search could ask for in that room. Cost: more sounds are held back; the label "as loud as the house may play" would become "as loud as this room went"; the plan reads the attempt's cap instead of the calibration's top.
 - (c) A replay ceiling of its own below the room top, such as the anchor (0 dB). Cost: a new number for the owner; many sounds missed near the top would replay no louder than they were, which the label would say.
 
@@ -1192,7 +1195,9 @@ Any value above 0 keeps the output stage from refusing a sound as `busy`, becaus
 
 The owner took option (a) and changed the literal, which is now cast with `as MissedSoundReplaySnapshot`, before task 1 ran.
 
-**Q7. Run counts and time budget of the property files. PROPOSED, NOT APPROVED.** The counts of "Run counts and time" and a budget of 45 seconds for this spec's property files together. Options: these; fewer runs of CP4 to CP8 (for example 100 each), which shortens the suite by about two thirds of their time and lowers the chance of finding a rare case in one run; or a larger budget. The visit flow's files take about 44 seconds and the result page's about 17 seconds today, so the whole of `npm test` would grow by about the budget.
+**Q7. Run counts and time budget of the property files. Decided by the owner on 2026-11-15.** Proposed before the decision: the counts of "Run counts and time" and a budget of 45 seconds for this spec's property files together. Options: these; fewer runs of CP4 to CP8 (for example 100 each), which shortens the suite by about two thirds of their time and lowers the chance of finding a rare case in one run; or a larger budget. The visit flow's files take about 44 seconds and the result page's about 17 seconds today, so the whole of `npm test` would grow by about the budget.
+
+The owner answered on 2026-11-15: the run counts stay exactly as they are, and the budget is the slowest of three runs of `npm test` with every property file of this spec present, plus about three tenths, rounded up to a multiple of 15 seconds. The three runs of task 13 are those runs (56.2, 61.0 and 61.9 seconds), so the budget is 90 seconds. It is for the project machine when nothing else heavy runs on it ("Run counts and time").
 
 ### Found in the existing code
 
@@ -1222,7 +1227,9 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D8. The replay starts on the visitor's press after the announcement.** The brief: "Before it starts, the house says what is about to happen". A press makes sure the visitor had the announcement in front of them, gives control (rule 7), and is a gesture, which the browser needs to start sound again after the page was hidden (`tech.md`). It needs no timing number. And the interface that exists today never calls `startReplay`, so the stage stays silent until the owner's screen is built. The first sound comes one gap after the press.
 
-**D9. The gap runs from the end of one sound to the request for the next.** The brief: "Gaps between sounds are shortened to a fixed short interval". Measuring from the end makes the silence the same whatever each sound's length, and guarantees one sound at a time (audio-output D16). The end is put on the page clock as the room runner puts a sound's start (visit-flow D3). The number is Q2.
+**D9. The gap runs from the end of one sound to the request for the next, and a first sound refused `busy` is not counted.** The brief: "Gaps between sounds are shortened to a fixed short interval". Measuring from the end makes the silence the same whatever each sound's length, and keeps the replayed sounds one at a time (audio-output D16). The end is put on the page clock as the room runner puts a sound's start (visit-flow D3). The number is Q2.
+
+The gap does not keep the first replayed sound from being refused `busy`. The stage begins at the last answer (visit-flow R16.1), and the last room's sound may still play then, for up to 1500 ms. After a quick press on the start control, the first request comes one gap later and the output stage refuses it `busy`; with the rule of D16 alone, three such refusals ended the replay with the end line of `soundRefused`, which says the house could not play the sounds on this device, and that is untrue (regression 4, found in task 12). So a `busy` refusal that comes before the first replayed sound of this replay has started is not counted towards the refusals that end the replay: the replay asks for the same sound again one gap later, and the refusal neither adds to nor resets the refusals in a row. Every other refusal counts as D16 says, and so does a `busy` refusal after the first sound has started. This is the rule the calibration controller already uses for a calibration repeat refused `busy`. The output stage keeps no sound longer than 1500 ms, so in the product these refusals end with the last room's sound. **This fix was chosen by the owner's coordinator on 2026-11-15, not by the owner, from the two fixes named in the report on task 12; the owner may review it.** It adds no number (task 16).
 
 **D10. The current sound changes, and its event is handed out, when the sound starts.** The ripple belongs to the moment the sound is heard. The output stage gives the start on the audio clock; the controller converts it with `soundWindowStartMs` and waits until then. Between sounds the view keeps the last one, so the label stays readable during the gap.
 
@@ -1236,7 +1243,7 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D15. A hidden page or an interruption pauses the replay; a device change ends it; leaving the page shows the result; the visitor's `pause()` does nothing here.** The output stage already stops all sound on every page event (rule 7). Pausing keeps the visit's peak for a visitor who glanced at another tab, and the cut sound is played again from its start, faded in, rather than resumed in the middle. A device change makes the output stage forget the calibration, and calibrating again for a few louder sounds is more than the replay is worth, so the replay ends and the result follows. A left page shows the result, as `stop` does, because the visit is complete (visit-flow D13). The visitor already has skip and stop, so `pause()` adds nothing.
 
-**D16. A refused sound is tried again, three times in a row at most.** The room runner does the same for a trial (visit-flow D25), and most refusals (a render over its peak bound) are random and pass on a new render. Three refusals in a row end the replay, not the visit: the result is complete and is shown. The number is the existing `refusedPlaysInARowMaxCount`, with the same meaning, refusals in a row of one sound, so no number is added. `notRunning` is a stopped shell and is handled as its stop; `notCalibrated` is a forgotten calibration and is handled as a device change.
+**D16. A refused sound is tried again, three times in a row at most.** The room runner does the same for a trial (visit-flow D25), and most refusals (a render over its peak bound) are random and pass on a new render. Three refusals in a row end the replay, not the visit: the result is complete and is shown. A `busy` refusal before the first replayed sound has started is not counted (D9). The number is the existing `refusedPlaysInARowMaxCount`, with the same meaning, refusals in a row of one sound, so no number is added. `notRunning` is a stopped shell and is handled as its stop; `notCalibrated` is a forgotten calibration and is handled as a device change.
 
 **D17. The finished replay waits for the visitor.** The brief does not say how the replay leads to the result. Going on by itself would need a new timing number and would cut off the end line and the counts. One press, the same as the stand-in's "See the picture", needs neither.
 
@@ -1256,7 +1263,7 @@ Each point below was open in the brief, the steering, the earlier specs or the c
 
 **D25. The ripple label carries one level, relative to the calibration.** It gives the side, the pitch and the level the sound was missed at, the brief's "original level", and then "Now it is louder" or "Now it is as loud as the house may play". A second number, the replayed level or the difference, would put two levels in one short label and invite comparing them with levels of other floors. The view still holds every level as numbers for anyone who needs them.
 
-**D26. Every property is universal, with proposed run counts and a time budget.** Nothing here is statistical, so no seed is fixed. If the files exceed the budget, the task stops and reports the times; no count is lowered. The counts and the budget are Q7.
+**D26. Every property is universal, with set run counts and a time budget.** Nothing here is statistical, so no seed is fixed. If the files exceed the budget, the task stops and reports the times; no count is lowered. The counts and the budget of 90 seconds are the owner's decision of 2026-11-15 in Q7.
 
 **D27. What the tasks touch, and how they are committed.** Unlike the result page, this spec must change `src/session/visit-flow-types.ts` and `src/session/create-visit-flow.ts`; it only adds to the first, and in the second changes nothing outside this stage and the two shared paths it branches from (`onOutputStopped`, `endPause`). The tasks create and change only the files listed in "Files", never `src/ui/`, `tests/e2e/`, `tests/properties/screen-leak/`, `index.html`, `listen.html`, `result-sheet.html`, `src/main.ts`, the root `README.md` or `.kiro/steering/`. They do not commit. A separate run makes one commit per task with a one-line message, so anything a task must record (property times, a counterexample, the measurement printed again) is written in this design or a README.
 
