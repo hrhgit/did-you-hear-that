@@ -13,6 +13,11 @@ The seeded random generator and the injectable timer live here too. `engine` and
 
 These values shape what is drawn. They change no sound and no decision about an answer, and the ambient schedule is drawn from a random source of its own.
 
+## The calibration music
+
+- `calibration-music-config.ts`: `calibrationMusicConfig.filePath`, where the calibration music lives, relative to the site's own address. It has a file of its own because every field of `audioOutputConfig` ends in a unit and a path has none (`.kiro/specs/audible-start/design.md`, "Config").
+- `audio-output-config.ts` holds the music's numbers: `calibrationSettingSpanMinDb` (10), the fewest decibels of settings the music must leave above the Keep_Minimum or the hiss is used; `calibrationMusicRisePeriodMs` (2000), in which the music rises by at most `calibrationRiseMaxDb`, guarded against being made shorter; `calibrationMusicGainStepMs` (100), one step of its level; and `calibrationMusicLoadMaxMs` (10000), after which the hiss is used. The calibration sound starts at `calibrationSettingMinDb`, and the headphone check plays at `headphoneCheckLevelDb`, the anchor the visitor has just set.
+
 ## The result page
 
 - `result-page-config.ts`: `resultPageConfig`, the numbers the result page adds. None of them changes a sound, a wait or a decision about an answer. `foundLightDepthAtCapFraction` (0.1) and `foundLightDepthAtFloorFraction` (0.9) set how far the light reaches into a wing for a threshold found at the floor's own loudest playable level and at the quietest playable level; they were decided on 2026-11-15 on the owner's behalf, at the owner's request (question Q1 of `.kiro/specs/result-page/design.md`). `betterThanFloorLightDepthFraction` (1, the far wall) and `worseThanCapLightDepthFraction` (0, dark) come from the brief. `savedVisitsMaxCount` (20, Q4) is the most saved visits the house keeps in one browser, and `headphoneNameMaxCharacterCount` (40, Q5) the longest headphone name in code points after tidying; both were decided on 2026-11-15 on the owner's behalf, at the owner's request. The file comments say beside each of the four that it was decided on 2026-11-15 and name its question.

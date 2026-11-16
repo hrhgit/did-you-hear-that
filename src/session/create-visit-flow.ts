@@ -10,9 +10,9 @@ import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
 import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
 import type { AudioBackend } from "../audio/output/audio-backend";
-import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
   AudioOutput,
+  CalibrationMusicOutput,
   KeepRefusal,
   PlayRefusal,
 } from "../audio/output/create-audio-output";
@@ -83,7 +83,13 @@ export type VisitFlowTestOptions = {
    * listener typed for `PresentedTrial` still fits it.
    */
   readonly onTrialPresented?: (trial: FlowPresentedTrial) => void;
-} & ({ readonly backend: AudioBackend } | { readonly output: AudioOutput });
+} & (
+  | { readonly backend: AudioBackend }
+  | {
+      /** An output without the music's calls has the hiss as its only calibration sound. */
+      readonly output: AudioOutput & Partial<CalibrationMusicOutput>;
+    }
+);
 
 /** Seeds are drawn as `floor(u × 2³²)`, every whole number a seed may be (D19). */
 const seedRangeCount = 0x100000000;
@@ -175,7 +181,7 @@ interface Visit {
   rulesShown: boolean;
   /** True once a calibration of this visit follows a device change. */
   calibrationAgain: boolean;
-  /** True from entering calibration until the visitor starts the hiss. */
+  /** True from entering calibration until the visitor starts the calibration sound. */
   calibrationFresh: boolean;
   keepRefusal: KeepRefusal | null;
   lastCalibration: LoggedCalibration | null;
@@ -223,7 +229,7 @@ export function createVisitFlow(
   const { timer } = options;
   const onTrialPresented =
     "onTrialPresented" in options ? options.onTrialPresented : undefined;
-  const output: AudioOutput =
+  const output: AudioOutput & Partial<CalibrationMusicOutput> =
     "output" in options
       ? options.output
       : createAudioOutput({
@@ -255,7 +261,6 @@ export function createVisitFlow(
     random: forwardingRandom,
   });
   const controlBottomDb = audioOutputConfig.calibrationSettingMinDb;
-  const controlTopDb = calibrationSettingTopDb();
 
   let stage: VisitStage = "entry";
   /** Raised at every stage entry, so a late activation can tell that the stage moved on (D35). */
@@ -353,19 +358,39 @@ export function createVisitFlow(
       case "calibration": {
         const controller = calibration.snapshot();
         const fresh = current.calibrationFresh;
+        const calibrationSound = controller.calibrationSound;
+        // The music's lines while it loads, the hiss's where it could not be loaded (audible-start
+        // design.md, "The calibration copy").
+        const lines =
+          calibrationSound === "hiss" ? calibrationCopy.hiss : calibrationCopy;
+        const freshLine =
+          calibrationSound === "loading"
+            ? calibrationCopy.loadingLine
+            : lines.openLine;
         return Object.freeze({
           ...base("calibration"),
           again: current.calibrationAgain,
           playing: fresh ? false : controller.playing,
           playedSettingDb: fresh ? null : controller.playedSettingDb,
           controlBottomDb,
-          controlTopDb,
+          // −5 dB with the music, −4 dB with the hiss and while the music loads (D7).
+          controlTopDb: controller.controlTopDb,
           atTop: fresh ? false : controller.atTop,
-          line: fresh ? calibrationCopy.openLine : controller.line,
+          line: fresh ? freshLine : controller.line,
           keepRefusal: current.keepRefusal,
           // The bottom until the visitor first starts the sound: `open` puts the target there
           // (audible-start R3.5, R3.6, D3).
           targetSettingDb: fresh ? controlBottomDb : controller.targetSettingDb,
+          calibrationSound,
+          heading: current.calibrationAgain
+            ? lines.againHeading
+            : lines.heading,
+          introLines: Object.freeze([
+            lines.openLine,
+            calibrationCopy.whyLine,
+            lines.riseLine,
+            calibrationCopy.keysLine,
+          ]),
         });
       }
       case "headphoneCheck":
@@ -1141,10 +1166,18 @@ export function createVisitFlow(
             outcome.rangeReport.rooms[soundId].topLevelDb,
           ]),
         ) as Record<GhostSoundId, number>;
+        const kept = calibration.snapshot().kept;
+        if (kept === null) {
+          throw new Error(
+            "A kept calibration has no record in the controller.",
+          );
+        }
         current.lastCalibration = current.recorder.calibrationKept({
           settingDb: outcome.settingDb,
           roomTopLevelDb,
           keptAtMs: timer.now(),
+          // How the anchor was set: with the music, or with the hiss (audible-start R8.4).
+          anchor: kept.anchor,
         });
         current.keepRefusal = null;
         current.calibrationFresh = false;

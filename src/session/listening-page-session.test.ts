@@ -133,8 +133,53 @@ describe("createListeningPageSession", () => {
     expect(session.snapshot().calibration).toMatchObject({
       playing: true,
       playedSettingDb: calibrationSettingMinDb,
+      // The fake has no music file: the calibration sound is the hiss.
+      calibrationSound: "hiss",
+      line: calibrationCopy.hiss.openLine,
+    });
+  });
+
+  it("calibrates with the music as the visit does, where the music can be loaded (audible-start Q34)", async () => {
+    const sampleCount = 4 * sampleRateHz;
+    const peakFraction = 0.92182;
+    const rmsFraction = peakFraction / 10 ** (18.4 / 20);
+    const squareFraction = Math.sqrt(
+      (rmsFraction ** 2 * sampleCount - peakFraction ** 2) / (sampleCount - 1),
+    );
+    const samples = new Float32Array(sampleCount);
+    for (let index = 0; index < sampleCount; index += 1) {
+      samples[index] = index % 2 === 0 ? squareFraction : -squareFraction;
+    }
+    samples[Math.floor(sampleCount / 2)] = peakFraction;
+    const { backend, session, advance } = setup({
+      calibrationMusic: { mode: "resolve", samples },
+    });
+    await session.start();
+    for (let round = 0; round < 5; round += 1) {
+      await Promise.resolve();
+    }
+    session.startCalibration();
+    expect(backend.scheduled()).toEqual([]);
+    expect(backend.loopTimeline()).toMatchObject([{ kind: "startLoop" }]);
+    expect(session.snapshot().calibration).toMatchObject({
+      playing: true,
+      calibrationSound: "music",
+      controlTopDb: -5,
+      playedSettingDb: calibrationSettingMinDb,
       line: calibrationCopy.openLine,
     });
+    for (let press = 0; press < 40; press += 1) {
+      session.louder();
+    }
+    for (let elapsedMs = 0; elapsedMs < 20_000; elapsedMs += 10) {
+      advance(10);
+    }
+    session.keepCalibration();
+    expect(session.snapshot().calibration.kept).toMatchObject({
+      settingDb: calibrationSettingMinDb + 40,
+      anchor: "music",
+    });
+    expect(backend.loopTimeline().at(-1)).toMatchObject({ kind: "stopLoop" });
   });
 
   it("shows no rows and no headphone check before a calibration is kept (R19.4)", async () => {
@@ -151,13 +196,14 @@ describe("createListeningPageSession", () => {
     const { session } = await calibrated(-4);
     const { rows, rangeReport } = session.snapshot();
     expect(rows.map((row) => row.soundId)).toEqual(soundIds);
-    // The bracketed values of the room-top table in design.md, at the top of the control.
+    // The bracketed values of the room-top table in design.md, at the top of the control, with
+    // the cap of 5 dB above the anchor (audible-start design.md, "The cap").
     const expectedHighest: Record<SoundId, number> = {
       cellar: 0,
-      corridor: 10,
+      corridor: 5,
       nursery: 5,
       stairs: 0,
-      attic: 10,
+      attic: 5,
       calibration: 0,
     };
     for (const row of rows) {
@@ -195,8 +241,9 @@ describe("createListeningPageSession", () => {
   });
 
   it("gives the rooms line for the five ghost rooms (R16.9)", async () => {
+    // At −4 dB the cellar and the stairs cannot reach the cap of 5 dB.
     expect((await calibrated(-4)).session.snapshot().roomsLine).toBe(
-      roomsShortLine(5, 5),
+      roomsShortLine(2, 5),
     );
     expect((await calibrated(-19)).session.snapshot().roomsLine).toBe(
       roomsShortLine(0, 5),

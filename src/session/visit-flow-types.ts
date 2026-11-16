@@ -75,9 +75,9 @@ export interface VisitFlow {
 
   /** Front door: starts a visit of this type, starts sound, and moves to calibration. */
   chooseVisit(visitType: VisitType): void;
-  /** Calibration: starts the hiss at the bottom of the control and keeps repeating it. Also starts it again after a stop. */
+  /** Calibration: starts the calibration sound at the bottom of the control: the music, looping, or the hiss repeats where the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
   startCalibration(): void;
-  /** Calibration: moves the control one step louder. The hiss rises by at most 5 dB per repeat. */
+  /** Calibration: moves the control one step louder. The hiss rises by at most 5 dB per repeat, the music by at most 5 dB in 2 seconds. */
   louder(): void;
   /** Calibration: moves the control one step quieter than the setting last played. */
   quieter(): void;
@@ -206,11 +206,11 @@ export interface EntrySnapshot extends SnapshotBase<"entry"> {
   }[];
 }
 
-/** Matching the hiss to the visitor's hands. */
+/** Setting the calibration sound to a comfortable listening volume. */
 export interface CalibrationSnapshot extends SnapshotBase<"calibration"> {
   /** True when this calibration follows a change of audio device during the visit. */
   readonly again: boolean;
-  /** Whether hiss repeats are being played one after another now. */
+  /** Whether the calibration sound is playing now: the music, or hiss repeats one after another. */
   readonly playing: boolean;
   /** The setting of the last repeat played, which the visible control shows, or null before the first. */
   readonly playedSettingDb: number | null;
@@ -230,6 +230,12 @@ export interface CalibrationSnapshot extends SnapshotBase<"calibration"> {
    * optional only so that literals written before it still compile.
    */
   readonly targetSettingDb?: number;
+  /** `loading`: the music is not ready yet. `music` or `hiss`: the sound of this calibration. Always present, as above. */
+  readonly calibrationSound?: CalibrationSound;
+  /** The heading of this screen, from `calibrationCopy`. Always present, as above. */
+  readonly heading?: string;
+  /** What to read before using the control, in order: what to do, why, how the sound follows the control, the keys. Always present, as above. */
+  readonly introLines?: readonly string[];
 }
 
 /** Making sure left is left. Shown right after a calibration is kept. */
@@ -409,6 +415,8 @@ export interface LoggedCalibration {
   readonly roomTopLevelDb: Readonly<Record<GhostSoundId, number>>;
   /** When it was kept. */
   readonly keptAtMs: number;
+  /** How the anchor was set. Absent in a calibration recorded before the audible-start spec, which was matched to the visitor's hands. */
+  readonly anchor?: CalibrationAnchor;
 }
 
 /** One answered headphone check. */
@@ -1111,3 +1119,12 @@ export type SwappedRepeat =
   | SwappedRepeatReady
   | SwappedRepeatRoom
   | SwappedRepeatFinished;
+
+// ─── Calibration, practice and the playable floor ───────────────────────────────────────
+// audible-start design.md.
+
+/** What a calibration plays. `loading`: the music is not ready yet; `hiss`: the music could not be loaded. */
+export type CalibrationSound = "loading" | "music" | "hiss";
+
+/** How a calibration's anchor was set. `hands`: matched to rubbed hands, before the audible-start spec. */
+export type CalibrationAnchor = "hands" | "music" | "hiss";

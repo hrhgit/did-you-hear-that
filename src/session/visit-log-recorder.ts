@@ -14,6 +14,7 @@ import type {
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
 import type {
+  CalibrationAnchor,
   LoggedCalibration,
   LoggedEarResult,
   LoggedHeadphoneCheck,
@@ -70,6 +71,11 @@ export interface VisitLogRecorder {
     readonly settingDb: number;
     readonly roomTopLevelDb: Readonly<Record<GhostSoundId, number>>;
     readonly keptAtMs: number;
+    /**
+     * How the anchor was set (audible-start R8.4). The flow always gives it; a calibration recorded
+     * without it reads as one matched to the visitor's hands, as before the audible-start spec.
+     */
+    readonly anchor?: Exclude<CalibrationAnchor, "hands">;
   }): LoggedCalibration;
   /** Records an answered headphone check. */
   headphoneCheckAnswered(input: {
@@ -307,11 +313,18 @@ export function createVisitLogRecorder(options: {
           ]),
         ) as Record<GhostSoundId, number>,
       );
+      const { anchor } = input;
+      if (anchor !== undefined && anchor !== "music" && anchor !== "hiss") {
+        throw new RangeError(
+          `A calibration's anchor is music or hiss, but got ${String(anchor)}.`,
+        );
+      }
       const entry: LoggedCalibration = Object.freeze({
         calibrationIndex: calibrations.length,
         settingDb: plainNumber("settingDb", input.settingDb),
         roomTopLevelDb,
         keptAtMs: sinceStart("keptAtMs", input.keptAtMs),
+        ...(anchor === undefined ? {} : { anchor }),
       });
       calibrations.push(entry);
       return entry;

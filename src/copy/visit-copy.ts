@@ -3,9 +3,11 @@
  * play at all.
  */
 export const visitCopy = Object.freeze({
-  calibrationHeading: "Match the hiss to your hands",
+  /** The same string as `calibrationCopy.heading` (audible-start design.md, "The calibration copy"). */
+  calibrationHeading: "Set the music to a comfortable volume",
   headphoneCheckHeading: "Left and right",
-  recalibrateHeading: "Match the hiss again",
+  /** The same string as `calibrationCopy.againHeading`. */
+  recalibrateHeading: "Set the music again",
   cannotPlayHeading: "The house cannot play here",
   /** Shown when the browser did not take a press as permission to start sound. */
   soundNotStartedLine:

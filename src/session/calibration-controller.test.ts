@@ -6,6 +6,7 @@ import { soundRulesConfig } from "../config/sound-rules-config";
 import { calibrationCopy } from "../copy/calibration-copy";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import { createAudioOutput } from "../audio/output/create-audio-output";
+import type { FakeAudioBackendOptions } from "../audio/output/fake-audio-backend";
 import { createFakeAudioBackend } from "../audio/output/fake-audio-backend";
 import { createCalibrationController } from "./calibration-controller";
 
@@ -15,7 +16,10 @@ const {
   calibrationSettingKeepMinDb,
   calibrationRiseMaxDb,
   calibrationRepeatGapMs,
+  calibrationMusicGainStepMs,
+  calibrationMusicLoadMaxMs,
   scheduleLeadMs,
+  stopFadeMs,
 } = audioOutputConfig;
 
 /** The lowest supported rate, where the calibration noise renders quickest. */
@@ -23,7 +27,8 @@ const sampleRateHz = soundRulesConfig.sampleRateMinHz;
 
 /**
  * A running shell on the fake backend, whose page clock is the manual timer's clock, and a
- * controller on it. `advance` moves the audio clock and the timer together.
+ * controller on it. `advance` moves the audio clock and the timer together. The fake has no music
+ * file, so the calibration sound is the hiss and the controller plays repeats.
  */
 async function setup() {
   const backend = createFakeAudioBackend({
@@ -77,7 +82,8 @@ describe("createCalibrationController", () => {
     expect(controller.snapshot()).toMatchObject({
       playing: false,
       playedSettingDb: null,
-      line: calibrationCopy.openLine,
+      line: calibrationCopy.hiss.openLine,
+      calibrationSound: "hiss",
     });
 
     controller.open();
@@ -174,7 +180,7 @@ describe("createCalibrationController", () => {
     expect(controller.snapshot()).toMatchObject({
       playedSettingDb: calibrationSettingTopDb(),
       atTop: true,
-      line: calibrationCopy.atTopLine,
+      line: calibrationCopy.hiss.atTopLine,
     });
   });
 
@@ -216,7 +222,7 @@ describe("createCalibrationController", () => {
     expect(controller.snapshot()).toMatchObject({
       playing: true,
       keepRefusal: "systemVolumeHigh",
-      line: calibrationCopy.systemVolumeHighLine,
+      line: calibrationCopy.hiss.systemVolumeHighLine,
     });
     advance(5_000);
     expect(backend.scheduled().length).toBeGreaterThan(1);
@@ -234,13 +240,13 @@ describe("createCalibrationController", () => {
     const played = controller.snapshot().playedSettingDb;
     expect(played).toBe(calibrationSettingMinDb + 20);
     expect(played).toBeGreaterThanOrEqual(calibrationSettingKeepMinDb);
-    expect(controller.snapshot().line).toBe(calibrationCopy.openLine);
+    expect(controller.snapshot().line).toBe(calibrationCopy.hiss.openLine);
 
     const outcome = controller.keep();
     expect(outcome).toMatchObject({ kind: "kept", settingDb: played });
     expect(controller.snapshot()).toMatchObject({
       playing: false,
-      kept: { settingDb: played },
+      kept: { settingDb: played, anchor: "hiss" },
       line: calibrationCopy.keptLine,
     });
     const count = backend.scheduled().length;
@@ -429,5 +435,286 @@ describe("createCalibrationController", () => {
     remove();
     controller.louder();
     expect(changes).toBe(2);
+  });
+});
+
+describe("createCalibrationController with the calibration music (audible-start R4 to R7)", () => {
+  /** Music-like samples made in code, with the crest factor of the measured file (18.4 dB). */
+  function musicSamples(): Float32Array {
+    const sampleCount = 4 * sampleRateHz;
+    const peakFraction = 0.92182;
+    // The crest factor of 18.4 dB as a ratio of peak to RMS.
+    const rmsFraction = peakFraction / 10 ** (18.4 / 20);
+    const squareFraction = Math.sqrt(
+      (rmsFraction ** 2 * sampleCount - peakFraction ** 2) / (sampleCount - 1),
+    );
+    const samples = new Float32Array(sampleCount);
+    for (let index = 0; index < sampleCount; index += 1) {
+      samples[index] = index % 2 === 0 ? squareFraction : -squareFraction;
+    }
+    samples[Math.floor(sampleCount / 2)] = peakFraction;
+    return samples;
+  }
+
+  async function flush(): Promise<void> {
+    for (let round = 0; round < 5; round += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  async function musicSetup(options: FakeAudioBackendOptions = {}) {
+    const backend = createFakeAudioBackend({
+      sampleRateHz,
+      performanceOffsetMs: 0,
+      calibrationMusic: { mode: "resolve", samples: musicSamples() },
+      ...options,
+    });
+    const timer = createManualTimer();
+    const output = createAudioOutput({ backend, timer });
+    const controller = createCalibrationController({
+      output,
+      timer,
+      random: createSeededRandom(7),
+    });
+    await output.activate();
+    await flush();
+    /** Moves both clocks together, 10 ms at a time, as the browser's do. */
+    const advance = (durationMs: number): void => {
+      for (let doneMs = 0; doneMs < durationMs; doneMs += 10) {
+        const chunkMs = Math.min(10, durationMs - doneMs);
+        backend.advanceClockBy(chunkMs);
+        timer.advanceBy(chunkMs);
+      }
+    };
+    const loopCalls = () =>
+      backend.loopTimeline().filter((call) => call.kind !== "fadeToSilence");
+    return { backend, timer, output, controller, advance, loopCalls };
+  }
+
+  it("plays the music, not the repeats, from the bottom of the control, with the music's lines", async () => {
+    const { backend, controller, loopCalls } = await musicSetup();
+    expect(controller.snapshot()).toMatchObject({
+      calibrationSound: "music",
+      controlTopDb: -5,
+      line: calibrationCopy.openLine,
+      playing: false,
+    });
+    controller.open();
+    expect(backend.scheduled()).toEqual([]);
+    expect(loopCalls()).toHaveLength(1);
+    expect(loopCalls()[0]).toMatchObject({ kind: "startLoop" });
+    expect(controller.snapshot()).toMatchObject({
+      playing: true,
+      targetSettingDb: calibrationSettingMinDb,
+      playedSettingDb: calibrationSettingMinDb,
+      atTop: false,
+      line: calibrationCopy.openLine,
+    });
+  });
+
+  it("hands the target to the shell, and the played setting follows the settings the shell's steps reach, at most 0.25 dB apart", async () => {
+    const { controller, advance } = await musicSetup();
+    controller.open();
+    controller.setTarget(-50);
+    const played: number[] = [];
+    for (let step = 0; step < 50; step += 1) {
+      advance(calibrationMusicGainStepMs);
+      played.push(controller.snapshot().playedSettingDb ?? Number.NaN);
+    }
+    // A step is shown once its ramp has ended, at the next step.
+    expect(played.slice(0, 3)).toEqual([-60, -59.75, -59.5]);
+    for (let index = 1; index < played.length; index += 1) {
+      expect(played[index] - played[index - 1]).toBeLessThanOrEqual(0.25);
+    }
+    advance(calibrationMusicGainStepMs);
+    expect(controller.snapshot().playedSettingDb).toBe(-50);
+    controller.quieter();
+    expect(controller.snapshot().targetSettingDb).toBe(-51);
+    advance(3 * calibrationMusicGainStepMs);
+    expect(controller.snapshot().playedSettingDb).toBe(-51);
+  });
+
+  it("rises to the music's top of −5 dB, says it is at the top, and keeps the target within it", async () => {
+    const { controller, advance } = await musicSetup();
+    controller.open();
+    controller.setTarget(Number.POSITIVE_INFINITY);
+    expect(controller.snapshot().targetSettingDb).toBe(-5);
+    advance(25_000);
+    expect(controller.snapshot()).toMatchObject({
+      playedSettingDb: -5,
+      atTop: true,
+      line: calibrationCopy.atTopLine,
+    });
+  });
+
+  it("keeps the setting the music reached, stops it, and records the music as the anchor", async () => {
+    const { controller, advance, loopCalls } = await musicSetup();
+    controller.open();
+    controller.setTarget(calibrationSettingKeepMinDb + 2);
+    advance(30_000);
+    const outcome = controller.keep();
+    expect(outcome).toMatchObject({
+      kind: "kept",
+      settingDb: calibrationSettingKeepMinDb + 2,
+    });
+    expect(loopCalls().at(-1)).toMatchObject({
+      kind: "stopLoop",
+      fadeOutMs: stopFadeMs,
+    });
+    expect(controller.snapshot()).toMatchObject({
+      playing: false,
+      kept: { settingDb: calibrationSettingKeepMinDb + 2, anchor: "music" },
+      line: calibrationCopy.keptLine,
+    });
+  });
+
+  it("refuses a setting below the Keep_Minimum with the music's volume line, and the music plays on", async () => {
+    const { controller, advance, loopCalls } = await musicSetup();
+    controller.open();
+    advance(1_000);
+    expect(controller.keep()).toEqual({
+      kind: "refused",
+      reason: "systemVolumeHigh",
+    });
+    expect(controller.snapshot()).toMatchObject({
+      playing: true,
+      line: calibrationCopy.systemVolumeHighLine,
+    });
+    expect(loopCalls().some((call) => call.kind === "stopLoop")).toBe(false);
+  });
+
+  it("stops the music on close and on a stop", async () => {
+    const { output, controller, loopCalls, advance } = await musicSetup();
+    controller.open();
+    controller.close();
+    expect(loopCalls().at(-1)).toMatchObject({ kind: "stopLoop" });
+    expect(controller.snapshot().playing).toBe(false);
+    advance(1_000);
+    controller.open();
+    expect(controller.snapshot().playing).toBe(true);
+    output.stopAll();
+    expect(controller.snapshot().playing).toBe(false);
+    const callCount = loopCalls().length;
+    advance(5_000);
+    expect(loopCalls()).toHaveLength(callCount);
+  });
+
+  it("while the music loads, gives the loading line, remembers the start and plays the music once it is ready", async () => {
+    const { backend, controller, loopCalls } = await musicSetup({
+      calibrationMusic: { mode: "pending" },
+    });
+    expect(controller.snapshot()).toMatchObject({
+      calibrationSound: "loading",
+      line: calibrationCopy.loadingLine,
+      controlTopDb: calibrationSettingTopDb(),
+    });
+    controller.open();
+    expect(controller.snapshot()).toMatchObject({
+      playing: false,
+      line: calibrationCopy.loadingLine,
+    });
+    expect(loopCalls()).toEqual([]);
+    expect(backend.scheduled()).toEqual([]);
+    backend.resolveCalibrationMusic(musicSamples());
+    await flush();
+    expect(loopCalls()).toHaveLength(1);
+    expect(controller.snapshot()).toMatchObject({
+      calibrationSound: "music",
+      playing: true,
+      controlTopDb: -5,
+      playedSettingDb: calibrationSettingMinDb,
+      line: calibrationCopy.openLine,
+    });
+  });
+
+  it("while the music loads, plays the first hiss repeat once loading has failed", async () => {
+    const { backend, timer, controller, loopCalls } = await musicSetup({
+      calibrationMusic: { mode: "pending" },
+    });
+    controller.open();
+    timer.advanceBy(calibrationMusicLoadMaxMs);
+    expect(backend.scheduled()).toHaveLength(1);
+    expect(loopCalls()).toEqual([]);
+    expect(controller.snapshot()).toMatchObject({
+      calibrationSound: "hiss",
+      playing: true,
+      playedSettingDb: calibrationSettingMinDb,
+      controlTopDb: calibrationSettingTopDb(),
+      line: calibrationCopy.hiss.openLine,
+    });
+  });
+
+  it("does not start the sound when loading ends after the calibration was closed", async () => {
+    const { backend, controller, loopCalls } = await musicSetup({
+      calibrationMusic: { mode: "pending" },
+    });
+    controller.open();
+    controller.close();
+    backend.resolveCalibrationMusic(musicSamples());
+    await flush();
+    expect(loopCalls()).toEqual([]);
+    expect(controller.snapshot().playing).toBe(false);
+  });
+
+  it("does not start the sound when loading ends after a stop", async () => {
+    const { backend, output, controller, loopCalls } = await musicSetup({
+      calibrationMusic: { mode: "pending" },
+    });
+    controller.open();
+    output.stopAll();
+    backend.resolveCalibrationMusic(musicSamples());
+    await flush();
+    expect(loopCalls()).toEqual([]);
+  });
+
+  it("brings a target above the music's top down to it when the music becomes ready", async () => {
+    const { backend, controller } = await musicSetup({
+      calibrationMusic: { mode: "pending" },
+    });
+    controller.setTarget(Number.POSITIVE_INFINITY);
+    expect(controller.snapshot().targetSettingDb).toBe(
+      calibrationSettingTopDb(),
+    );
+    backend.resolveCalibrationMusic(musicSamples());
+    await flush();
+    expect(controller.snapshot().targetSettingDb).toBe(-5);
+  });
+
+  it("gives the hiss's lines when the music could not be loaded", async () => {
+    const { controller, advance } = await musicSetup({
+      calibrationMusic: { mode: "reject" },
+    });
+    expect(controller.snapshot()).toMatchObject({
+      calibrationSound: "hiss",
+      line: calibrationCopy.hiss.openLine,
+    });
+    controller.open();
+    advance(2_000);
+    expect(controller.keep()).toMatchObject({ reason: "systemVolumeHigh" });
+    expect(controller.snapshot().line).toBe(
+      calibrationCopy.hiss.systemVolumeHighLine,
+    );
+  });
+
+  it("tries the start again after calibrationRepeatGapMs when the shell is busy", async () => {
+    const { backend, output, controller, advance, loopCalls } =
+      await musicSetup();
+    output.beginCalibration();
+    const repeat = output.playCalibrationRepeat({
+      requestedSettingDb: calibrationSettingMinDb,
+      random: createSeededRandom(3),
+    });
+    expect(repeat.kind).toBe("scheduled");
+    controller.open();
+    expect(controller.snapshot().repeatRefusal).toBe("busy");
+    expect(loopCalls()).toEqual([]);
+    if (repeat.kind === "scheduled") {
+      advance(repeat.endMs - backend.currentTimeMs() + calibrationRepeatGapMs);
+    }
+    expect(loopCalls()).toHaveLength(1);
+    expect(controller.snapshot()).toMatchObject({
+      playing: true,
+      repeatRefusal: null,
+    });
   });
 });

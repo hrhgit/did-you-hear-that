@@ -6,7 +6,7 @@ May import from: `config`.
 
 ## The output stage's copy
 
-- `calibration-copy.ts`: the calibration lines and buttons, and `roomsShortLine(count, total)`, the line shown when some rooms cannot get as loud as the house would like at the kept setting. No line advises raising the system volume.
+- `calibration-copy.ts`: the calibration lines and buttons, and `roomsShortLine(count, total)`, the line shown when some rooms cannot get as loud as the house would like at the kept setting. The visitor sets a piece of music to the volume at which they would listen to music in a quiet room; the music's lines are the top-level constants and the hiss's, for when the music cannot be loaded, are in `calibrationCopy.hiss` (`.kiro/specs/audible-start/design.md`, "The calibration copy"). No line advises raising the system volume, and no line mentions hands.
 - `headphone-check-copy.ts`: the question, the four answers and the line for each judgement.
 - `output-state-copy.ts`: the stop control, the "Start sound again" button, a line for each reason sound stopped and a line for each reason a device cannot carry the house.
 - `listening-page-copy.ts`: the labels of the development listening page, and functions for every number it shows. `levelLabel` always labels a level as relative to the visitor's own calibration.

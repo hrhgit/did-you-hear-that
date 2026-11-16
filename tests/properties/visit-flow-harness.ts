@@ -29,6 +29,7 @@ import type {
   OutputEventKind,
   VisitDriver,
 } from "../listeners/simulated-visitor";
+import { calibrationMusicFixture } from "./calibration-music-fixture";
 
 // The Visit_Harness (visit-flow design.md, "The Visit_Harness"; R22.1, D26). It builds a visit
 // flow on the fake backend and the manual timer, moves the audio clock and the timer together, and
@@ -136,7 +137,25 @@ export interface VisitHarnessOptions {
     FakeAudioBackendOptions,
     "performanceOffsetMs" | "startMs"
   >;
+  /**
+   * The calibration music (audible-start design.md, "Testing the music under Node"): `fixture`,
+   * the default, resolves the load with `harnessMusicFixture`, as a site whose music loads does;
+   * `reject` fails it, so the calibration sound is the hiss. A `calibrationMusic` in `backend`
+   * goes before both.
+   */
+  readonly music?: "fixture" | "reject";
 }
+
+/**
+ * The music the harness loads by default: music-like samples made in code, with the RMS and the
+ * crest factor of the measured file (0.11088 and 18.40 dB), so that its top is −5 dB, at the
+ * harness's rate.
+ */
+export const harnessMusicFixture: Float32Array = calibrationMusicFixture({
+  crestDb: 18.4,
+  rmsFraction: 0.11088,
+  sampleRateHz: harnessSampleRateHz,
+});
 
 export interface VisitHarness extends VisitDriver {
   readonly backend: FakeAudioBackend;
@@ -161,7 +180,8 @@ export interface VisitHarness extends VisitDriver {
 /**
  * Builds a Visit_Harness (R22.1). The fake backend runs at `harnessSampleRateHz` with
  * `performanceOffsetMs` P and its audio clock at 0, and the manual timer starts at P, so the page
- * clock of the timestamp pair is the timer's clock.
+ * clock of the timestamp pair is the timer's clock. Its calibration music loads with
+ * `harnessMusicFixture` unless `music` is `reject`.
  *
  * The flow and its shell get a timer that wraps the manual timer and knows the due time of every
  * pending callback, so the harness can move the clocks from one callback to the next. Moving
@@ -172,6 +192,10 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
   const { performanceOffsetMs } = options;
   const backend = createFakeAudioBackend({
     sampleRateHz: harnessSampleRateHz,
+    calibrationMusic:
+      options.music === "reject"
+        ? { mode: "reject" }
+        : { mode: "resolve", samples: harnessMusicFixture },
     ...options.backend,
     performanceOffsetMs,
     startMs: 0,

@@ -13,7 +13,7 @@ export const outputStateCopy = Object.freeze({
       "All sound stopped when the page was hidden. Press Start sound again when you are ready.",
     pageLeft: "All sound stopped when you left the page.",
     deviceChanged:
-      "All sound stopped because your audio device changed. Match the hiss again before the house plays anything else.",
+      "All sound stopped because your audio device changed. Calibrate again before the house plays anything else.",
     interrupted:
       "All sound stopped because something else on this device took over the sound. Press Start sound again when you are ready.",
   }),

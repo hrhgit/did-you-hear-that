@@ -14,7 +14,7 @@ export const leavingCopy = Object.freeze({
     interrupted:
       "Something else on this device took over the sound, so the visit paused. The sound you were waiting for will come again later.",
     deviceChanged:
-      "Your audio device changed, so the visit paused. You will match the hiss again, and then this room starts over.",
+      "Your audio device changed, so the visit paused. You will calibrate again, and then this room starts over.",
   }),
   goOnButton: "Go on",
   exitHeading: "You left the house",

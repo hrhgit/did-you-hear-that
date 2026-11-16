@@ -171,6 +171,58 @@ describe("playVisit", () => {
     },
   );
 
+  it.each([
+    ["fixture" as const, "music", false],
+    ["reject" as const, "hiss", true],
+  ])(
+    "calibrates with the harness's music %s: the anchor is %s, and repeats are scheduled: %s",
+    async (music, anchor, schedulesRepeats) => {
+      const harness = createVisitHarness({
+        seed: 20261211,
+        performanceOffsetMs: 777,
+        music,
+      });
+      const run = await playVisit(harness, script);
+      expect(run.ending).toBe("done");
+      const final = harness.flow.snapshot();
+      if (final.stage !== "result") {
+        throw new Error("The visit did not reach its result.");
+      }
+      expect(final.visitLog.calibrations).toMatchObject([
+        { settingDb: script.calibrationTargetDb, anchor },
+      ]);
+      // The music is a loop of the output stage; the hiss is repeats it schedules.
+      const calibrationSchedules = harness.schedules.filter(
+        (schedule) => schedule.stage === "calibration",
+      );
+      expect(calibrationSchedules.length > 0).toBe(schedulesRepeats);
+      expect(
+        harness.backend
+          .loopTimeline()
+          .some((call) => call.kind === "startLoop"),
+      ).toBe(music === "fixture");
+    },
+  );
+
+  it("keeps the top of the music's control for a setting above it, as the line at the top says", async () => {
+    const harness = createVisitHarness({
+      seed: 20261212,
+      performanceOffsetMs: 0,
+    });
+    const run = await playVisit(harness, {
+      ...script,
+      calibrationTargetDb: -4,
+    });
+    expect(run.ending).toBe("done");
+    const final = harness.flow.snapshot();
+    if (final.stage !== "result") {
+      throw new Error("The visit did not reach its result.");
+    }
+    expect(final.visitLog.calibrations).toMatchObject([
+      { settingDb: -5, anchor: "music" },
+    ]);
+  });
+
   it("drags halfway to a setting off the grid, which the flow rounds down, and presses on from there", async () => {
     const harness = createVisitHarness({
       seed: 20261210,

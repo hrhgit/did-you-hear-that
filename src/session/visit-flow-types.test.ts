@@ -5,15 +5,19 @@ import type {
   RoomResult,
   SoundOutcome,
 } from "../engine/search-types";
+import type { CalibrationSound as OutputCalibrationSound } from "../audio/output/create-audio-output";
 import type {
   BetweenRoomsSnapshot,
+  CalibrationAnchor,
   CalibrationSnapshot,
+  CalibrationSound,
   EarpieceArrangement,
   EarpieceState,
   EntrySnapshot,
   ExitSnapshot,
   HeadphoneCheckAnswer,
   HeadphoneCheckSnapshot,
+  LoggedCalibration,
   LoggedEarResult,
   LoggedRoomResult,
   MissedSoundReplay,
@@ -279,5 +283,40 @@ describe("visit-flow-types", () => {
     expectTypeOf<
       Omit<CalibrationSnapshot, "targetSettingDb">
     >().toExtend<CalibrationSnapshot>();
+  });
+
+  it("names the calibration sounds and the anchor kinds of audible-start", () => {
+    expectTypeOf<CalibrationSound>().toEqualTypeOf<
+      "loading" | "music" | "hiss"
+    >();
+    expectTypeOf<CalibrationAnchor>().toEqualTypeOf<
+      "hands" | "music" | "hiss"
+    >();
+  });
+
+  it("gives the calibration sound the same members as the output stage's", () => {
+    expectTypeOf<CalibrationSound>().toEqualTypeOf<OutputCalibrationSound>();
+  });
+
+  it("gives CalibrationSnapshot an optional calibrationSound, heading and introLines (D29)", () => {
+    expectTypeOf<
+      Pick<CalibrationSnapshot, "calibrationSound" | "heading" | "introLines">
+    >().toEqualTypeOf<{
+      readonly calibrationSound?: CalibrationSound;
+      readonly heading?: string;
+      readonly introLines?: readonly string[];
+    }>();
+    expectTypeOf<
+      Omit<CalibrationSnapshot, "calibrationSound" | "heading" | "introLines">
+    >().toExtend<CalibrationSnapshot>();
+  });
+
+  it("gives LoggedCalibration an optional anchor, absent in calibrations recorded before audible-start", () => {
+    expectTypeOf<Pick<LoggedCalibration, "anchor">>().toEqualTypeOf<{
+      readonly anchor?: CalibrationAnchor;
+    }>();
+    expectTypeOf<
+      Omit<LoggedCalibration, "anchor">
+    >().toExtend<LoggedCalibration>();
   });
 });

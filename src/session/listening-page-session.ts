@@ -116,6 +116,10 @@ interface RowState {
  *
  * The page is one Room_Span: it never calls `beginRoom`, so every sound on an ear is limited by
  * the last one on that ear, across rows (D27).
+ *
+ * It calibrates as the visit does (audible-start Q34): the controller plays the calibration music
+ * the shell loads in the first `start`, or the hiss repeats where the music cannot be loaded, and
+ * the snapshot's calibration gives which.
  */
 export function createListeningPageSession(
   options: ListeningPageSessionOptions,

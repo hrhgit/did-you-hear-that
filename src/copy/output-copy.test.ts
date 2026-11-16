@@ -232,7 +232,98 @@ describe("the output stage's copy", () => {
   it("tells the visitor to turn the system volume down when the setting is too low to keep (R16.6)", () => {
     expect(calibrationCopy.systemVolumeHighLine).toMatch(/turn it down/i);
     expect(calibrationCopy.systemVolumeHighLine).toMatch(
-      /match the hiss again/i,
+      /set the music again/i,
+    );
+    expect(calibrationCopy.hiss.systemVolumeHighLine).toMatch(/turn it down/i);
+    expect(calibrationCopy.hiss.systemVolumeHighLine).toMatch(
+      /set the hiss again/i,
+    );
+  });
+
+  it("says that a changed audio device means calibrating again", () => {
+    expect(outputStateCopy.stoppedLines.deviceChanged).toMatch(
+      /calibrate again/i,
+    );
+    expect(outputStateCopy.stoppedLines.deviceChanged).toBe(
+      "All sound stopped because your audio device changed. Calibrate again before the house plays anything else.",
+    );
+  });
+});
+
+describe('the calibration copy (audible-start design.md, "The calibration copy")', () => {
+  it("holds the music's lines word for word", () => {
+    expect(calibrationCopy).toMatchObject({
+      heading: "Set the music to a comfortable volume",
+      againHeading: "Set the music again",
+      openLine:
+        "Move the control until the music is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The music starts very quietly.",
+      whyLine:
+        "This tells the house how loud is safe on these headphones at this volume, and gives your result a level to be measured from.",
+      riseLine:
+        "The music follows the control a little at a time, so it takes a few seconds to get louder.",
+      keysLine:
+        "On a keyboard, the arrow keys move the control one step. Shift with an arrow, Page Up or Page Down move it five steps. Home and End go to the ends. Enter keeps the setting.",
+      atTopLine:
+        "This is as loud as the music goes here. If it still sounds too quiet, keep this setting.",
+      systemVolumeHighLine:
+        "Your system volume is set very high. Turn it down, then set the music again.",
+      loadingLine: "The music is on its way.",
+    });
+  });
+
+  it("holds the hiss's lines word for word", () => {
+    expect(calibrationCopy.hiss).toEqual({
+      heading: "Set the hiss to a comfortable volume",
+      againHeading: "Set the hiss again",
+      openLine:
+        "The calibration sound is a hiss. Move the control until it is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The hiss starts very quietly.",
+      riseLine:
+        "The hiss follows the control a little at a time, so it takes a few seconds to get louder.",
+      atTopLine:
+        "This is as loud as the hiss goes here. If it still sounds too quiet, keep this setting.",
+      systemVolumeHighLine:
+        "Your system volume is set very high. Turn it down, then set the hiss again.",
+    });
+    expect(Object.isFrozen(calibrationCopy.hiss)).toBe(true);
+  });
+
+  it("keeps the line of audio-safety rule 8 and the button labels as they were", () => {
+    expect(calibrationCopy.keptLine).toBe(
+      "Leave your system volume where it is now. The house keeps every sound below its limit only if you do not turn the volume up.",
+    );
+    expect(calibrationCopy).toMatchObject({
+      startButton: "Start calibrating",
+      quieterButton: "Quieter",
+      louderButton: "Louder",
+      keepButton: "Keep this setting",
+    });
+  });
+
+  it("mentions hands in no line (audible-start R7.2)", () => {
+    for (const { path, text } of everyString) {
+      expect(text, path).not.toMatch(/\bhands?\b/i);
+    }
+  });
+
+  it("names the music in the music's lines and the hiss in the hiss's, and neither in the lines both share", () => {
+    for (const key of [
+      "heading",
+      "againHeading",
+      "openLine",
+      "riseLine",
+      "atTopLine",
+      "systemVolumeHighLine",
+    ] as const) {
+      expect(calibrationCopy[key], key).toMatch(/music/i);
+      expect(calibrationCopy[key], key).not.toMatch(/hiss/i);
+      expect(calibrationCopy.hiss[key], key).toMatch(/hiss/i);
+    }
+    for (const key of ["whyLine", "keysLine", "keptLine"] as const) {
+      expect(calibrationCopy[key], key).not.toMatch(/music|hiss/i);
+    }
+    // The hiss's line says what the sound is and nothing about why the music is missing.
+    expect(calibrationCopy.hiss.openLine).not.toMatch(
+      /load|could not|fail|missing|music cannot/i,
     );
   });
 });

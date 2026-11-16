@@ -78,6 +78,7 @@ function fullLog(): VisitLog {
     settingDb: -31,
     roomTopLevelDb: roomTops,
     keptAtMs: visitStartMs + 1000,
+    anchor: "music",
   });
   visit.headphoneCheckAnswered({
     calibrationIndex: calibration.calibrationIndex,
@@ -328,6 +329,53 @@ describe("createVisitLogRecorder", () => {
         endedAtMs: 50,
       },
     ]);
+  });
+
+  it("records how the anchor of a kept calibration was set (audible-start R8.4)", () => {
+    const visit = recorder();
+    const music = visit.calibrationKept({
+      settingDb: -27,
+      roomTopLevelDb: roomTops,
+      keptAtMs: visitStartMs + 1,
+      anchor: "music",
+    });
+    const hiss = visit.calibrationKept({
+      settingDb: -20,
+      roomTopLevelDb: roomTops,
+      keptAtMs: visitStartMs + 2,
+      anchor: "hiss",
+    });
+    expect(music.anchor).toBe("music");
+    expect(hiss.anchor).toBe("hiss");
+    expect(visit.log().calibrations.map((entry) => entry.anchor)).toEqual([
+      "music",
+      "hiss",
+    ]);
+  });
+
+  it("records no anchor for a calibration given none, as one recorded before audible-start", () => {
+    const visit = recorder();
+    const entry = visit.calibrationKept({
+      settingDb: -27,
+      roomTopLevelDb: roomTops,
+      keptAtMs: visitStartMs + 1,
+    });
+    expect(Object.hasOwn(entry, "anchor")).toBe(false);
+  });
+
+  it("refuses an anchor that is not music or hiss, the hands among them", () => {
+    const visit = recorder();
+    for (const anchor of ["hands", "loading", ""]) {
+      expect(() =>
+        visit.calibrationKept({
+          settingDb: -27,
+          roomTopLevelDb: roomTops,
+          keptAtMs: visitStartMs + 1,
+          anchor: anchor as "music",
+        }),
+      ).toThrow(RangeError);
+    }
+    expect(visit.log().calibrations).toEqual([]);
   });
 
   it("freezes every entry and the log", () => {

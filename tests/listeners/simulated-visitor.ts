@@ -1,5 +1,5 @@
 // The Simulated_Visitor (visit-flow design.md, "The Simulated_Visitor"; R22.2). It plays one visit
-// through a visit flow driver: it chooses the visit, matches the hiss, answers the headphone check,
+// through a visit flow driver: it chooses the visit, sets the calibration sound, answers the headphone check,
 // goes through the rules and the rests, answers every presented trial with a Simulated_Listener
 // after a delay drawn from a seeded source, and applies the script's disturbances. It knows the
 // flow only through the contract and the flow's test options: it learns of a trial from the
@@ -271,7 +271,10 @@ export interface VisitorHeadphones {
 /** Everything a Simulated_Visitor does in one visit. */
 export interface VisitorScript {
   readonly visitType: VisitType;
-  /** The calibration setting the visitor raises the hiss to and keeps. */
+  /**
+   * The calibration setting the visitor raises the calibration sound to and keeps, or the top of
+   * the control where that is lower.
+   */
   readonly calibrationTargetDb: number;
   /** How the visitor moves the control to that setting. Without it, `presses`, as before audible-start. */
   readonly calibrationControl?: VisitorCalibrationControl;
@@ -407,10 +410,10 @@ interface PlannedAction {
  * Time moves by events: the visitor keeps its planned actions and moves the clocks to whichever
  * comes first, its next action or the timer's next callback, so that every answer lands at the
  * exact time planned. After every step it looks at the snapshot and plans what the stage asks
- * for: in calibration it starts the hiss, presses louder after each repeat until the played
- * setting reaches its target (at most `calibrationRiseMaxDb` above the last repeat, as a person
- * holding the button), and keeps it, or first drags the control as `script.calibrationControl`
- * says; at the headphone check it plays the check and answers; at
+ * for: in calibration it starts the calibration sound (the music, or the hiss where the music
+ * cannot be loaded), presses louder as the played setting rises until it reaches its target (at
+ * most `calibrationRiseMaxDb` above the played setting, as a person holding the button), and keeps
+ * it, or first drags the control as `script.calibrationControl` says; at the headphone check it plays the check and answers; at
  * `rules`, `betweenRooms` and `missedSoundReplay` it proceeds after a rest; while a pause holds it
  * resumes, at the time its disturbance set or at once. Each presented trial goes to the listener,
  * and an answer other than `none` is given after a drawn delay with a drawn time stamp. With a
@@ -775,6 +778,11 @@ export async function playVisit(
         if (playedDb === null) {
           return;
         }
+        // The control stands where the flow says: with the music, the played setting lies between
+        // grid settings and the flow rounds every move down to the grid (audible-start D1).
+        if (snapshot.targetSettingDb !== undefined) {
+          controlDb = snapshot.targetSettingDb;
+        }
         if (calibrationControl !== "presses" && !dragged) {
           atOnce(() => {
             dragged = true;
@@ -794,23 +802,26 @@ export async function playVisit(
           });
           return;
         }
-        if (playedDb === script.calibrationTargetDb) {
+        // A setting above the top of the control is the top: there the visitor keeps it, as the
+        // line at the top says. The music's top lies a step below the hiss's (audible-start D7).
+        const keptDb = Math.min(
+          script.calibrationTargetDb,
+          snapshot.controlTopDb,
+        );
+        if (playedDb === keptDb) {
           if (snapshot.keepRefusal === null) {
             atOnce(() => flow.keepCalibration());
           }
           return;
         }
-        if (playedDb > script.calibrationTargetDb) {
+        if (playedDb > keptDb) {
           atOnce(() => {
             controlDb = playedDb - calibrationSettingStepDb;
             flow.quieter();
           });
           return;
         }
-        const wantedDb = Math.min(
-          script.calibrationTargetDb,
-          playedDb + calibrationRiseMaxDb,
-        );
+        const wantedDb = Math.min(keptDb, playedDb + calibrationRiseMaxDb);
         if (Math.max(controlDb, playedDb) >= wantedDb) {
           return;
         }

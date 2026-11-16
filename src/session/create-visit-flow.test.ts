@@ -18,6 +18,7 @@ import type { AudioBackend } from "../audio/output/audio-backend";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
 import type {
   AudioOutput,
+  CalibrationMusicOutput,
   PlayOutcome,
   PlayRefusal,
   PlayRequest,
@@ -78,7 +79,7 @@ interface SpyPlay {
 interface Harness {
   readonly backend: FakeAudioBackend;
   readonly timer: ManualTimer;
-  readonly output: AudioOutput;
+  readonly output: AudioOutput & CalibrationMusicOutput;
   readonly flow: VisitFlow;
   /** Every call the flow made to the output shell, with the stage it was made in. */
   readonly calls: SpyCall[];
@@ -130,7 +131,7 @@ function createHarness(
   const record = (name: string): void => {
     calls.push({ name, stage: flowRef?.snapshot().stage ?? "creation" });
   };
-  const output: AudioOutput = {
+  const output: AudioOutput & CalibrationMusicOutput = {
     ...real,
     activate() {
       record("activate");
@@ -697,9 +698,18 @@ describe("createVisitFlow: calibration", () => {
       controlBottomDb: calibrationSettingMinDb,
       controlTopDb: calibrationSettingTopDb(),
       atTop: false,
-      line: calibrationCopy.openLine,
+      line: calibrationCopy.hiss.openLine,
       keepRefusal: null,
       targetSettingDb: calibrationSettingMinDb,
+      // The harness's fake has no music file: the calibration sound is the hiss.
+      calibrationSound: "hiss",
+      heading: calibrationCopy.hiss.heading,
+      introLines: [
+        calibrationCopy.hiss.openLine,
+        calibrationCopy.whyLine,
+        calibrationCopy.hiss.riseLine,
+        calibrationCopy.keysLine,
+      ],
     });
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
@@ -734,7 +744,7 @@ describe("createVisitFlow: calibration", () => {
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "calibration",
       keepRefusal: "systemVolumeHigh",
-      line: calibrationCopy.systemVolumeHighLine,
+      line: calibrationCopy.hiss.systemVolumeHighLine,
     });
   });
 
@@ -767,6 +777,7 @@ describe("createVisitFlow: calibration", () => {
           attic: report.rooms.attic.topLevelDb,
         },
         keptAtMs: expect.any(Number),
+        anchor: "hiss",
       },
     ]);
   }, 60_000);
@@ -794,6 +805,222 @@ describe("createVisitFlow: calibration", () => {
       });
     }
   }, 60_000);
+});
+
+describe("createVisitFlow: calibration with the music (audible-start R4 to R8)", () => {
+  /** Music-like samples made in code, with the crest factor of the measured file (18.4 dB). */
+  function musicSamples(): Float32Array {
+    const sampleCount = 4 * sampleRateHz;
+    const peakFraction = 0.92182;
+    // The crest factor of 18.4 dB as a ratio of peak to RMS.
+    const rmsFraction = peakFraction / 10 ** (18.4 / 20);
+    const squareFraction = Math.sqrt(
+      (rmsFraction ** 2 * sampleCount - peakFraction ** 2) / (sampleCount - 1),
+    );
+    const samples = new Float32Array(sampleCount);
+    for (let index = 0; index < sampleCount; index += 1) {
+      samples[index] = index % 2 === 0 ? squareFraction : -squareFraction;
+    }
+    samples[Math.floor(sampleCount / 2)] = peakFraction;
+    return samples;
+  }
+
+  const musicLines = [
+    calibrationCopy.openLine,
+    calibrationCopy.whyLine,
+    calibrationCopy.riseLine,
+    calibrationCopy.keysLine,
+  ];
+
+  it("gives the music's heading, opening lines, line and top once the music is ready", async () => {
+    const harness = createHarness({
+      backend: {
+        calibrationMusic: { mode: "resolve", samples: musicSamples() },
+      },
+    });
+    await toCalibration(harness);
+    expect(harness.flow.snapshot()).toMatchObject({
+      stage: "calibration",
+      calibrationSound: "music",
+      heading: calibrationCopy.heading,
+      introLines: musicLines,
+      line: calibrationCopy.openLine,
+      controlBottomDb: calibrationSettingMinDb,
+      controlTopDb: -5,
+      targetSettingDb: calibrationSettingMinDb,
+    });
+  });
+
+  it("plays the music from the bottom, follows the target a step at a time, and logs the music as the anchor", async () => {
+    const harness = createHarness({
+      backend: {
+        calibrationMusic: { mode: "resolve", samples: musicSamples() },
+      },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    expect(harness.backend.loopTimeline()).toMatchObject([
+      { kind: "startLoop" },
+    ]);
+    expect(harness.flow.snapshot()).toMatchObject({
+      playing: true,
+      playedSettingDb: calibrationSettingMinDb,
+    });
+    const targetDb = calibrationSettingKeepMinDb + 1;
+    harness.flow.setCalibrationTarget(targetDb);
+    harness.advance(30_000);
+    expect(harness.flow.snapshot()).toMatchObject({
+      playedSettingDb: targetDb,
+      targetSettingDb: targetDb,
+      line: calibrationCopy.openLine,
+    });
+    expect(harness.backend.scheduled()).toEqual([]);
+    harness.flow.keepCalibration();
+    expect(stageOf(harness)).toBe("headphoneCheck");
+    expect(harness.backend.loopTimeline().at(-1)).toMatchObject({
+      kind: "stopLoop",
+    });
+    expect(harness.output.rangeReport()?.calibrationSettingDb).toBeCloseTo(
+      targetDb,
+      9,
+    );
+  }, 60_000);
+
+  it("logs the music as the anchor of a kept calibration", async () => {
+    const harness = createHarness({
+      backend: {
+        calibrationMusic: { mode: "resolve", samples: musicSamples() },
+      },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    harness.flow.setCalibrationTarget(calibrationSettingKeepMinDb);
+    harness.advance(30_000);
+    harness.flow.keepCalibration();
+    await checkHeadphones(harness);
+    harness.flow.proceed();
+    harness.flow.proceed();
+    await harness.settle();
+    for (let room = 0; room < 3; room += 1) {
+      playRoom(harness, stepListener());
+      harness.flow.proceed();
+      await harness.settle();
+    }
+    const result = harness.flow.snapshot();
+    expect(logOf(result).calibrations).toMatchObject([
+      { settingDb: calibrationSettingKeepMinDb, anchor: "music" },
+    ]);
+  }, 60_000);
+
+  it("while the music loads, gives the loading line and the hiss's top, and a press of start plays the music once it is ready (R4.5, R4.6)", async () => {
+    const harness = createHarness({
+      backend: { calibrationMusic: { mode: "pending" } },
+    });
+    await toCalibration(harness);
+    expect(harness.flow.snapshot()).toMatchObject({
+      calibrationSound: "loading",
+      heading: calibrationCopy.heading,
+      introLines: musicLines,
+      line: calibrationCopy.loadingLine,
+      controlTopDb: calibrationSettingTopDb(),
+    });
+    harness.flow.startCalibration();
+    await harness.settle();
+    expect(harness.flow.snapshot()).toMatchObject({
+      playing: false,
+      line: calibrationCopy.loadingLine,
+    });
+    expect(harness.backend.loopTimeline()).toEqual([]);
+    expect(harness.backend.scheduled()).toEqual([]);
+    harness.backend.resolveCalibrationMusic(musicSamples());
+    await harness.settle();
+    expect(harness.backend.loopTimeline()).toMatchObject([
+      { kind: "startLoop" },
+    ]);
+    expect(harness.flow.snapshot()).toMatchObject({
+      calibrationSound: "music",
+      playing: true,
+      controlTopDb: -5,
+      line: calibrationCopy.openLine,
+    });
+  });
+
+  it("while the music loads, a press of start plays the first hiss repeat when loading fails, with the hiss's lines", async () => {
+    const harness = createHarness({
+      backend: { calibrationMusic: { mode: "pending" } },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    await harness.settle();
+    harness.backend.rejectCalibrationMusic();
+    await harness.settle();
+    expect(harness.backend.scheduled()).toHaveLength(1);
+    expect(harness.flow.snapshot()).toMatchObject({
+      calibrationSound: "hiss",
+      playing: true,
+      playedSettingDb: calibrationSettingMinDb,
+      heading: calibrationCopy.hiss.heading,
+      line: calibrationCopy.hiss.openLine,
+      controlTopDb: calibrationSettingTopDb(),
+    });
+  });
+
+  it("while the music loads, starts nothing when it arrives while a pause holds", async () => {
+    const harness = createHarness({
+      backend: { calibrationMusic: { mode: "pending" } },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    await harness.settle();
+    harness.backend.fire("hidden");
+    expect(harness.flow.snapshot()).toMatchObject({
+      pause: { reason: "hidden" },
+    });
+    harness.backend.resolveCalibrationMusic(musicSamples());
+    await harness.settle();
+    expect(
+      harness.backend
+        .loopTimeline()
+        .filter((call) => call.kind === "startLoop"),
+    ).toEqual([]);
+    expect(harness.flow.snapshot()).toMatchObject({
+      pause: { reason: "hidden" },
+      playing: false,
+    });
+  });
+
+  it("while the music loads, starts nothing when it arrives after calibration was left", async () => {
+    const harness = createHarness({
+      backend: { calibrationMusic: { mode: "pending" } },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    await harness.settle();
+    harness.flow.stop();
+    harness.flow.backToFrontDoor();
+    harness.backend.resolveCalibrationMusic(musicSamples());
+    await harness.settle();
+    expect(
+      harness.backend
+        .loopTimeline()
+        .filter((call) => call.kind === "startLoop"),
+    ).toEqual([]);
+  });
+
+  it("stops the music when the visitor stops", async () => {
+    const harness = createHarness({
+      backend: {
+        calibrationMusic: { mode: "resolve", samples: musicSamples() },
+      },
+    });
+    await toCalibration(harness);
+    harness.flow.startCalibration();
+    harness.advance(1_000);
+    harness.flow.stop();
+    expect(harness.backend.loopTimeline().at(-1)).toMatchObject({
+      kind: "fadeToSilence",
+    });
+  });
 });
 
 describe('createVisitFlow: the calibration target (audible-start design.md, "The calibration target")', () => {
@@ -827,7 +1054,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
       targetSettingDb: calibrationSettingTopDb(),
       playedSettingDb: calibrationSettingTopDb(),
       atTop: true,
-      line: calibrationCopy.atTopLine,
+      line: calibrationCopy.hiss.atTopLine,
     });
   }, 60_000);
 
@@ -1345,6 +1572,7 @@ describe("createVisitFlow: pauses", () => {
       playing: false,
       playedSettingDb: null,
       pause: null,
+      heading: calibrationCopy.hiss.againHeading,
     });
     const playsBefore = harness.calls.filter(
       (call) => call.name === "play",
@@ -1585,7 +1813,7 @@ describe("createVisitFlow: stop and leaving", () => {
       visitType: "full",
       again: false,
       playedSettingDb: null,
-      line: calibrationCopy.openLine,
+      line: calibrationCopy.hiss.openLine,
     });
     harness.flow.keepCalibration();
     expect(stageOf(harness)).toBe("calibration");

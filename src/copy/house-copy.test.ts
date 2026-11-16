@@ -19,6 +19,10 @@ import {
 } from "./room-copy";
 import * as rules from "./rules-copy";
 import { rulesCopy } from "./rules-copy";
+import { calibrationCopy } from "./calibration-copy";
+import { leavingCopy } from "./leaving-copy";
+import * as visit from "./visit-copy";
+import { visitCopy } from "./visit-copy";
 
 /** Every string reachable from a module's exports, with the path to it. */
 function stringsOf(
@@ -46,6 +50,7 @@ const constantStrings = [
   ...stringsOf("rules", rules),
   ...stringsOf("room", room),
   ...stringsOf("leaving", leaving),
+  ...stringsOf("visit", visit),
 ];
 
 const frequencies = fc.double({ min: 20, max: 20000, noNaN: true });
@@ -62,6 +67,25 @@ describe("the house interface's copy", () => {
     expect(findBannedTerms(text, bannedTerms)).toEqual([]);
     expect(text.trim()).toBe(text);
     expect(text).not.toBe("");
+  });
+
+  it.each(constantStrings)(
+    "$path says nothing about hands (audible-start R7.2)",
+    ({ text }) => {
+      expect(text).not.toMatch(/\bhands?\b/i);
+    },
+  );
+
+  it("heads the calibration screens with the music's headings until the page reads the snapshot's (audible-start D32)", () => {
+    expect(visitCopy.calibrationHeading).toBe(calibrationCopy.heading);
+    expect(visitCopy.recalibrateHeading).toBe(calibrationCopy.againHeading);
+  });
+
+  it("says that a changed audio device means calibrating again, without naming the calibration sound", () => {
+    expect(leavingCopy.pauseLines.deviceChanged).toBe(
+      "Your audio device changed, so the visit paused. You will calibrate again, and then this room starts over.",
+    );
+    expect(leavingCopy.pauseLines.deviceChanged).not.toMatch(/hiss|music/i);
   });
 
   it("opens with the line the brief fixes for the front door", () => {
