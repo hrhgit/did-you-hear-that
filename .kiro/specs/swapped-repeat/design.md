@@ -1111,6 +1111,8 @@ export const swappedRepeatCopy = Object.freeze({
   runLabels: Object.freeze({ asMarked: "Headphones as marked", swapped: "Headphones swapped" }),
   /** The keys are the earpieces. */
   earpieceLabels: Object.freeze({ left: "Left earpiece", right: "Right earpiece" }),
+  /** The letters printed on headphones, which the page draws on a small sketch of the swapped headphones. The keys are the earpieces. */
+  earpieceMarks: Object.freeze({ left: "L", right: "R" }),
   /** The keys are the outcomes. */
   outcomeLabels: Object.freeze({
     followsEar: "The difference stayed with your ears",
@@ -1118,10 +1120,14 @@ export const swappedRepeatCopy = Object.freeze({
     unclear: "Not clear",
   }),
   savedAgainLine: "The saved visit now holds the room you visited again.",   // Q5, decided by the owner on 2026-11-15
+  /** Shown beside the save control while `archive.savedCopyLacksRepeats` is true (the sub-question of Q5, chosen by the owner's coordinator on 2026-11-15). */
+  savedCopyLacksLine: "The saved visit does not hold the room you visited again yet. Save again to add it.",
 });
 ```
 
 `answers` and `question` are those of the visit's headphone check, so the visitor answers the same question with the same labels. The pause lines are the visit's: "The visit is paused. The sound you were waiting for will come again later." and the two for a hidden page and an interruption.
+
+`savedCopyLacksLine` and `earpieceMarks` were added on 2026-11-15 at the request of the owner's coordinator, who builds the page and needs every string it shows in `src/copy`. Their wording is the coordinator's proposal; the owner has not decided it. The page shows `savedCopyLacksLine` beside its save control while `savedCopyLacksRepeats` is true, and draws `earpieceMarks`, the letters printed on headphones, on a small sketch of the swapped headphones. The keys of `earpieceMarks` are the earpieces, `left` and `right`, as `structure.md` asks of every name in code; only the strings are the letters printed on the headphones.
 
 ### `src/copy/swapped-repeat-lines.ts`
 
@@ -1136,7 +1142,7 @@ export function outcomeLines(outcome: SwappedRepeatOutcomeName, unclearReason: S
 export function comparisonDescription(input: ComparisonWords): string;   // plain values of both runs and the outcome
 ```
 
-`swapped-repeat-types-match.test.ts` checks that `SwapSideName` equals `Ear`, `SwappedRepeatOutcomeName` equals `SwappedRepeatOutcome`, `SwappedRepeatUnclearReasonName` equals `SwappedRepeatUnclearReason`, and that the keys of `judgementLines` are `confirmed` and the judgements of `SwappedRepeatCheck["judgement"]`, of `pauseLines` exactly `SwappedRepeatPauseReason`, of `unavailableLines` exactly `SwappedRepeatUnavailableReason`, of `endLines` exactly `SwappedRepeatEnding`, of `runLabels` exactly `EarpieceArrangement`, of `earpieceLabels` exactly `Ear` and of `outcomeLabels` exactly `SwappedRepeatOutcome`.
+`swapped-repeat-types-match.test.ts` checks that `SwapSideName` equals `Ear`, `SwappedRepeatOutcomeName` equals `SwappedRepeatOutcome`, `SwappedRepeatUnclearReasonName` equals `SwappedRepeatUnclearReason`, and that the keys of `judgementLines` are `confirmed` and the judgements of `SwappedRepeatCheck["judgement"]`, of `pauseLines` exactly `SwappedRepeatPauseReason`, of `unavailableLines` exactly `SwappedRepeatUnavailableReason`, of `endLines` exactly `SwappedRepeatEnding`, of `runLabels` exactly `EarpieceArrangement`, of `earpieceLabels` exactly `Ear`, of `earpieceMarks` exactly `Ear` and of `outcomeLabels` exactly `SwappedRepeatOutcome`.
 
 | Function and input | Output |
 |---|---|
@@ -1157,7 +1163,7 @@ Why these words. The outcome lines say where the difference seems to belong and 
 
 ### The copy tests
 
-`src/copy/swapped-repeat-copy.test.ts`, in the form of `replay-copy.test.ts`: every string reachable from `swappedRepeatCopy` is non-empty, trimmed and free of banned terms; every function gives the outputs of the table; for representative inputs (every room and pitch, every ear and earpiece pair of a swap, levels from −70 to 15 in 5 dB steps and −0.4, 0, 0.4, every outcome with its reasons, every state of every wing) every output is free of banned terms, every match of `\d+ dB` is followed by " quieter than your calibration", " louder than your calibration", " quieter on the left" or " quieter on the right", the outcome lines of `followsEar` end with `limitsStatement.sentences[3]` exactly, and no other outcome's lines contain it; the inputs of the `RangeError` rows throw. `npm run check:copy` checks the exported constants, and the copy hook runs it on save.
+`src/copy/swapped-repeat-copy.test.ts`, in the form of `replay-copy.test.ts`: every string reachable from `swappedRepeatCopy` is non-empty, trimmed and free of banned terms; `savedCopyLacksLine` has the wording above, and `earpieceMarks` is frozen with exactly the keys `left` and `right` and the letters `L` and `R`; every function gives the outputs of the table; for representative inputs (every room and pitch, every ear and earpiece pair of a swap, levels from −70 to 15 in 5 dB steps and −0.4, 0, 0.4, every outcome with its reasons, every state of every wing) every output is free of banned terms, every match of `\d+ dB` is followed by " quieter than your calibration", " louder than your calibration", " quieter on the left" or " quieter on the right", the outcome lines of `followsEar` end with `limitsStatement.sentences[3]` exactly, and no other outcome's lines contain it; the inputs of the `RangeError` rows throw. `npm run check:copy` checks the exported constants, and the copy hook runs it on save.
 
 ## Measurements
 
