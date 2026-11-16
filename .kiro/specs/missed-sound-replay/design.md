@@ -1045,6 +1045,24 @@ Times of task 11. Three runs of `npm test` on 2026-11-15, with the files of task
 
 Where the time goes. CP2 runs 1000 times and CP9 500 times, and each run of both plays its drawn script on the replay harness, because CP2 checks the counts of every view of a replay and CP9 every string of one. Run alone, CP2 took 8.2 seconds and CP9 6.5 seconds; in `npm test` the other files run in parallel workers, and both took about twice as long. Over 300 drawn runs, one harness took about 3.8 ms to build (most of it the calibration) and 3.3 ms to play its script and the minute after it. The two files together add about 26 to 31 seconds to the 27 to 32 seconds of task 10.
 
+Times of task 13. Three runs of `npm test` on 2026-11-15, with the files of tasks 1 to 13 present, measured the same way, in ms. The run counts and the 45 second budget are PROPOSED, NOT APPROVED (Q7).
+
+| File | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| CP1 | 1712 | 1628 | 1872 |
+| CP2 | 13548 | 15679 | 15786 |
+| CP3 | 1089 | 1132 | 1185 |
+| CP4 | 2582 | 2593 | 2901 |
+| CP5 | 4504 | 4791 | 5272 |
+| CP6 | 6887 | 7455 | 7085 |
+| CP7 | 5730 | 6199 | 6161 |
+| CP8 | 5040 | 5611 | 5711 |
+| CP9 | 11734 | 12567 | 12285 |
+| CP10 | 3422 | 3308 | 3631 |
+| Together | 56248 | 60963 | 61889 |
+
+**Every run was over the 45 second budget.** The owner's coordinator asked for task 13 to be finished in spite of the times of task 11, so it was finished and the times are written here; the budget and the run counts are still the owner's to settle in Q7, and no run count was changed. CP10 adds 3.3 to 3.6 seconds to the files of task 11. `missed-sound-replay-simulated-visits.test.ts` took 303, 382 and 358 ms, and the regression file 59, 40 and 47 ms. The whole of `npm test` took 60.0, 66.0 and 70.6 seconds. `src/session/create-visit-flow.test.ts`, which is not a property file, took 46.6, 51.6 and 55.0 seconds in these runs: each example of task 12 plays a quick visit to the replay, about 0.46 seconds alone.
+
 ### Counterexamples
 
 A counterexample becomes a named case in `tests/properties/missed-sound-replay-regressions.test.ts`, `regression <n>: <what went wrong> (<property>, seed <s>)`, with the case written out, first with `it.fails`. The task that finds it stops there and reports it, so that the case and the fix go in separate commits, as the earlier specs do. A case that could only be removed by changing a proposed value of Q1 or Q2, or a steering value, stays an expected break, with a decision giving the case.

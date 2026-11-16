@@ -114,7 +114,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
 
 **End of batch 3.** Every property of the controller holds before the flow plays a replayed sound.
 
-- [ ] 12. Play the replay in the visit flow
+- [x] 12. Play the replay in the visit flow
   - Change `src/session/create-visit-flow.ts` as in "What the flow does", replacing the stand-in view of task 1: on entering the stage, draw the render seed from the visit's source and make the controller; `startReplay` in `announcing` with no pause, through `withSound`; `proceed` calls `skip` first; `stop` calls `cancel`; the first branch of `onOutputStopped` for this stage; the first branch of `endPause` for this stage, which writes nothing to the recorder; a play refused `notRunning` handled as a stop report; the snapshot's `replay` from the controller's view. Nothing the flow does in another stage changes.
   - Change `src/session/create-visit-flow.test.ts`: the row of `missedSoundReplay` in "What each stage accepts" for the new actions, and one example for each row of "What each phase accepts"; `activationRefused` when the browser saw no press, with the phase still `announcing`; the seed drawn on entering equals `replayRenderSeed` of the log, and the draws before it equal the logged engine seeds; `beginRoom` before the first replayed play; the `result` stage holds the same log object, deep-equal to the log on entering, after a watched, skipped, stopped and device-ended replay and after a left page; no pause of this stage in the log's `pauses`.
   - Every visit-flow property must still pass unchanged: the simulated visitor still calls `proceed` in this stage, which now skips the replay.
@@ -131,7 +131,7 @@ Until task 12, the stage `missedSoundReplay` plays nothing: `startReplay` does n
   - _Requirements: 1.1, 7.1, 9.1, 9.2, 13.3, 13.4, 14.2, 15.1, 17.3, 17.4, 17.5, 17.6_
   - _Decisions: D2, D13, D18, D26_
 
-- [ ] 14. Update the READMEs
+- [x] 14. Update the READMEs
   - `src/session/README.md`: a section on the missed-sound replay: the contract's additions and the rule of only adding, with Q6 settled by the owner's option (a); the plan and which trials it holds; the cap; the selection; the counts; the render seed from the log; the controller and the flow's part; that the log is not changed. `replaySoundsMaxCount`, `replayGapMs` and the readings of Q3, Q4 and Q5 are described as PROPOSED, NOT APPROVED.
   - `src/copy/README.md`: a section on the replay's copy: `replayCopy`, the lines, counts in words, and levels labelled relative to the visitor's calibration.
   - `src/config/README.md`: `missed-sound-replay-config.ts` with its values, `replayRaiseDb` from brief 07 and the other two PROPOSED, NOT APPROVED (Q1, Q2).
