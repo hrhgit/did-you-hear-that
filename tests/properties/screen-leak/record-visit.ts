@@ -1,9 +1,15 @@
-import { createSeededRandom } from "../../../src/config/seeded-random";
+import {
+  createSeededRandom,
+  type RandomSource,
+} from "../../../src/config/seeded-random";
 import {
   playVisit,
   type VisitorDisturbance,
   type VisitorRun,
   type VisitorScript,
+  type VisitorSwappedRepeatBehaviour,
+  type VisitorSwappedRepeatEvent,
+  type VisitorSwappedRepeatFloor,
 } from "../../listeners/simulated-visitor";
 import { createVisitHarness } from "../visit-flow-harness";
 import { createScreenRecorder, type ScreenRecord } from "./screen-record";
@@ -46,6 +52,7 @@ export async function recordVisit(
       ear: trial.ear,
       roomIndex: trial.roomIndex,
       attempt: trial.attempt,
+      inSwappedRepeat: trial.swappedRepeatRunNumber !== null,
     });
   });
   const run = await playVisit(harness, script);
@@ -55,6 +62,13 @@ export async function recordVisit(
 export interface VisitorScriptOptions {
   /** With disturbances the visitor pauses, hides the page, has the sound interrupted and changes device. */
   readonly disturbed: boolean;
+  /**
+   * With a swapped repeat, one ear needs sounds 20 to 30 dB louder than the other, so that every
+   * floor offers the repeat, and the visitor repeats one floor after the result: swapped, the
+   * check answered as heard, the room answered through the headphones, and back to the picture.
+   * Disturbed, the repeat is also paused, hidden or interrupted, and resumed.
+   */
+  readonly swappedRepeat?: boolean;
 }
 
 /**
@@ -71,6 +85,7 @@ export function visitorScriptOf(
     min + random.next() * (max - min);
   const whole = (min: number, max: number): number =>
     Math.floor(between(min, max + 1));
+  const withRepeat = options.swappedRepeat === true;
   const disturbances: VisitorDisturbance[] = [];
   if (options.disturbed) {
     const kinds = ["pause", "hidden", "interrupted", "deviceChanged"] as const;
@@ -83,28 +98,91 @@ export function visitorScriptOf(
       });
     }
   }
+  // A visit without a repeat draws exactly what it drew before the repeat existed, in the same
+  // order, so the fixed seeds of the predictor give the same visits.
+  const calibrationTargetDb = whole(-40, -10);
+  let trueThresholdDb: { left: number; right: number };
+  if (withRepeat) {
+    const louderEarThresholdDb = between(-55, -25);
+    const quieterEarThresholdDb = louderEarThresholdDb + between(20, 30);
+    trueThresholdDb =
+      random.next() < 0.5
+        ? { left: quieterEarThresholdDb, right: louderEarThresholdDb }
+        : { left: louderEarThresholdDb, right: quieterEarThresholdDb };
+  } else {
+    trueThresholdDb = { left: between(-55, 5), right: between(-55, 5) };
+  }
+  const widthDb = between(1, 8);
+  const lapseFraction = between(0, 0.1);
+  // A visitor who answers silence often makes the ears of a floor unreliable, and such a floor
+  // offers no repeat, so a visitor with a repeat answers silence less.
+  const falseAlarmFraction = between(0, 0.5) * (withRepeat ? 0.2 : 1);
+  const wrongSideFraction = between(0, 0.1);
+  const listenerSeed = whole(0, 0xffffffff);
+  const visitorSeed = whole(0, 0xffffffff);
+  const repeat = withRepeat
+    ? {
+        headphones: { imbalanceDb: between(-6, 6) },
+        swappedRepeat: swappedRepeatOf(random, options.disturbed),
+      }
+    : {};
   return {
     visitType: "quick",
-    calibrationTargetDb: whole(-40, -10),
+    calibrationTargetDb,
     firstHeadphoneCheckAnswer: "left",
     listener: {
       kind: "psychometric",
       parameters: {
-        trueThresholdDb: { left: between(-55, 5), right: between(-55, 5) },
-        widthDb: between(1, 8),
-        lapseFraction: between(0, 0.1),
-        falseAlarmFraction: between(0, 0.5),
-        wrongSideFraction: between(0, 0.1),
+        trueThresholdDb,
+        widthDb,
+        lapseFraction,
+        falseAlarmFraction,
+        wrongSideFraction,
       },
-      seed: whole(0, 0xffffffff),
+      seed: listenerSeed,
     },
-    visitorSeed: whole(0, 0xffffffff),
+    visitorSeed,
     answerDelayMaxMs: 2500,
     timeStampModes: ["now"],
     restMaxMs: 5000,
     extraPresses: [],
     disturbances,
     ending: null,
+    ...repeat,
+  };
+}
+
+/** The visitor's swapped repeat in a recorded visit, drawn from `random`. */
+function swappedRepeatOf(
+  random: RandomSource,
+  disturbed: boolean,
+): VisitorSwappedRepeatBehaviour {
+  const floors: readonly VisitorSwappedRepeatFloor[] = [
+    { kind: "firstOffered" },
+    { kind: "lastOffered" },
+    { kind: "drawnOffered", fraction: Math.floor(random.next() * 1000) / 1000 },
+  ];
+  const events: VisitorSwappedRepeatEvent[] = [];
+  if (disturbed) {
+    const kinds = ["pause", "hidden", "interrupted"] as const;
+    const count = 1 + Math.floor(random.next() * 3);
+    for (let index = 0; index < count; index += 1) {
+      events.push({
+        atMs: Math.floor(random.next() * 120_000),
+        action: kinds[Math.floor(random.next() * kinds.length)] ?? "pause",
+        resumeAfterMs: Math.floor(random.next() * 10_000),
+      });
+    }
+  }
+  return {
+    floor: floors[Math.floor(random.next() * floors.length)] ?? {
+      kind: "firstOffered",
+    },
+    swapsOnFirstInstruction: true,
+    firstCheckAnswer: "heard",
+    pressDelayMaxMs: 3000,
+    events,
+    turnsBack: random.next() < 0.5,
   };
 }
 

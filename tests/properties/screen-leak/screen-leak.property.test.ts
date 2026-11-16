@@ -100,6 +100,67 @@ describe("when the page draws during a visit", () => {
   );
 });
 
+describe("when the page draws in the swapped repeat", () => {
+  /** The trials of the swapped repeat's room in a record. */
+  const repeatTrials = (record: ScreenRecord): RecordedTrial[] =>
+    record.trials.filter((trial) => trial.inSwappedRepeat === true);
+
+  /**
+   * Plays visits of one kind with a swapped repeat after the result and checks `holds` on every
+   * trial, those of the visit's rooms and those of the repeat's room. Most visits must reach the
+   * repeat's room, or the property would say nothing about it.
+   */
+  async function assertOverRepeats(
+    disturbed: boolean,
+    holds: (record: ScreenRecord, trial: RecordedTrial) => void,
+  ): Promise<void> {
+    let visits = 0;
+    let visitsWithRepeatTrials = 0;
+    await fc.assert(
+      fc.asyncProperty(
+        seedArbitrary,
+        seedArbitrary,
+        async (flowSeed, visitorSeed) => {
+          const { record, run } = await recordVisit(
+            flowSeed,
+            visitorScriptOf(visitorSeed, { disturbed, swappedRepeat: true }),
+          );
+          expect(run.finalStage).toBe("result");
+          visits += 1;
+          if (repeatTrials(record).length > 0) {
+            visitsWithRepeatTrials += 1;
+          }
+          for (const trial of record.trials) {
+            holds(record, trial);
+          }
+        },
+      ),
+      { numRuns: drawingRuns },
+    );
+    expect(visitsWithRepeatTrials).toBeGreaterThan(visits / 2);
+  }
+
+  it(
+    "draws nothing from one decision to the next in the repeated room of a visit that is left alone",
+    async () => {
+      await assertOverRepeats(false, (record, trial) => {
+        expect(momentsBeforeDecision(record, trial)).toEqual([]);
+      });
+    },
+    timeoutMs,
+  );
+
+  it(
+    "draws nothing while a trial's window is open in a repeated room that is paused, hidden or interrupted",
+    async () => {
+      await assertOverRepeats(true, (record, trial) => {
+        expect(momentsInWindow(record, trial)).toBe(0);
+      });
+    },
+    timeoutMs,
+  );
+});
+
 describe("what a predictor can guess from the screen", () => {
   let training: ScreenRecord[] = [];
   let heldOut: ScreenRecord[] = [];

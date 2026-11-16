@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { hearingMethodConfig } from "../../../src/config/hearing-method-config";
 import { createSeededRandom } from "../../../src/config/seeded-random";
+import {
+  swappedRepeatView,
+  type SwappedRepeatViewInput,
+} from "../../../src/session/swapped-repeat-view";
 import type {
   ScoredVisitTrial,
   SnapshotBase,
+  SwappedRepeatSnapshot,
   TrialScoredEvent,
   VisitEvent,
+  VisitLog,
   VisitRoom,
   VisitSnapshot,
   VisitStage,
+  VisitSummary,
 } from "../../../src/session/visit-flow-types";
 import { guessFromScreen } from "./guess-from-screen";
 import {
@@ -172,6 +180,117 @@ describe("createScreenRecorder", () => {
     recorder.event(decided("sound", "none"));
     expect(recorder.record().trials).toHaveLength(1);
     expect(recorder.record().trials[0]?.presentedAtMs).toBe(9000);
+  });
+
+  it("starts the swapped repeat's room from its snapshot and takes its decided trials", () => {
+    const counts = {
+      presentationCount: 10,
+      catchCount: 5,
+      wrongSideCount: 0,
+      missCount: 5,
+    };
+    const viewInput: SwappedRepeatViewInput = {
+      roomSummary: {
+        room,
+        left: { ...counts, state: "found", thresholdDb: -40 },
+        right: { ...counts, state: "found", thresholdDb: -60 },
+        searchCapDb: 0,
+        noSoundTrialCount: 0,
+        falseAlarmCount: 0,
+        rightMinusLeftDb: -20,
+        swappedRepeatOffered: true,
+      },
+      phase: "ready",
+      earpieces: "swapped",
+      unavailable: null,
+      again: false,
+      awaitingAnswer: false,
+      playRefusal: null,
+      judgement: null,
+      cut: false,
+      runNumber: 1,
+      pauseReason: null,
+      ending: null,
+      record: null,
+      floorDb: hearingMethodConfig.floorDb,
+    };
+    const repeatSnapshot = (
+      phase: SwappedRepeatViewInput["phase"],
+    ): SwappedRepeatSnapshot => ({
+      ...base("swappedRepeat"),
+      canProceed: true,
+      room,
+      visitLog: {} as VisitLog,
+      summary: {} as VisitSummary,
+      repeat: swappedRepeatView({ ...viewInput, phase }),
+    });
+    const swappedDecided = (line: string | null): VisitEvent =>
+      ({
+        kind: "swappedTrialScored",
+        room,
+        runNumber: 1,
+        trial: { kind: "sound", ear: "right", earpiece: "left" },
+        reaction: line === null ? "none" : "ripple",
+        line,
+      }) as unknown as VisitEvent;
+
+    let nowMs = 0;
+    const recorder = createScreenRecorder(() => nowMs);
+    // The last trial of the visit's rooms, then the result, the sheet of the swap and the check.
+    recorder.event({ kind: "roomStarted", room, attempt: 1 });
+    nowMs = 1000;
+    recorder.event(decided("sound", "none"));
+    nowMs = 2000;
+    recorder.snapshot(repeatSnapshot("instruction"));
+    nowMs = 3000;
+    recorder.snapshot(repeatSnapshot("ready"));
+    nowMs = 4000;
+    recorder.snapshot(repeatSnapshot("room"));
+    nowMs = 6000;
+    recorder.presented({
+      kind: "sound",
+      ear: "right",
+      roomIndex: 0,
+      attempt: 1,
+      inSwappedRepeat: true,
+    });
+    nowMs = 6500;
+    recorder.event(swappedDecided("Heard on the right"));
+    // Another snapshot of the same room's phase does not start it again.
+    recorder.snapshot(repeatSnapshot("room"));
+    nowMs = 9000;
+    recorder.presented({
+      kind: "sound",
+      ear: "right",
+      roomIndex: 0,
+      attempt: 1,
+      inSwappedRepeat: true,
+    });
+    nowMs = 9400;
+    recorder.event(swappedDecided(null));
+
+    const record = recorder.record();
+    const repeated = record.trials.filter(
+      (trial) => trial.inSwappedRepeat === true,
+    );
+    expect(
+      repeated.map(({ anchorMs, presentedAtMs, decidedAtMs }) => ({
+        anchorMs,
+        presentedAtMs,
+        decidedAtMs,
+      })),
+    ).toEqual([
+      { anchorMs: 4000, presentedAtMs: 6000, decidedAtMs: 6500 },
+      { anchorMs: 6500, presentedAtMs: 9000, decidedAtMs: 9400 },
+    ]);
+    expect(record.moments).toContainEqual({ atMs: 6500, what: "ripple" });
+    // The sheet of the swap changed the page, but before the room began, not before a decision.
+    expect(record.moments.filter((moment) => moment.atMs < 4000)).not.toEqual(
+      [],
+    );
+    for (const trial of repeated) {
+      expect(momentsBeforeDecision(record, trial)).toEqual([]);
+    }
   });
 });
 

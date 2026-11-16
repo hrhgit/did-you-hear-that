@@ -19,8 +19,8 @@ import type { LeakSample } from "./guess-from-screen";
 export interface ScreenMoment {
   readonly atMs: number;
   /**
-   * `screen`: the screen derived from a snapshot changed. `ripple`, `say`: a reaction to a scored
-   * trial. `replayRipple`: the ripple of a sound that is played again after the rooms.
+   * `screen`: the screen derived from a snapshot changed. `ripple`, `say`: a reaction to a decided
+   * trial, in a room of the visit or in the swapped repeat's room. `replayRipple`: the ripple of a sound that is played again after the rooms.
    */
   readonly what: "screen" | "ripple" | "say" | "replayRipple";
 }
@@ -31,11 +31,16 @@ export interface PresentedTrialFacts {
   readonly ear: "left" | "right" | null;
   readonly roomIndex: number;
   readonly attempt: number;
+  /** True for a trial of the swapped repeat's room. Absent or false for a room of the visit. */
+  readonly inSwappedRepeat?: boolean;
 }
 
 /** One trial that was answered or ran out, with the times that matter for the picture. */
 export interface RecordedTrial extends PresentedTrialFacts {
-  /** The decision before this trial in the same room, or the moment the room started. */
+  /**
+   * The decision before this trial in the same room, or the moment the room started: a
+   * `roomStarted` event, or the snapshot in which the swapped repeat's room begins.
+   */
   readonly anchorMs: number;
   readonly presentedAtMs: number;
   readonly decidedAtMs: number;
@@ -63,9 +68,18 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
   let lastScreen: string | null = null;
   let anchorMs = now();
   let waiting: (PresentedTrialFacts & { readonly atMs: number }) | null = null;
+  let inRepeatRoom = false;
 
   return {
     snapshot(snapshot) {
+      // The swapped repeat's room has no event of its own when it starts: its snapshot says so.
+      const repeatRoom =
+        snapshot.stage === "swappedRepeat" && snapshot.repeat.phase === "room";
+      if (repeatRoom && !inRepeatRoom) {
+        anchorMs = now();
+        waiting = null;
+      }
+      inRepeatRoom = repeatRoom;
       const screen = JSON.stringify(screenOfSnapshot(snapshot));
       if (screen !== lastScreen) {
         lastScreen = screen;
@@ -76,7 +90,10 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
       if (event.kind === "roomStarted") {
         anchorMs = now();
         waiting = null;
-      } else if (event.kind === "trialScored") {
+      } else if (
+        event.kind === "trialScored" ||
+        event.kind === "swappedTrialScored"
+      ) {
         if (waiting !== null) {
           const { atMs, ...facts } = waiting;
           trials.push({
