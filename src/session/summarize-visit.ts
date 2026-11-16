@@ -52,7 +52,10 @@ function finishedAttempts(log: VisitLog): readonly FinishedAttempt[] {
 }
 
 /** Whether a decided sound trial of this attempt was played at another level than asked (D23). */
-function levelDiffers(log: VisitLog, attempt: LoggedRoomAttempt): boolean {
+export function levelDiffers(
+  log: VisitLog,
+  attempt: LoggedRoomAttempt,
+): boolean {
   return log.trials.some(
     (trial) =>
       trial.roomIndex === attempt.roomIndex &&
@@ -64,7 +67,7 @@ function levelDiffers(log: VisitLog, attempt: LoggedRoomAttempt): boolean {
 }
 
 /** A frozen copy of the search's ear result with this spec's reasons added after its own. */
-function visitEarResult(
+export function visitEarResult(
   searchResult: LoggedEarResult,
   addedReasons: readonly VisitUnreliableReason[],
 ): VisitEarResult {
