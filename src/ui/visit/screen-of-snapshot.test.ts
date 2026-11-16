@@ -17,7 +17,9 @@ import type {
   ReplayPlaying,
   ReplaySideCounts,
   ReplaySound,
+  ResultSnapshot,
   SnapshotBase,
+  SwappedRepeatSnapshot,
   VisitLog,
   VisitRoom,
   VisitSnapshot,
@@ -488,11 +490,12 @@ describe("screenOfSnapshot", () => {
   });
 
   it("names the result and holds nothing of it", () => {
+    // The cast lets this literal stand while the swapped repeat adds fields to the snapshot.
     const screen = screenOfSnapshot({
       ...base("result", 3),
       visitLog: {} as VisitLog,
       summary: {} as VisitSummary,
-    });
+    } as ResultSnapshot);
     expect(screen.sheet).toBe("result");
     expect(screen.notice).toBeNull();
     expect(screen.stopShown).toBe(false);
@@ -502,12 +505,13 @@ describe("screenOfSnapshot", () => {
   });
 
   it("says that the swapped repeat is not built and leads back to the picture", () => {
+    // The cast lets this literal stand while the swapped repeat adds fields to the snapshot.
     const screen = screenOfSnapshot({
       ...base("swappedRepeat", 3),
       room: stairs,
       visitLog: {} as VisitLog,
       summary: {} as VisitSummary,
-    });
+    } as SwappedRepeatSnapshot);
     expect(screen.sheet).toBe("notice");
     expect(screen.stopShown).toBe(false);
     expect(screen.notice).toEqual({

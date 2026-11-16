@@ -20,22 +20,24 @@ const wing = (ear: "left" | "right"): PictureWing => ({
   earlier: null,
 });
 
-const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
-  room: {
-    roomIndex: ["corridor", "stairs", "attic"].indexOf(roomId),
-    roomId,
-    frequencyHz: 1000,
-  },
-  roomName: roomId,
-  pitchLabel: "1 kHz",
-  left: wing("left"),
-  right: wing("right"),
-  rightMinusLeftDb: 0,
-  differenceLabel: "0 dB",
-  differenceLine: "difference line",
-  swappedRepeat: null,
-  description: `description of the ${roomId}`,
-});
+// The cast lets this literal stand while the swapped repeat adds a field to the floor.
+const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor =>
+  ({
+    room: {
+      roomIndex: ["corridor", "stairs", "attic"].indexOf(roomId),
+      roomId,
+      frequencyHz: 1000,
+    },
+    roomName: roomId,
+    pitchLabel: "1 kHz",
+    left: wing("left"),
+    right: wing("right"),
+    rightMinusLeftDb: 0,
+    differenceLabel: "0 dB",
+    differenceLine: "difference line",
+    swappedRepeat: null,
+    description: `description of the ${roomId}`,
+  }) as PictureFloor;
 
 const picture: ResultPicture = {
   kind: "live",
