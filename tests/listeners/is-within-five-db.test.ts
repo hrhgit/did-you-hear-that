@@ -3,7 +3,7 @@ import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { isWithinFiveDb } from "./is-within-five-db";
 import type { RunEarResult } from "./search-under-test";
 
-// Shipped settings: floor -70, cap 15.
+// Shipped settings: floor -70, cap 5.
 const within = (earResult: RunEarResult, trueThresholdDb: number) =>
   isWithinFiveDb(earResult, trueThresholdDb, hearingMethodConfig);
 
@@ -41,13 +41,13 @@ describe("isWithinFiveDb, the original measure of property 1 (D18, D37, D42)", (
     const worseThanCap: RunEarResult = { state: "worseThanCap" };
 
     it("is within when the true threshold is at most 5 dB below the cap", () => {
-      expect(within(worseThanCap, 10)).toBe(true);
-      expect(within(worseThanCap, 15)).toBe(true);
+      expect(within(worseThanCap, 0)).toBe(true);
+      expect(within(worseThanCap, 5)).toBe(true);
       expect(within(worseThanCap, 35)).toBe(true);
     });
 
     it("is not just past 5 dB below the cap", () => {
-      expect(within(worseThanCap, 9.9)).toBe(false);
+      expect(within(worseThanCap, -0.1)).toBe(false);
     });
   });
 

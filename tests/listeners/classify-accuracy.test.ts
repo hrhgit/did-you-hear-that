@@ -7,7 +7,7 @@ import {
 } from "./classify-accuracy";
 import type { RunEarResult } from "./search-under-test";
 
-// Shipped settings: start -25, upward step 5, floor -70, cap 15.
+// Shipped settings: start -25, upward step 5, floor -70, cap 5.
 const classify = (earResult: RunEarResult, trueThresholdDb: number) =>
   classifyAccuracy(earResult, trueThresholdDb, hearingMethodConfig);
 const found = (thresholdDb: number): RunEarResult => ({
@@ -132,13 +132,13 @@ describe("classifyAccuracy (D42)", () => {
     const worseThanCap: RunEarResult = { state: "worseThanCap" };
 
     it("is accurate when the grid level at or above the true threshold is the cap or louder", () => {
-      expect(classify(worseThanCap, 10.1)).toBe("accurate");
-      expect(classify(worseThanCap, 15)).toBe("accurate");
+      expect(classify(worseThanCap, 0.1)).toBe("accurate");
+      expect(classify(worseThanCap, 5)).toBe("accurate");
       expect(classify(worseThanCap, 35)).toBe("accurate");
     });
 
     it("is wrong once that level is below the cap, including a true threshold exactly one step below it", () => {
-      expect(classify(worseThanCap, 10)).toBe("wrong");
+      expect(classify(worseThanCap, 0)).toBe("wrong");
       expect(classify(worseThanCap, -40)).toBe("wrong");
     });
 

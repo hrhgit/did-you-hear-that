@@ -215,11 +215,11 @@ describe("createThresholdSearch", () => {
     });
 
     it("skips the ear draw when only one ear is searching", () => {
-      // 0.4 makes every trial a sound trial for the left ear. Trace B ends it after 10.
+      // 0.4 makes every trial a sound trial for the left ear. Trace B ends it after 8.
       const random = createStubRandom(0.4);
       const search = create(random);
       let step = search.current();
-      for (let index = 0; index < 10; index += 1) {
+      for (let index = 0; index < 8; index += 1) {
         expect(trialOf(step)).toMatchObject({ kind: "sound", ear: "left" });
         step = search.respond("none");
       }
@@ -252,18 +252,18 @@ describe("createThresholdSearch", () => {
   });
 
   it("adds closing trials until the minimum share is reached when draws never make a no-sound trial", () => {
-    // 0.9 makes every search trial a sound trial. Never answering ends each ear after 10, and
-    // 20 sound trials need 4 no-sound trials: 3 of 23 is below 0.15 and 4 of 24 is not.
+    // 0.9 makes every search trial a sound trial. Never answering ends each ear after 8, and
+    // 16 sound trials need 3 no-sound trials: 2 of 18 is below 0.15 and 3 of 19 is not.
     const random = createStubRandom(0.9);
     const search = create(random);
     const steps = runRoom(search, neverAnswers);
     const trials = steps.slice(0, -1).map(trialOf);
-    expect(trials).toHaveLength(24);
-    expect(trials.slice(0, 20).every((trial) => trial.kind === "sound")).toBe(
+    expect(trials).toHaveLength(19);
+    expect(trials.slice(0, 16).every((trial) => trial.kind === "sound")).toBe(
       true,
     );
-    expect(trials.slice(20)).toEqual(
-      [21, 22, 23, 24].map((trialNumber) => ({
+    expect(trials.slice(16)).toEqual(
+      [17, 18, 19].map((trialNumber) => ({
         kind: "noSound",
         trialNumber,
         phase: "closing",
@@ -273,7 +273,7 @@ describe("createThresholdSearch", () => {
     const finished = steps.at(-1);
     expect(finished?.kind).toBe("finished");
     if (finished?.kind === "finished") {
-      expect(finished.result.noSoundTrialCount).toBe(4);
+      expect(finished.result.noSoundTrialCount).toBe(3);
       expect(finished.result.left.state).toBe("worseThanCap");
       expect(finished.result.right.state).toBe("worseThanCap");
     }

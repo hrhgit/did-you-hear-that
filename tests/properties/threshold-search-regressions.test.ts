@@ -24,6 +24,18 @@ import { cp2AccurateOrFlaggedCheck } from "./checks/cp2-accurate-or-flagged-chec
 import { cp3UsefulForAttentiveCheck } from "./checks/cp3-useful-for-attentive-check";
 import { measureListenerSet } from "./checks/measure-listener-set";
 
+/**
+ * The settings every case was found with, written out (audible-start design.md, D35, "The cap"):
+ * the cap was 15 dB above the anchor then, and the search started at −25 dB with the floor at −70
+ * dB. The cases keep testing what they record, whatever the shipped settings become.
+ */
+const foundWithSettings = Object.freeze({
+  ...hearingMethodConfig,
+  startingLevelDb: -25,
+  capRelativeToAnchorDb: 15,
+  floorDb: -70,
+});
+
 /** CP2's condition for one parameter set: at least 93 percent of 800 ears Accurate or Flagged. */
 function expectAccurateOrFlagged(
   parameters: PsychometricListenerParameters,
@@ -33,7 +45,7 @@ function expectAccurateOrFlagged(
     cp2AccurateOrFlaggedCheck.parameters;
   const measurement = measureListenerSet(
     specSearchUnderTest,
-    hearingMethodConfig,
+    foundWithSettings,
     parameters,
     roomsPerSet,
   );
@@ -57,7 +69,7 @@ function expectUsefulForAttentive(
     cp3UsefulForAttentiveCheck.parameters;
   const measurement = measureListenerSet(
     specSearchUnderTest,
-    hearingMethodConfig,
+    foundWithSettings,
     parameters,
     roomsPerSet,
   );

@@ -263,7 +263,12 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
           "deviceChanged",
         ]),
         async (seed, performanceOffsetMs, path) => {
-          const harness = createVisitHarness({ seed, performanceOffsetMs });
+          // With the hiss repeats, as the property states: the music cannot be loaded.
+          const harness = createVisitHarness({
+            seed,
+            performanceOffsetMs,
+            music: "reject",
+          });
           const { flow } = harness;
           flow.chooseVisit("quick");
           await harness.settle();

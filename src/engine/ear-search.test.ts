@@ -29,9 +29,9 @@ const traces: readonly Trace[] = [
   },
   {
     name: "B. never answers",
-    outcomes: [M, M, M, M, M, M, M, M, M, M],
-    levelsDb: [-25, -20, -15, -10, -5, 0, 5, 10, 15, 15],
-    directions: [first, asc, asc, asc, asc, asc, asc, asc, asc, asc],
+    outcomes: [M, M, M, M, M, M, M, M],
+    levelsDb: [-25, -20, -15, -10, -5, 0, 5, 5],
+    directions: [first, asc, asc, asc, asc, asc, asc, asc],
     ending: { kind: "worseThanCap" },
   },
   {
@@ -42,11 +42,11 @@ const traces: readonly Trace[] = [
     ending: { kind: "betterThanFloor" },
   },
   {
-    name: "D. step listener, true threshold 12",
-    outcomes: [M, M, M, M, M, M, M, M, C, M, M, C],
-    levelsDb: [-25, -20, -15, -10, -5, 0, 5, 10, 15, 5, 10, 15],
-    directions: [first, asc, asc, asc, asc, asc, asc, asc, asc, desc, asc, asc],
-    ending: { kind: "found", thresholdDb: 15 },
+    name: "D. step listener, true threshold 2",
+    outcomes: [M, M, M, M, M, M, C, M, M, C],
+    levelsDb: [-25, -20, -15, -10, -5, 0, 5, -5, 0, 5],
+    directions: [first, asc, asc, asc, asc, asc, asc, desc, asc, asc],
+    ending: { kind: "found", thresholdDb: 5 },
   },
   {
     name: "E. an inconsistent catch",

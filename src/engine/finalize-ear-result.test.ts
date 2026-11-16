@@ -14,7 +14,7 @@ const W: SoundOutcome = "wrongSide";
 
 /** Trace outcomes from the worked examples in design.md. */
 const traceA = [C, C, C, M, C, M, M, C];
-const traceB = [M, M, M, M, M, M, M, M, M, M];
+const traceB = [M, M, M, M, M, M, M, M];
 const traceC = [C, C, C, C, C, C, C];
 const traceE = [C, C, C, M, C, C, M, M, M, M, C];
 const traceG = [
@@ -151,21 +151,21 @@ describe("finalizeEarResult", () => {
       ).toMatchObject({ state: "found", thresholdDb: -50 });
     });
 
-    it("uses the cap for worse than cap: a catch at 5 with a cap of 15 is inconsistent", () => {
+    it("uses the cap for worse than cap: a catch at -5 with a cap of 5 is inconsistent", () => {
       const { presentations } = play(traceB);
       expect(
         finalize({ kind: "worseThanCap" }, [
-          presentation(5, C),
+          presentation(-5, C),
           ...presentations,
         ]),
       ).toMatchObject({ state: "unreliable", reasons: ["inconsistentCatch"] });
     });
 
-    it("uses the cap for worse than cap: a catch at 10 with a cap of 15 is not", () => {
+    it("uses the cap for worse than cap: a catch at 0 with a cap of 5 is not", () => {
       const { presentations } = play(traceB);
       expect(
         finalize({ kind: "worseThanCap" }, [
-          presentation(10, C),
+          presentation(0, C),
           ...presentations,
         ]),
       ).toMatchObject({ state: "worseThanCap" });
@@ -202,10 +202,10 @@ describe("finalizeEarResult", () => {
       const result = finalize(ending, presentations);
       expect(result).toEqual({
         state: "worseThanCap",
-        presentationCount: 10,
+        presentationCount: 8,
         catchCount: 0,
         wrongSideCount: 0,
-        missCount: 10,
+        missCount: 8,
       });
       expect(result).not.toHaveProperty("thresholdDb");
     });
@@ -234,7 +234,7 @@ describe("finalizeEarResult", () => {
       const { presentations } = play(traceB.map(() => W));
       expect(finalize({ kind: "worseThanCap" }, presentations)).toMatchObject({
         state: "worseThanCap",
-        wrongSideCount: 10,
+        wrongSideCount: 8,
       });
     });
 

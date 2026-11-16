@@ -94,7 +94,12 @@ describe("visit flow regressions", () => {
       ],
       ending: null,
     };
-    const harness = createVisitHarness({ seed: 0, performanceOffsetMs: 0 });
+    // Calibrated with the hiss repeats, as when the case was found: its times depend on them.
+    const harness = createVisitHarness({
+      seed: 0,
+      performanceOffsetMs: 0,
+      music: "reject",
+    });
     const timeline = observeVisit(harness);
     const run = await playVisit(timeline.driver, script);
 
