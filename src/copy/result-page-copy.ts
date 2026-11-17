@@ -40,3 +40,42 @@ export const resultPageCopy = Object.freeze({
     "The visits saved in this browser could not be read. Delete them all to save new ones.",
   robotModeLine: "Robot mode keeps nothing in this browser.",
 });
+
+/**
+ * The score of the chase on the result page (the game layer of 2026-11-16). Not part of the
+ * result page's design, so it stands apart from `resultPageCopy`.
+ */
+export const chaseScoreCopy = Object.freeze({
+  heading: "Your chase",
+});
+
+function requireWholeCount(count: number, what: string): void {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new RangeError(
+      `${what} must be a whole number from 0 up, but got ${String(count)}.`,
+    );
+  }
+}
+
+/** The sounds caught in the whole visit: "23 caught in all". */
+export function totalCaughtLine(count: number): string {
+  requireWholeCount(count, "The sounds caught");
+  return count === 1 ? "1 caught in all" : `${String(count)} caught in all`;
+}
+
+/** The longest row of catches in one room: "Longest row: 6 in a row". */
+export function longestRowLine(count: number): string {
+  requireWholeCount(count, "The longest row");
+  return count < 2
+    ? "Never two in a row"
+    : `Longest row: ${String(count)} in a row`;
+}
+
+/**
+ * The sounds caught in one room: "Cellar: 7 caught". Counts only. The levels of two floors are
+ * never set side by side, since floors cannot be compared (limits statement).
+ */
+export function roomCaughtLine(roomName: string, count: number): string {
+  requireWholeCount(count, "The sounds caught in a room");
+  return `${roomName}: ${String(count)} caught`;
+}

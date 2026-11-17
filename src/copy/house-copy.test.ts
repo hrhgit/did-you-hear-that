@@ -10,6 +10,11 @@ import * as leaving from "./leaving-copy";
 import * as room from "./room-copy";
 import { lanternConfig } from "../config/lantern-config";
 import {
+  longestRowLine,
+  roomCaughtLine,
+  totalCaughtLine,
+} from "./result-page-copy";
+import {
   betweenRoomsLine,
   caughtCountLine,
   deepestCatchLabel,
@@ -282,6 +287,33 @@ describe("the lines of the chase (game layer)", () => {
     expect(rulesCopy.sentences.join(" ")).toContain(
       `a lantern of ${words[lanternConfig.cellCount] ?? ""} lights`,
     );
+  });
+});
+
+describe("the score of the chase on the result page", () => {
+  it("counts the catches, the longest row and each room in whole numbers", () => {
+    expect(totalCaughtLine(1)).toBe("1 caught in all");
+    expect(totalCaughtLine(23)).toBe("23 caught in all");
+    expect(longestRowLine(1)).toBe("Never two in a row");
+    expect(longestRowLine(6)).toBe("Longest row: 6 in a row");
+    expect(roomCaughtLine("Cellar", 7)).toBe("Cellar: 7 caught");
+    fc.assert(
+      fc.property(fc.nat(500), (count) => {
+        for (const line of [
+          totalCaughtLine(count),
+          longestRowLine(count),
+          ...ghostSoundIds.map((id) => roomCaughtLine(roomNames[id], count)),
+        ]) {
+          expect(findBannedTerms(line, bannedTerms)).toEqual([]);
+          expect(line).not.toMatch(/dB|quiet|loud/i);
+        }
+      }),
+    );
+    for (const bad of [-1, 2.5, Number.NaN]) {
+      expect(() => totalCaughtLine(bad)).toThrow(RangeError);
+      expect(() => longestRowLine(bad)).toThrow(RangeError);
+      expect(() => roomCaughtLine("Cellar", bad)).toThrow(RangeError);
+    }
   });
 });
 

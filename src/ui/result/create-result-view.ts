@@ -1,5 +1,13 @@
 import { leavingCopy } from "../../copy/leaving-copy";
-import { resultPageCopy } from "../../copy/result-page-copy";
+import {
+  chaseScoreCopy,
+  longestRowLine,
+  resultPageCopy,
+  roomCaughtLine,
+  totalCaughtLine,
+} from "../../copy/result-page-copy";
+import { roomNames } from "../../copy/room-copy";
+import { chaseScoreOf } from "../../session/chase-score";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import type {
   FindEarlierVisit,
@@ -113,9 +121,19 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const turnBack = make("p", "result-turn-back");
   turnBack.setAttribute("role", "status");
   turnBack.hidden = true;
+  // The score of the chase: the game's side of the visit, from the same log as the picture.
+  const scoreTotal = make("p", "result-score-total");
+  const scoreRow = make("p", "result-score-row");
+  const scoreRooms = make("ul", "result-score-rooms");
+  const score = make("section", "result-score", [
+    make("h2", "result-score-heading", [chaseScoreCopy.heading]),
+    make("div", "result-score-lines", [scoreTotal, scoreRow]),
+    scoreRooms,
+  ]);
   const head = make("header", "result-head", [
     heading,
     make("p", "result-meta", [dateLabel, visitTypeLabel]),
+    score,
     turnBack,
     shownVisit,
     falseAlarmLine,
@@ -458,6 +476,20 @@ export function createResultView(options: ResultViewOptions): ResultView {
     dateLabel.textContent = picture.dateLabel;
     visitTypeLabel.textContent = picture.visitTypeLabel;
     falseAlarmLine.textContent = picture.falseAlarmLine;
+    const shownLog = shownSaved?.visitLog ?? live?.visitLog ?? null;
+    score.hidden = shownLog === null;
+    if (shownLog !== null) {
+      const chase = chaseScoreOf(shownLog);
+      scoreTotal.textContent = totalCaughtLine(chase.caughtCount);
+      scoreRow.textContent = longestRowLine(chase.longestRow);
+      scoreRooms.replaceChildren(
+        ...chase.rooms.map((room) =>
+          make("li", "", [
+            roomCaughtLine(roomNames[room.roomId], room.caughtCount),
+          ]),
+        ),
+      );
+    }
     notice.hidden = picture.visitNotice === null;
     if (picture.visitNotice !== null) {
       noticeHeading.textContent = picture.visitNotice.heading;

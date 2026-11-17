@@ -48,6 +48,11 @@ import type { LatestOffset, PresentedTrial } from "./room-runner";
 import { createRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
 import { roomSearchFloorDb } from "./room-search-floor";
+import {
+  countIntoChase,
+  emptyChaseTally,
+  type ChaseTally,
+} from "./chase-score";
 import { summarizeVisit } from "./summarize-visit";
 import type {
   EarpieceState,
@@ -154,31 +159,9 @@ function reactionTo(entry: ScoredVisitTrial): TrialReaction {
 }
 
 /** The chase of the room under way, as the flow keeps it (`RoomChase`). */
-interface Chase {
-  caughtCount: number;
-  streak: number;
-  bestStreak: number;
-  readonly deepestCaughtDb: { left: number | null; right: number | null };
+interface Chase extends ChaseTally {
   readonly topLevelDb: number;
   readonly floorLevelDb: number;
-}
-
-/** Counts one scored trial into the chase. */
-function countIntoChase(chase: Chase, entry: ScoredVisitTrial): void {
-  if (entry.kind === "sound" && entry.outcome === "caught") {
-    chase.caughtCount += 1;
-    chase.streak += 1;
-    chase.bestStreak = Math.max(chase.bestStreak, chase.streak);
-    const deepest = chase.deepestCaughtDb[entry.ear];
-    chase.deepestCaughtDb[entry.ear] =
-      deepest === null
-        ? entry.playedLevelDb
-        : Math.min(deepest, entry.playedLevelDb);
-    return;
-  }
-  if (entry.kind === "sound" || entry.outcome === "falseAlarm") {
-    chase.streak = 0;
-  }
 }
 
 /** Whether two values of plain data are equal, field by field. */
@@ -1195,10 +1178,7 @@ export function createVisitFlow(
           });
           current.lanternHold = false;
           current.chase = {
-            caughtCount: 0,
-            streak: 0,
-            bestStreak: 0,
-            deepestCaughtDb: { left: null, right: null },
+            ...emptyChaseTally(),
             topLevelDb: searchCapDb,
             floorLevelDb: searchFloorDb,
           };

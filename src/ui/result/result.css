@@ -86,6 +86,57 @@ p.result-meta {
   overflow-wrap: anywhere;
 }
 
+/*
+ * The score of the chase: a small tally under the date, in the lamp's colour, like the lights of
+ * the lantern the visitor carried. It counts catches only, never levels.
+ */
+.result-score {
+  margin-top: 1.25rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--color-lamp-low);
+}
+
+.result-score-heading {
+  margin: 0;
+  color: var(--color-lamp);
+  font-size: 1rem;
+  font-style: italic;
+  font-weight: inherit;
+}
+
+.result-score-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin-top: 0.25rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.result-score-lines p {
+  margin: 0;
+}
+
+.result-score-total {
+  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
+}
+
+.result-score-row {
+  align-self: flex-end;
+  color: var(--color-graphite);
+}
+
+.result-score-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1.25rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
 p.result-silence {
   margin-top: 1.25rem;
   font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
