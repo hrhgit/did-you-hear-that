@@ -171,7 +171,10 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               expect(isExactZero(schedule[other])).toBe(true);
             });
 
-            // Discarded exactly when a pause (a device change included) came before its decision.
+            // Discarded exactly when a pause (a device change included) came before its decision,
+            // or the visitor's lantern went dark: a room presents nothing that cannot be
+            // answered, so it takes the trial back and presents it again when a cell is back
+            // (the game layer, 2026-11-16).
             presented.forEach((shown, index) => {
               const trial = trials[index];
               if (trial === undefined) {
@@ -185,7 +188,9 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
                       entry.event.kind === "trialScored" &&
                       sameTrialPlace(entry.event.trial, shown.trial)) ||
                     (entry.kind === "snapshot" &&
-                      entry.snapshot.pause !== null),
+                      (entry.snapshot.pause !== null ||
+                        (entry.snapshot.stage === "room" &&
+                          entry.snapshot.lantern?.cells === 0))),
                 );
               expect(next).toBeDefined();
               if (next?.kind === "snapshot") {

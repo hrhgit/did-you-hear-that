@@ -1,5 +1,6 @@
 import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
+import { lanternConfig } from "../config/lantern-config";
 import type { VisitType } from "../config/hearing-method-config";
 import type { RandomSource } from "../config/seeded-random";
 import { createSeededRandom } from "../config/seeded-random";
@@ -37,7 +38,10 @@ import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
+import { answerTimeMs } from "./answer-time";
 import { judgeHeadphoneCheck } from "./judge-headphone-check";
+import type { Lantern } from "./lantern";
+import { createLantern } from "./lantern";
 import type { PractisedRoomRunner } from "./practised-room-runner";
 import { createPractisedRoomRunner } from "./practised-room-runner";
 import type { LatestOffset, PresentedTrial } from "./room-runner";
@@ -139,7 +143,42 @@ function reactionTo(entry: ScoredVisitTrial): TrialReaction {
   if (entry.kind === "noSound" && entry.outcome === "falseAlarm") {
     return "noSoundLine";
   }
+  // A sound that went by. The trial is scored, so its time to answer is over (the game layer).
+  if (entry.kind === "sound" && entry.outcome === "missed") {
+    return "slipped";
+  }
+  if (entry.kind === "sound" && entry.outcome === "wrongSide") {
+    return "otherSide";
+  }
   return "none";
+}
+
+/** The chase of the room under way, as the flow keeps it (`RoomChase`). */
+interface Chase {
+  caughtCount: number;
+  streak: number;
+  bestStreak: number;
+  readonly deepestCaughtDb: { left: number | null; right: number | null };
+  readonly topLevelDb: number;
+  readonly floorLevelDb: number;
+}
+
+/** Counts one scored trial into the chase. */
+function countIntoChase(chase: Chase, entry: ScoredVisitTrial): void {
+  if (entry.kind === "sound" && entry.outcome === "caught") {
+    chase.caughtCount += 1;
+    chase.streak += 1;
+    chase.bestStreak = Math.max(chase.bestStreak, chase.streak);
+    const deepest = chase.deepestCaughtDb[entry.ear];
+    chase.deepestCaughtDb[entry.ear] =
+      deepest === null
+        ? entry.playedLevelDb
+        : Math.min(deepest, entry.playedLevelDb);
+    return;
+  }
+  if (entry.kind === "sound" || entry.outcome === "falseAlarm") {
+    chase.streak = 0;
+  }
 }
 
 /** Whether two values of plain data are equal, field by field. */
@@ -195,6 +234,12 @@ interface Visit {
   judgement: HeadphoneCheckJudgement | null;
   /** The run of the room under way: its practice, then its search. */
   runner: PractisedRoomRunner | null;
+  /** The lantern of the room under way, from the start of its counting, or null. */
+  lantern: Lantern | null;
+  /** True while the room's run waits for the dark lantern to get one cell back. */
+  lanternHold: boolean;
+  /** The chase of the room under way, from the start of its counting, or null. */
+  chase: Chase | null;
   /** The room of the last run started: the room of the `room` stage. */
   activeRoomIndex: number;
   attempt: number;
@@ -418,6 +463,22 @@ export function createVisitFlow(
           ...base("room"),
           room: roomAt(current, current.activeRoomIndex),
           practice: roomPracticeOf(current),
+          lantern:
+            current.lantern === null
+              ? null
+              : Object.freeze({
+                  cells: current.lantern.cells(),
+                  cellCount: lanternConfig.cellCount,
+                }),
+          chase:
+            current.chase === null
+              ? null
+              : Object.freeze({
+                  ...current.chase,
+                  deepestCaughtDb: Object.freeze({
+                    ...current.chase.deepestCaughtDb,
+                  }),
+                }),
         });
       case "betweenRooms":
         return Object.freeze({
@@ -600,6 +661,14 @@ export function createVisitFlow(
     stageToken += 1;
   };
 
+  /** Puts out the lantern of a room run that is over, with its chase. */
+  const dropLantern = (current: Visit): void => {
+    current.lantern?.stop();
+    current.lantern = null;
+    current.lanternHold = false;
+    current.chase = null;
+  };
+
   /** A timer for one visit: its callbacks run as steps, and only while that visit is under way. */
   const visitTimer = (handles: Set<TimerHandle>, owner: () => Visit | null) =>
     Object.freeze({
@@ -634,6 +703,7 @@ export function createVisitFlow(
     current.timerHandles.clear();
     current.runner?.abandon();
     current.runner = null;
+    dropLantern(current);
     // A swapped repeat under way plays nothing more and gives no record (visit-flow D35).
     current.repeat?.leave();
     current.repeat = null;
@@ -714,6 +784,7 @@ export function createVisitFlow(
     }
     runner.abandon();
     current.runner = null;
+    dropLantern(current);
     current.recorder.attemptEnded({
       roomIndex: current.activeRoomIndex,
       attempt: current.attempt,
@@ -751,6 +822,9 @@ export function createVisitFlow(
         abandonAttempt(current);
       } else {
         current.runner?.pause();
+        // A pause fills the lantern, so the room goes on at once when the pause ends.
+        current.lantern?.fill();
+        current.lanternHold = false;
       }
     }
     calibration.close();
@@ -944,6 +1018,7 @@ export function createVisitFlow(
         result,
       });
       current.runner = null;
+      dropLantern(current);
       emit({ kind: "roomFinished", room: roomAt(current, roomIndex) });
       current.finishedRoomCount += 1;
       if (current.finishedRoomCount < current.rooms.length) {
@@ -1060,13 +1135,21 @@ export function createVisitFlow(
         soundRandom: current.soundRandom,
         recorder: current.recorder,
         latestOffset: current.latestOffset,
-        scored: (entry) =>
+        scored: (entry) => {
+          if (current.chase !== null) {
+            countIntoChase(current.chase, entry);
+          }
+          // A caught sound gives its cell back, so only an answer at nothing costs light.
+          if (entry.kind === "sound" && entry.outcome === "caught") {
+            current.lantern?.giveBack();
+          }
           emit({
             kind: "trialScored",
             room,
             trial: entry,
             reaction: reactionTo(entry),
-          }),
+          });
+        },
         finished: finishRoom(current, roomIndex),
         pauseFromOutput,
         soundRefused,
@@ -1095,6 +1178,30 @@ export function createVisitFlow(
           });
         },
         countingStarted: () => {
+          // The lantern is lit when the room begins to count (the game layer, 2026-11-16).
+          current.lantern = createLantern({
+            timer: current.timer,
+            cameBack: (wasDark) => {
+              if (
+                wasDark &&
+                current.lanternHold &&
+                pause === null &&
+                stage === "room"
+              ) {
+                current.lanternHold = false;
+                current.runner?.resume();
+              }
+            },
+          });
+          current.lanternHold = false;
+          current.chase = {
+            caughtCount: 0,
+            streak: 0,
+            bestStreak: 0,
+            deepestCaughtDb: { left: null, right: null },
+            topLevelDb: searchCapDb,
+            floorLevelDb: searchFloorDb,
+          };
           emit({ kind: "countingStarted", room });
         },
         notHeard: () => {
@@ -1170,6 +1277,9 @@ export function createVisitFlow(
           playRefusal: null,
           judgement: null,
           runner: null,
+          lantern: null,
+          lanternHold: false,
+          chase: null,
           activeRoomIndex: 0,
           attempt: 0,
           log: null,
@@ -1370,7 +1480,34 @@ export function createVisitFlow(
         }
         const current = inVisit("room");
         if (current !== null) {
+          const lantern = current.lantern;
+          if (lantern === null) {
+            // The practice: an answer costs nothing.
+            current.runner?.answer(side, pressedAtMs);
+            return;
+          }
+          // Every answer spends one cell, and a dark lantern takes no answer.
+          if (!lantern.spend()) {
+            // Logged as every answer is that decides nothing (R8.1).
+            current.recorder.answerIgnored({
+              atMs: answerTimeMs(pressedAtMs, timer.now()),
+              side,
+              roomIndex: current.activeRoomIndex,
+              attempt: current.attempt,
+            });
+            return;
+          }
           current.runner?.answer(side, pressedAtMs);
+          // A catch has given its cell back by now. With the lantern dark the room waits: it
+          // presents nothing that could not be answered.
+          if (
+            current.lantern === lantern &&
+            lantern.cells() === 0 &&
+            current.runner !== null
+          ) {
+            current.runner.pause();
+            current.lanternHold = true;
+          }
           return;
         }
         // The room of the swapped repeat: the side is the visitor's own ear.

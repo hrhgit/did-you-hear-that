@@ -270,6 +270,41 @@ export interface RoomSnapshot extends SnapshotBase<"room"> {
   readonly room: VisitRoom;
   /** What the room says about its practice and its counting. Always present in the snapshots the flow gives; optional only so that literals written before it still compile. */
   readonly practice?: RoomPractice;
+  /**
+   * The visitor's lantern, or null while the room practises. It changes only with the visitor's
+   * own answers, with a caught sound in the moment it is scored, and with time. Always present in
+   * the snapshots the flow gives; optional only so that literals written before it still compile.
+   */
+  readonly lantern?: RoomLantern | null;
+  /** How the chase of this room stands, or null while the room practises. Optional as `lantern` is. */
+  readonly chase?: RoomChase | null;
+}
+
+/** The visitor's lantern inside a room (`lanternConfig`). */
+export interface RoomLantern {
+  /** The cells of light left. At 0 the lantern is dark: no answer is taken and the room waits. */
+  readonly cells: number;
+  /** The cells of a full lantern. */
+  readonly cellCount: number;
+}
+
+/**
+ * How the chase of one room stands. Every field changes only in the moment a trial is scored, and
+ * says nothing of a trial that is not scored yet.
+ */
+export interface RoomChase {
+  /** The sounds caught in this room so far. */
+  readonly caughtCount: number;
+  /** The sounds caught in a row up to now. A missed sound and an answer at nothing end it. */
+  readonly streak: number;
+  /** The longest such row in this room. */
+  readonly bestStreak: number;
+  /** The quietest level caught on each side, or null where nothing was caught yet. */
+  readonly deepestCaughtDb: Readonly<Record<"left" | "right", number | null>>;
+  /** The loudest level the room may play: the top of the depth scale. */
+  readonly topLevelDb: number;
+  /** The quietest level the room may play: the bottom of the depth scale. */
+  readonly floorLevelDb: number;
 }
 
 /** The rest between two rooms. The visit waits here until `proceed`. */
@@ -348,9 +383,13 @@ export type VisitSnapshot =
  * What the interface shows at once for a scored trial.
  * `ripple`: a ripple from the trial's side, labelled with the room's pitch and the played level.
  * `noSoundLine`: the house says "I made no sound that time." (wording.md).
- * `none`: nothing now. Missed sounds are shown in the replay.
+ * `slipped`: the house says on which side a sound went by unanswered. Said only when the trial is
+ * scored, which is when its time to answer is over (the game layer, 2026-11-16).
+ * `otherSide`: the house says the sound was on the other side from the answer.
+ * `none`: nothing now.
  */
-export type TrialReaction = "ripple" | "noSoundLine" | "none";
+export type TrialReaction =
+  "ripple" | "noSoundLine" | "slipped" | "otherSide" | "none";
 
 /** Released when a room begins. Says nothing about any trial. */
 export interface RoomStartedEvent {

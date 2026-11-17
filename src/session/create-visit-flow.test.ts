@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { audioSafetyConfig } from "../config/audio-safety-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
+import { lanternConfig } from "../config/lantern-config";
 import { missedSoundReplayConfig } from "../config/missed-sound-replay-config";
 import type { ManualTimer } from "../config/manual-timer";
 import { createManualTimer } from "../config/manual-timer";
@@ -1311,7 +1312,7 @@ describe("createVisitFlow: rooms", () => {
     expect(JSON.parse(JSON.stringify(log))).toStrictEqual(log);
   }, 60_000);
 
-  it("gives each decided trial its reaction: ripple, noSoundLine or none (R9.1, R9.2)", async () => {
+  it("gives each decided trial its reaction: ripple, noSoundLine, slipped, otherSide or none (R9.1, R9.2, the game layer)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
@@ -1344,8 +1345,8 @@ describe("createVisitFlow: rooms", () => {
     const expected = {
       caught: "ripple",
       falseAlarm: "noSoundLine",
-      missed: "none",
-      wrongSide: "none",
+      missed: "slipped",
+      wrongSide: "otherSide",
       noResponse: "none",
     } as const;
     for (const event of scored) {
@@ -1367,18 +1368,23 @@ describe("createVisitFlow: rooms", () => {
     expect(isDeeplyFrozen(harness.flow.snapshot())).toBe(true);
   }, 60_000);
 
-  it("logs answers outside every window and releases nothing about them (R8.1, R8.3)", async () => {
+  it("logs answers outside every window, takes a cell of the lantern for each and releases nothing else about them (R8.1, R8.3, the game layer)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
     const snapshotCount = harness.snapshots.length;
     const eventCount = harness.events.length;
     const before = harness.flow.snapshot();
+    expect(before).toMatchObject({ lantern: { cells: 3, cellCount: 3 } });
     harness.advance(500);
     harness.flow.answer("left");
     harness.flow.answer("right", harness.timer.now() - 100);
-    expect(harness.flow.snapshot()).toBe(before);
-    expect(harness.snapshots).toHaveLength(snapshotCount);
+    // Each answer cost one cell, and nothing else in the snapshot moved.
+    expect(harness.flow.snapshot()).toEqual({
+      ...before,
+      lantern: { cells: 1, cellCount: 3 },
+    });
+    expect(harness.snapshots).toHaveLength(snapshotCount + 2);
     expect(harness.events).toHaveLength(eventCount);
     await toResultFromRoom(harness);
     const log = logOf(harness.flow.snapshot());
@@ -1386,6 +1392,126 @@ describe("createVisitFlow: rooms", () => {
       { side: "left", roomIndex: 0, attempt: 1 },
       { side: "right", roomIndex: 0, attempt: 1 },
     ]);
+  }, 60_000);
+
+  it("lights no lantern while a room practises, and a full one when it counts (the game layer)", async () => {
+    const harness = createHarness();
+    await toRoom(harness);
+    expect(harness.flow.snapshot()).toMatchObject({
+      stage: "room",
+      lantern: null,
+      chase: null,
+    });
+    practise(harness);
+    expect(harness.flow.snapshot()).toMatchObject({
+      lantern: { cells: 3, cellCount: 3 },
+      chase: {
+        caughtCount: 0,
+        streak: 0,
+        bestStreak: 0,
+        deepestCaughtDb: { left: null, right: null },
+      },
+    });
+  }, 60_000);
+
+  it("keeps the lantern full for a visitor who answers only what is there, and counts the chase (the game layer)", async () => {
+    const harness = createHarness();
+    await toRoom(harness);
+    practise(harness);
+    // Hears everything, so every answer is a catch and gives its cell back.
+    const hearsAll: Listener = (trial) =>
+      trial.kind === "sound" ? trial.ear : null;
+    playRoom(
+      harness,
+      hearsAll,
+      () =>
+        harness.events.filter((event) => event.kind === "trialScored").length >=
+        6,
+    );
+    const caught = harness.events.flatMap((event) =>
+      event.kind === "trialScored" && event.trial.outcome === "caught"
+        ? [event.trial]
+        : [],
+    );
+    expect(caught.length).toBeGreaterThan(0);
+    const snapshot = harness.flow.snapshot();
+    expect(snapshot).toMatchObject({
+      lantern: { cells: 3 },
+      chase: {
+        caughtCount: caught.length,
+        streak: caught.length,
+        bestStreak: caught.length,
+      },
+    });
+    if (snapshot.stage !== "room" || snapshot.chase == null) {
+      throw new Error("The room shows no chase.");
+    }
+    for (const ear of ["left", "right"] as const) {
+      const levels = caught.flatMap((trial) =>
+        trial.kind === "sound" && trial.ear === ear
+          ? [trial.playedLevelDb]
+          : [],
+      );
+      expect(snapshot.chase.deepestCaughtDb[ear]).toBe(
+        levels.length === 0 ? null : Math.min(...levels),
+      );
+    }
+  }, 60_000);
+
+  it("takes no answer with a dark lantern and presents nothing until a cell is back (the game layer)", async () => {
+    const harness = createHarness();
+    await toRoom(harness);
+    practise(harness);
+    const eventCount = harness.events.length;
+    // Three answers at nothing, before the first trial of the search is presented.
+    harness.flow.answer("left");
+    harness.flow.answer("left");
+    harness.flow.answer("left");
+    expect(harness.flow.snapshot()).toMatchObject({ lantern: { cells: 0 } });
+    const presentedCount = harness.presented.length;
+    const dark = harness.flow.snapshot();
+    harness.flow.answer("right");
+    expect(harness.flow.snapshot()).toBe(dark);
+    // The room waits for the whole of one wait, far longer than any gap between two trials.
+    harness.advance(lanternConfig.rechargeMs - 1);
+    expect(harness.presented).toHaveLength(presentedCount);
+    expect(harness.events).toHaveLength(eventCount);
+    expect(harness.flow.snapshot()).toMatchObject({ lantern: { cells: 0 } });
+    harness.advance(1);
+    expect(harness.flow.snapshot()).toMatchObject({ lantern: { cells: 1 } });
+    // Then it goes on, and the room can be played to its end.
+    await toResultFromRoom(harness);
+    const log = logOf(harness.flow.snapshot());
+    expect(log.ignoredAnswers.slice(0, 4).map((answer) => answer.side)).toEqual(
+      ["left", "left", "left", "right"],
+    );
+    // The dark lantern came before the first trial, so no trial had to be taken back.
+    expect(log.trials.length).toBeGreaterThan(0);
+    expect(log.trials.every((trial) => trial.status === "scored")).toBe(true);
+  }, 60_000);
+
+  it("fills the lantern at a pause, so the room goes on when the pause ends (the game layer)", async () => {
+    const harness = createHarness();
+    await toRoom(harness);
+    practise(harness);
+    harness.flow.answer("left");
+    harness.flow.answer("left");
+    harness.flow.answer("left");
+    harness.flow.pause();
+    harness.flow.resume();
+    await harness.settle();
+    expect(harness.flow.snapshot()).toMatchObject({
+      stage: "room",
+      pause: null,
+      lantern: { cells: 3 },
+    });
+    const presentedCount = harness.presented.length;
+    harness.advance(
+      hearingMethodConfig.gapBetweenTrialsMaxMs +
+        audioOutputConfig.scheduleLeadMs +
+        100,
+    );
+    expect(harness.presented.length).toBeGreaterThan(presentedCount);
   }, 60_000);
 
   it("ends the visit with soundRefused after three refused plays of one trial (R21.2)", async () => {
@@ -2712,7 +2838,7 @@ describe("createVisitFlow: notifications", () => {
     ]);
   }, 60_000);
 
-  it("notifies nobody of a decision that changes nothing in the snapshot (R11.3, R11.4)", async () => {
+  it("notifies only of a change, and inside a room only of the lantern and the chase (R11.3, R11.4, the game layer)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
@@ -2725,8 +2851,25 @@ describe("createVisitFlow: notifications", () => {
         harness.events.filter((event) => event.kind === "trialScored").length >=
         8,
     );
-    expect(harness.snapshots).toHaveLength(snapshotCount);
-    expect(harness.flow.snapshot()).toBe(before);
+    const during = harness.snapshots.slice(snapshotCount);
+    let previous = before;
+    for (const snapshot of during) {
+      // A notification brings a snapshot that differs from the one before it.
+      expect(snapshot).not.toEqual(previous);
+      // And only in the lantern and the chase, which hold nothing of a trial not yet scored.
+      expect({ ...snapshot, lantern: null, chase: null }).toEqual({
+        ...before,
+        lantern: null,
+        chase: null,
+      });
+      previous = snapshot;
+    }
+    // A decision that changes neither notifies nobody: there are fewer notifications than
+    // decisions and answers together.
+    const decisions = harness.events.filter(
+      (event) => event.kind === "trialScored",
+    ).length;
+    expect(during.length).toBeLessThanOrEqual(decisions * 2);
   }, 60_000);
 
   it("calls every snapshot listener when one throws, throws its error afterwards, and keeps its state (R11.7)", async () => {

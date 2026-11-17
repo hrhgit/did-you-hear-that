@@ -3,6 +3,7 @@ import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
+import { lanternConfig } from "../../src/config/lantern-config";
 import { createSeededRandom } from "../../src/config/seeded-random";
 import type { VisitSnapshot } from "../../src/session/visit-flow-types";
 import { playVisit } from "../listeners/simulated-visitor";
@@ -35,6 +36,18 @@ const probeSpanMs =
   hearingMethodConfig.gapBetweenTrialsMaxMs +
   audioOutputConfig.scheduleLeadMs +
   hearingMethodConfig.responseWindowMs;
+
+/**
+ * A snapshot without the visitor's lantern. The lantern is the one thing a room shows that moves
+ * between two decisions: it follows the visitor's own answers and the clock, and the checks below
+ * hold it to exactly that (the game layer, 2026-11-16).
+ */
+const withoutLantern = (snapshot: VisitSnapshot): unknown =>
+  snapshot.stage === "room" ? { ...snapshot, lantern: null } : snapshot;
+
+/** The cells of the lantern a snapshot shows, or null where it shows none. */
+const lanternCells = (snapshot: VisitSnapshot): number | null =>
+  snapshot.stage === "room" ? (snapshot.lantern?.cells ?? null) : null;
 
 /** Whether an entry is something the visitor did that may change what is shown. */
 const isVisitorStep = (entry: TimelineEntry): boolean =>
@@ -72,7 +85,12 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                 return;
               }
               const now = harness.flow.snapshot();
-              if (!isDeepStrictEqual(now, baseline)) {
+              if (
+                !isDeepStrictEqual(
+                  withoutLantern(now),
+                  withoutLantern(baseline),
+                )
+              ) {
                 differences.push(
                   `${where} at ${String(harness.now())}: ${JSON.stringify(now)} after ${JSON.stringify(baseline)}`,
                 );
@@ -113,8 +131,27 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
             // The snapshot read in a stretch is the one it began with.
             expect(differences).toEqual([]);
 
-            // Within the counting of a room run, the timer hands out only decisions, and a
-            // room's end with its last decision. The counting begins after the practice.
+            // Within the counting of a room run, the timer hands out only decisions, a room's
+            // end with its last decision, and one cell of the lantern at a time. A cell comes
+            // back exactly one wait after an answer or after the cell before it, so the moment
+            // follows the visitor's own answers and no trial. The counting begins after the
+            // practice.
+            const waitStartsMs: number[] = [];
+            let lastSnapshot: VisitSnapshot | null = null;
+            const cellCameBack = (snapshot: VisitSnapshot): boolean => {
+              const before =
+                lastSnapshot === null ? null : lanternCells(lastSnapshot);
+              const after = lanternCells(snapshot);
+              return (
+                lastSnapshot !== null &&
+                before !== null &&
+                after === before + 1 &&
+                isDeepStrictEqual(
+                  withoutLantern(snapshot),
+                  withoutLantern(lastSnapshot),
+                )
+              );
+            };
             let inRun = false;
             let previous: "scored" | "finished" | "counting" | null = null;
             let previousAtMs = Number.NaN;
@@ -128,23 +165,48 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                 previousAtMs = entry.atMs;
                 continue;
               }
+              if (entry.kind === "action" && entry.name === "answer") {
+                waitStartsMs.push(entry.atMs);
+              }
               if (
                 inRun &&
                 entry.cause === "timer" &&
                 (entry.kind === "event" || entry.kind === "snapshot")
               ) {
+                // A decision changes the chase, so its snapshot follows it in the same moment.
+                const withDecision =
+                  (previous === "finished" ||
+                    previous === "counting" ||
+                    previous === "scored") &&
+                  previousAtMs === entry.atMs;
+                const cameBack =
+                  entry.kind === "snapshot" && cellCameBack(entry.snapshot);
+                if (cameBack) {
+                  expect(
+                    waitStartsMs.some(
+                      (startMs) =>
+                        Math.abs(
+                          startMs + lanternConfig.rechargeMs - entry.atMs,
+                        ) < 1e-6,
+                    ),
+                    `a cell came back at ${String(entry.atMs)}, which is not one wait after an answer or after the cell before it`,
+                  ).toBe(true);
+                  waitStartsMs.push(entry.atMs);
+                }
                 const allowed =
                   entry.kind === "event"
                     ? entry.event.kind === "trialScored" ||
                       (entry.event.kind === "roomFinished" &&
                         previous === "scored" &&
                         previousAtMs === entry.atMs)
-                    : (previous === "finished" || previous === "counting") &&
-                      previousAtMs === entry.atMs;
+                    : withDecision || cameBack;
                 expect(
                   allowed,
                   `${entry.kind} ${JSON.stringify(entry.kind === "event" ? entry.event.kind : entry.snapshot.stage)} handed out by the timer at ${String(entry.atMs)}`,
                 ).toBe(true);
+              }
+              if (entry.kind === "snapshot") {
+                lastSnapshot = entry.snapshot;
               }
               if (entry.kind === "event" || entry.kind === "snapshot") {
                 previous =
@@ -228,21 +290,46 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               }
             }
 
-            // An answer that decides nothing changes nothing and hands out nothing.
+            // An answer that decides nothing hands out no event and changes nothing but the
+            // lantern, which it costs one cell. An answer that decides a trial costs one cell
+            // too, and a caught sound gives it back. A dark lantern and a pause take no answer.
             for (const entry of entries) {
               if (entry.kind !== "action" || entry.name !== "answer") {
                 continue;
               }
               const made = entries.slice(entry.seq + 1, entry.endSeq + 1);
-              const decided = made.some(
-                (inside) =>
-                  inside.kind === "event" &&
-                  (inside.event.kind === "trialScored" ||
-                    inside.event.kind === "practiceSoundScored"),
+              const scoredInside = made.flatMap((inside) =>
+                inside.kind === "event" &&
+                (inside.event.kind === "trialScored" ||
+                  inside.event.kind === "practiceSoundScored")
+                  ? [inside.event]
+                  : [],
               );
-              if (!decided) {
-                expect(made).toEqual([]);
-                expect(entry.snapshotAfter).toEqual(entry.snapshotBefore);
+              const cellsBefore = lanternCells(entry.snapshotBefore);
+              const cellsAfter = lanternCells(entry.snapshotAfter);
+              const taken =
+                entry.snapshotBefore.pause === null &&
+                cellsBefore !== null &&
+                cellsBefore > 0;
+              if (scoredInside.length === 0) {
+                expect(
+                  made.filter((inside) => inside.kind === "event"),
+                ).toEqual([]);
+                expect(withoutLantern(entry.snapshotAfter)).toEqual(
+                  withoutLantern(entry.snapshotBefore),
+                );
+                if (cellsBefore !== null) {
+                  expect(cellsAfter).toBe(
+                    taken ? cellsBefore - 1 : cellsBefore,
+                  );
+                }
+              } else if (cellsBefore !== null && cellsAfter !== null) {
+                // A decided trial was answered with a lit lantern.
+                expect(taken).toBe(true);
+                const caught = scoredInside.some(
+                  (event) => event.trial.outcome === "caught",
+                );
+                expect(cellsAfter).toBe(caught ? cellsBefore : cellsBefore - 1);
               }
             }
           },
