@@ -48,6 +48,15 @@ A share of trials play nothing. A response on such a trial is a false alarm.
 - The false alarm rate is reported with the result.
 - Above the limit set in `src/config`, the result for that visit is marked unreliable and the visitor is invited to repeat it.
 
+## The lantern
+
+The rooms are played as a chase (the game layer, decided by the owner on 2026-11-16). It changes what an answer costs, not how a trial is scored.
+
+- The visitor carries a lantern of `lanternConfig.cellCount` lights (3). Every answer in a room that counts spends one light, whether it scores a trial or not. A caught sound gives its light back at once. A spent light comes back by itself `lanternConfig.rechargeMs` (8000 ms) after it was spent or after the light before it came back; an answer does not start that wait again.
+- With no light left, an answer is not taken: it is logged as an answer that scored nothing, and the room holds its trials, as a pause does, until a light is back. A trial under way when the last light goes is discarded and comes again, as in a pause.
+- A visitor who answers only what they hear never runs short: every catch is free. A visitor who answers blindly gets at most three answers and then one per wait, which is slower than the room presents trials. The wait must stay well above a room's mean trial time (about 4.75 s); do not set it below 6000 ms without the owner.
+- The practice and the swapped repeat have no lantern. A pause fills it.
+
 ## When a search cannot finish honestly
 
 A search must always end within the trial limit. It ends in one of these states:
@@ -74,6 +83,7 @@ The 15 dB figure is a starting value. Its clinical source has not been checked.
 - Ghost sounds are narrow bands of noise or tone clusters, not pure tones. Whether they give the same thresholds as pure tones is not established.
 - Bluetooth headphones carry about 16 bits and may gate, cut or reshape very quiet sounds. So the house does not play or count on a sound below a room's playable floor: the higher of the quietest playable level and the level at which a sound's RMS is 84 dB below full scale with the visitor's calibration, about one bit above one step of a 16-bit path. That value comes from arithmetic; a listening session with the listening page settles it. A result at that floor, or within one step of it, says that this is as quiet as the house can play through these headphones at this volume.
 - Bluetooth headphones also play later than wired ones. The response window is not lengthened by the output latency the browser reports, so a slow answer on such headphones may be scored as a miss.
+- The chase shows a missed sound after it is scored, and costs a light for every answer. Both may change how readily a visitor answers, and so the thresholds and the false alarm rate. Neither has been checked against a plain run of the same search.
 - Fear may affect thresholds. The research is thin and mixed. The product avoids startle and uses no-sound trials to detect guessing.
 - The digits-in-noise door uses home-made speech material with no reference data. Its outcome is part of the game and is never reported as a measurement.
 

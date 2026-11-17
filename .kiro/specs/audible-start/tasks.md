@@ -41,6 +41,28 @@ The e2e tests the design listed under "May stop passing" were brought up to date
 
 Open for the owner: Q39, Q41 and Q42 need a person to listen, and nothing here settles them.
 
+## The game layer of 2026-11-16
+
+Not in this spec. The owner asked for the rooms to play more like a game, with gameplay put ahead of the precision of the calibration, and decided the design with Claude Code on 2026-11-16: the trials stay as they are, at random moments, and a lantern makes an answer cost something. Claude Code wrote it in this working tree, with the screen, and committed each step after `npm run typecheck`, `npm run lint`, `npm run check:copy` and `npx vitest run` passed.
+
+| Step | What was built | Commit |
+|---|---|---|
+| The lantern | `lanternConfig` (3 lights, 8000 ms to come back) and `createLantern`. | db6056a |
+| The lantern in the rooms | Every answer in a counted room spends a light and a catch gives it back. With no light left an answer is logged as one that scored nothing and the room holds its trials until a light is back. A pause fills the lantern. The snapshot carries the lantern and the chase (caught, in a row, the quietest catch on each side). The practice and the swapped repeat have none. | db6056a |
+| The picture | A caught sound shows its shape by its wall; a sound that went by is shown leaving by its side, with "One went by on your left" or "That one was on your left". The lantern's lights, the count and the row, and a depth scale at each edge. A dark lantern dims the house slowly and says so. | f69fe64 |
+| The score | The result page shows the catches in all, the longest row and the catches of each room, counted from the log by the same function as the rooms. It shows no levels side by side, because the limits statement says floors cannot be compared; the depth per floor that was first proposed was changed to a count for that reason. | b861f67 |
+| The rules | A fourth sentence about the lantern, and a second line of the counting. | f69fe64 |
+
+What changed in rules that held before:
+
+- A sound that went by used to show nothing. It is now shown after its trial is scored. The reactions `slipped` and `otherSide` are new; `reactionOfEvent` gives both only for a `trialScored` event.
+- A room's snapshot used to stay the same from one decision to the next. The lantern now changes between decisions. The properties were restated, not loosened: visit-flow CP3 compares the snapshots without the lantern, and checks that a light comes back exactly `rechargeMs` after an answer or the light before, that an answer that decides nothing costs one light (none when dark or paused) and that a deciding answer costs one unless it was a catch; CP2 discards a trial also when the lantern went dark while it was presented; the screen-leak properties record a change of the lantern alone apart and require it to be one light. The predictor still sees every change and still does no better than chance.
+- The rules test now expects four sentences. The design-pinned `resultPageCopy` is unchanged; the score's heading is in `chaseScoreCopy`.
+
+Checked: the e2e suite ran headless and muted with the lantern. The practice test failed on the new chase line before the counting's lines, and was restated to check those lines, the full lantern, "0 caught" and both empty depth scales; the suite then passed. Screenshots showed the depth scales crossing the house's eaves and floor names on a narrow upright screen, and the counting's lines running into the roof; both were moved in `visit.css`.
+
+Not done: the `WHOLE_VISIT=1` spec was not run with the lantern, and nobody has played it to tune `rechargeMs`.
+
 - [x] 1. Add the calibration target
   - Create `src/session/calibration-target-setting.ts` (`calibrationTargetSettingDb(settingDb, { bottomDb, topDb, stepDb })`) and its test, as "The calibration target" in `design.md`: on the grid, itself; between grid settings, rounded down with the tolerance of `next-calibration-setting.ts`; below the bottom and −Infinity, the bottom; above the top and +Infinity, the top; NaN and a value that is not a number, null.
   - Change `src/session/calibration-controller.ts`: `setTarget(settingDb)` sets the target from that function and notifies, and does nothing for null; `louder()` and `quieter()` compute their setting as today and pass it through the same function (D2). `open()` is unchanged: it puts the target at the bottom (D3). The way repeats are played does not change (R3.8). In its test: every row of the table; `louder` and `quieter` give what they gave before; a target set before `open` is at the bottom after it; repeats rise by at most 5 dB towards a target dragged to the top.

@@ -9,7 +9,11 @@ The seeded random generator and the injectable timer live here too. `engine` and
 ## Motion of the picture
 
 - `ambient-motion-config.ts`: how often the lamp is nudged and how far it swings, how often a shadow crosses under the door, how many dust motes there are and how slowly they sink, and how much of this is left when the visitor has asked for reduced motion.
-- `ripple-config.ts`: how many rings a ripple has, how long they take, and the shortest time a ripple may take to reach its brightest.
+- `ripple-config.ts`: how many rings a ripple has, how long they take, and the shortest time a ripple may take to reach its brightest; and how long the shape of a scored sound stays, `sightingMs` for a caught one and `slippedSightingMs` for one that went by.
+
+## The lantern
+
+- `lantern-config.ts`: `lanternConfig`, the visitor's lantern inside a room (the game layer, decided by the owner on 2026-11-16). `cellCount` (3) is the lights of a full lantern; `rechargeMs` (8000) is how long a spent light takes to come back. Its test keeps the wait above a room's mean trial time and at 6000 ms or more; going lower needs the owner. It changes no sound and no scoring, only which answers are taken and when a room waits.
 
 These values shape what is drawn. They change no sound and no decision about an answer, and the ambient schedule is drawn from a random source of its own.
 

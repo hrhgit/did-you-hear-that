@@ -16,7 +16,7 @@ People who wear headphones for hours a day and have never had their hearing chec
 
 1. Enters the house. Chooses the visit of about 7 minutes, the visit of about 12 minutes, or a 60 second replay that needs no headphones.
 2. Calibrates. Sets a piece of music in the headphones to the volume at which they would listen to music in a quiet room, clear and comfortable, without changing the system volume. Confirms left and right are not swapped.
-3. Walks through rooms. Each room uses one pitch. Left ear and right ear trials are mixed in random order. On some trials the house makes no sound at all.
+3. Walks through rooms, carrying a lantern. Each room uses one pitch. Left ear and right ear trials are mixed in random order. On some trials the house makes no sound at all. Every answer costs the lantern one of its three lights, a catch gives it back, and a spent light returns by itself after a while; with no light left the visitor waits and the room makes no sound.
 4. Opens the last door (the visit of about 12 minutes only). A voice says three digits in noise and the visitor types them.
 5. Hears the replay. Every sound they missed is played again, louder, from where it was.
 6. Sees the result. A cross-section of a five-storey house with a left wing and a right wing. Light reaches as deep into each wing as that ear could hear on that floor.
@@ -35,6 +35,7 @@ Nothing else is claimed. Floors are never compared with each other. There is no 
 
 - The fear comes from things getting quieter. There are no sudden loud sounds anywhere in the product.
 - Before the visitor answers, nothing on screen may reveal when a sound plays or which side it is on. The one exception is the practice at the start of each room: while a practice sound plays, the screen says that a sound is playing now, never which side. Practice counts for nothing, comes before every counted sound of the room, and is there so that the visitor knows the house and the headphones work and what to do.
+- After a trial is scored, and not before, the screen may say what happened: a caught sound shows itself by its wall, and a sound that went by is shown leaving by its side ("One went by on your left"). Its time to answer is over by then, and the next trial's side is drawn afresh. The lantern may change between trials, because it follows only the visitor's own answers, a catch at the moment it is scored, and the clock (the game layer, decided by the owner on 2026-11-16).
 - A visitor with no headphones, and a judge who only watches a video, must still be able to follow what happened. Every caught sound is drawn as a ripple labelled with its pitch and level, and the replay mode shows a whole recorded visit.
 - All interface text is in English.
 

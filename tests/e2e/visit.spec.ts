@@ -6,6 +6,9 @@ import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { notHeardLines, practiceCopy } from "../../src/copy/practice-copy";
 import {
+  caughtCountLine,
+  deepestCatchLabel,
+  lanternLabel,
   roomCopy,
   roomNames,
   roomProgressLine,
@@ -193,7 +196,25 @@ test.describe(`a visit at ${address}`, () => {
     // Going on starts the counting, and the practice says only that it now counts.
     await button(page, practiceCopy.goOnLabel).click();
     await expect(notice).toBeHidden();
-    await expect(practice).toHaveText(practiceCopy.countingLines.join(""));
+    await expect(practice.locator(".visit-practice-lines")).toHaveText(
+      practiceCopy.countingLines.join(""),
+    );
+    // With the counting comes the lantern, full, and the count of the chase (game layer).
+    await expect(
+      practice.getByRole("img", { name: lanternLabel(3, 3) }),
+    ).toBeVisible();
+    await expect(practice.locator(".visit-chase-caught")).toHaveText(
+      caughtCountLine(0),
+    );
+    await expect(
+      practice.locator(".visit-lantern-cell[data-lit='true']"),
+    ).toHaveCount(3);
+    await expect(
+      page.getByRole("img", { name: deepestCatchLabel("left", null) }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: deepestCatchLabel("right", null) }),
+    ).toBeVisible();
     await expect(page.getByText(roomProgressLine(1, 3))).toBeVisible();
     await expect(answerButton(page, "left")).toBeVisible();
     await expectNoHorizontalScroll(page);
