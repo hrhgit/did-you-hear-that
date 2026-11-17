@@ -6,7 +6,7 @@ import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import { notHeardLines, practiceCopy } from "../../copy/practice-copy";
 import { replayCopy } from "../../copy/replay-copy";
-import { roomCopy } from "../../copy/room-copy";
+import { chaseCopy, roomCopy } from "../../copy/room-copy";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
@@ -474,6 +474,104 @@ describe("screenOfSnapshot", () => {
           label: practiceCopy.goOnLabel,
           action: "goOnWithoutPractice",
         },
+      });
+    });
+
+    describe("with the lantern and the chase of a room that counts (game layer)", () => {
+      const chase = {
+        caughtCount: 4,
+        streak: 3,
+        bestStreak: 3,
+        deepestCaughtDb: { left: -40, right: null },
+        topLevelDb: -10,
+        floorLevelDb: -70,
+      };
+      const counting = (cells: number) =>
+        screenOfSnapshot({
+          ...base("room", 2),
+          room: stairs,
+          practice: practice("counting", false),
+          lantern: { cells, cellCount: 3 },
+          chase,
+        });
+
+      it("shows the lantern, the count, the row and the depth of each side", () => {
+        expect(counting(2).chase).toEqual({
+          lantern: {
+            cells: 2,
+            cellCount: 3,
+            label: "Lantern: 2 of 3 lights",
+            darkLine: null,
+          },
+          caughtLine: "4 caught",
+          streakLine: "3 in a row",
+          depth: {
+            left: {
+              fraction: 0.5,
+              label:
+                "Quietest catch on your left: 40 dB quieter than your calibration",
+            },
+            right: {
+              fraction: null,
+              label: "Nothing caught on your right yet",
+            },
+          },
+          depthQuieterLabel: chaseCopy.depthQuieterLabel,
+        });
+      });
+
+      it("says the lantern is out only while it is dark", () => {
+        expect(counting(0).chase?.lantern.darkLine).toBe(
+          chaseCopy.lanternDarkLine,
+        );
+        expect(counting(1).chase?.lantern.darkLine).toBeNull();
+      });
+
+      it("changes nothing but the lantern when only the lantern changes", () => {
+        const withoutLantern = (cells: number) => {
+          const screen = counting(cells);
+          return { ...screen, chase: { ...screen.chase, lantern: null } };
+        };
+        expect(withoutLantern(0)).toEqual(withoutLantern(3));
+      });
+
+      it("says no row below two caught sounds, and keeps the mark on the scale", () => {
+        const screen = screenOfSnapshot({
+          ...base("room", 2),
+          room: stairs,
+          practice: practice("counting", false),
+          lantern: { cells: 3, cellCount: 3 },
+          chase: {
+            ...chase,
+            streak: 1,
+            deepestCaughtDb: { left: -95, right: 5 },
+          },
+        });
+        expect(screen.chase?.streakLine).toBeNull();
+        expect(screen.chase?.depth.left.fraction).toBe(1);
+        expect(screen.chase?.depth.right.fraction).toBe(0);
+      });
+
+      it("has no chase in the practice or while paused", () => {
+        expect(
+          screenOfSnapshot({
+            ...base("room", 2),
+            room: stairs,
+            practice: practice("practice", false),
+            lantern: null,
+            chase: null,
+          }).chase,
+        ).toBeNull();
+        expect(
+          screenOfSnapshot({
+            ...base("room", 2),
+            room: stairs,
+            pause: { reason: "visitor" },
+            practice: practice("counting", false),
+            lantern: { cells: 1, cellCount: 3 },
+            chase,
+          }).chase,
+        ).toBeNull();
       });
     });
 

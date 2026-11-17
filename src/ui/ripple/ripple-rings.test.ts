@@ -4,6 +4,8 @@ import {
   rippleDurationMs,
   rippleGlowStrength,
   rippleRings,
+  sightingAt,
+  sightingDurationMs,
 } from "./ripple-rings";
 
 const frameMs = 16;
@@ -90,6 +92,53 @@ describe("rippleGlowStrength", () => {
     expect(rippleDurationMs(false)).toBe(
       rippleConfig.ringMs +
         (rippleConfig.ringCount - 1) * rippleConfig.ringGapMs,
+    );
+  });
+});
+
+describe("sightingAt", () => {
+  const kinds = ["caught", "slipped"] as const;
+
+  it("shows nothing before it starts and after it ends", () => {
+    for (const kind of kinds) {
+      expect(sightingAt(kind, 0)).toBeNull();
+      expect(sightingAt(kind, -5)).toBeNull();
+      expect(sightingAt(kind, Number.NaN)).toBeNull();
+      expect(sightingAt(kind, sightingDurationMs(kind))).toBeNull();
+    }
+  });
+
+  it("keeps its strength and its drift from 0 to 1, and drifts only onwards", () => {
+    for (const kind of kinds) {
+      let lastDrift = 0;
+      for (let ageMs = 1; ageMs < sightingDurationMs(kind); ageMs += 7) {
+        const sighting = sightingAt(kind, ageMs);
+        expect(sighting).not.toBeNull();
+        if (sighting === null) {
+          continue;
+        }
+        expect(sighting.strength).toBeGreaterThanOrEqual(0);
+        expect(sighting.strength).toBeLessThanOrEqual(1);
+        expect(sighting.drift).toBeGreaterThanOrEqual(lastDrift);
+        expect(sighting.drift).toBeLessThanOrEqual(1);
+        lastDrift = sighting.drift;
+      }
+    }
+  });
+
+  it("never reaches its brightest sooner than a ripple may, so it does not flash", () => {
+    for (const kind of kinds) {
+      for (let ageMs = 1; ageMs < rippleConfig.fadeInMinMs; ageMs += 3) {
+        expect(sightingAt(kind, ageMs)?.strength).toBeLessThan(1);
+      }
+      // A fifth of a second in, it is still well short of full (audio-safety rule 9).
+      expect(sightingAt(kind, 100)?.strength).toBeLessThan(0.35);
+    }
+  });
+
+  it("shows a caught sound longer than one that went by", () => {
+    expect(sightingDurationMs("caught")).toBeGreaterThan(
+      sightingDurationMs("slipped"),
     );
   });
 });

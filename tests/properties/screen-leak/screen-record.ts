@@ -19,10 +19,15 @@ import type { LeakSample } from "./guess-from-screen";
 export interface ScreenMoment {
   readonly atMs: number;
   /**
-   * `screen`: the screen derived from a snapshot changed. `ripple`, `say`: a reaction to a decided
-   * trial, in a room of the visit or in the swapped repeat's room. `replayRipple`: the ripple of a sound that is played again after the rooms.
+   * `screen`: the screen derived from a snapshot changed, other than its lantern. `lantern`: only
+   * the lantern of the screen changed (the game layer of 2026-11-16). `ripple`, `slipped`, `say`:
+   * a reaction to a decided trial, in a room of the visit or in the swapped repeat's room.
+   * `replayRipple`: the ripple of a sound that is played again after the rooms.
    */
-  readonly what: "screen" | "ripple" | "say" | "replayRipple";
+  readonly what:
+    "screen" | "lantern" | "ripple" | "slipped" | "say" | "replayRipple";
+  /** For `lantern`: the lights before and after the change. */
+  readonly lantern?: { readonly from: number; readonly to: number };
 }
 
 /** What a recorder is told when a trial's window is set. */
@@ -66,6 +71,7 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
   const moments: ScreenMoment[] = [];
   const trials: RecordedTrial[] = [];
   let lastScreen: string | null = null;
+  let lastCells: number | null = null;
   let anchorMs = now();
   let waiting: (PresentedTrialFacts & { readonly atMs: number }) | null = null;
   let inRepeatRoom = false;
@@ -80,11 +86,25 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
         waiting = null;
       }
       inRepeatRoom = repeatRoom;
-      const screen = JSON.stringify(screenOfSnapshot(snapshot));
+      const shown = screenOfSnapshot(snapshot);
+      const cells = shown.chase?.lantern.cells ?? null;
+      // The screen without its lantern, so that a change of the lantern alone is told apart.
+      const screen = JSON.stringify({
+        ...shown,
+        chase:
+          shown.chase === null ? null : { ...shown.chase, lantern: undefined },
+      });
       if (screen !== lastScreen) {
         lastScreen = screen;
         moments.push({ atMs: now(), what: "screen" });
+      } else if (cells !== lastCells && lastCells !== null && cells !== null) {
+        moments.push({
+          atMs: now(),
+          what: "lantern",
+          lantern: { from: lastCells, to: cells },
+        });
       }
+      lastCells = cells;
     },
     event(event) {
       // A room's counting starts after its practice (audible-start, light plan of 2026-11-16).

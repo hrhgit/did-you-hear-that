@@ -1,5 +1,10 @@
 import type { GhostSoundId } from "../../config/sound-id";
-import { caughtLine, roomCopy } from "../../copy/room-copy";
+import {
+  caughtLine,
+  otherSideLine,
+  roomCopy,
+  slippedLine,
+} from "../../copy/room-copy";
 import type { VisitEvent } from "../../session/visit-flow-types";
 
 /** What the page does at once for an event of the visit. */
@@ -7,6 +12,15 @@ export type ScreenReaction =
   | {
       /** A ripple from the wall on the side the sound was caught, with what the house says. */
       readonly kind: "ripple";
+      readonly side: "left" | "right";
+      readonly line: string;
+    }
+  | {
+      /**
+       * A sound that went by: a faint shape leaves by the wall of its side, with what the house
+       * says. Given only for a scored trial, whose time to answer is over.
+       */
+      readonly kind: "slipped";
       readonly side: "left" | "right";
       readonly line: string;
     }
@@ -25,9 +39,10 @@ export type ScreenReaction =
 /**
  * The reaction to an event, or null when the page shows nothing for it. Inside a room only a
  * scored trial can give one, and the visit flow releases a scored trial in the moment it is
- * scored and not before. A missed sound, a wrong side and an unanswered silence give null: the
- * page stays as it was. After the rooms, a sound that is played again gives a ripple as it
- * starts. By then every answer has been given, so the ripple tells nothing that could be used.
+ * scored and not before. A caught sound ripples from its side. A sound that went by, unanswered
+ * or answered on the other side, is shown leaving by its side once its trial is scored (the game
+ * layer, 2026-11-16). An unanswered silence gives null: the page stays as it was. After the
+ * rooms, a sound that is played again gives a ripple as it starts. By then every answer has been given, so the ripple tells nothing that could be used.
  * The room of a swapped repeat is a room like every other: only its scored trials give a reaction.
  * A practice sound before a room counts gives a ripple only when it is caught.
  */
@@ -75,6 +90,12 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
   }
   if (reaction === "noSoundLine") {
     return { kind: "say", line: roomCopy.noSoundLine };
+  }
+  if (trial.kind === "sound" && reaction === "slipped") {
+    return { kind: "slipped", side: trial.ear, line: slippedLine(trial.ear) };
+  }
+  if (trial.kind === "sound" && reaction === "otherSide") {
+    return { kind: "slipped", side: trial.ear, line: otherSideLine(trial.ear) };
   }
   return null;
 }

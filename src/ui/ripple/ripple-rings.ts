@@ -67,3 +67,42 @@ export function rippleGlowStrength(
 ): number {
   return swell(ageMs, config.fadeInMinMs * 1.5, config.reducedMotionGlowMs);
 }
+
+/** The shape of a sound that was answered (`caught`) or that went by (`slipped`). */
+export type SightingKind = "caught" | "slipped";
+
+/** The shape of a scored sound at one moment. */
+export interface Sighting {
+  /** How strongly it is drawn, from 0 to 1. */
+  readonly strength: number;
+  /** How far it has drifted, from 0 (where it appeared) to 1 (where it is gone). */
+  readonly drift: number;
+}
+
+/** How long the shape of a scored sound shows. */
+export function sightingDurationMs(
+  kind: SightingKind,
+  config: RippleConfig = rippleConfig,
+): number {
+  return kind === "caught" ? config.sightingMs : config.slippedSightingMs;
+}
+
+/**
+ * The shape of a scored sound that is `ageMs` old, or null before it starts and after it ends.
+ * It swells no faster than a ripple does, so it never flashes, and drifts while slowing down.
+ */
+export function sightingAt(
+  kind: SightingKind,
+  ageMs: number,
+  config: RippleConfig = rippleConfig,
+): Sighting | null {
+  const totalMs = sightingDurationMs(kind, config);
+  if (!(ageMs > 0) || ageMs >= totalMs) {
+    return null;
+  }
+  const progress = ageMs / totalMs;
+  return {
+    strength: swell(ageMs, config.fadeInMinMs * 1.25, totalMs),
+    drift: 1 - (1 - progress) ** 2,
+  };
+}

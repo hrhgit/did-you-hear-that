@@ -5,14 +5,21 @@ import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import {
   betweenRoomsLine,
+  caughtCountLine,
+  chaseCopy,
+  deepestCatchLabel,
+  lanternLabel,
   roomCopy,
   roomNames,
   roomProgressLine,
+  streakLine,
 } from "../../copy/room-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
   HeadphoneCheckAnswer,
   MissedSoundReplaySnapshot,
+  RoomChase,
+  RoomLantern,
   SwappedRepeatComparison,
   SwappedRepeatSnapshot,
   VisitRoom,
@@ -104,6 +111,40 @@ export interface PracticeScreen {
   readonly lines: readonly string[];
   /** Said while a practice sound plays, or null. */
   readonly soundPlayingLine: string | null;
+}
+
+/** One depth scale: how quiet the quietest sound caught on its side was. */
+export interface DepthScreen {
+  /**
+   * Where the mark stands between the loudest sound of the room (0) and the quietest it can make
+   * (1), or null before the first catch on this side.
+   */
+  readonly fraction: number | null;
+  /** The scale in words, for a visitor who cannot see it. */
+  readonly label: string;
+}
+
+/**
+ * The lantern, the count and the depth scales of a room that counts (the game layer of
+ * 2026-11-16). The lantern changes with the visitor's own answers, with a catch in the moment it
+ * is scored, and with the clock. Everything else here changes only when a trial is scored. So
+ * none of it says anything about a trial that is still open or still to come.
+ */
+export interface ChaseScreen {
+  readonly lantern: {
+    readonly cells: number;
+    readonly cellCount: number;
+    /** The lantern in words, for a visitor who cannot see it. */
+    readonly label: string;
+    /** Said while the lantern is dark, or null. */
+    readonly darkLine: string | null;
+  };
+  readonly caughtLine: string;
+  /** Said from two caught sounds in a row, or null. */
+  readonly streakLine: string | null;
+  readonly depth: Readonly<Record<"left" | "right", DepthScreen>>;
+  /** The word under each depth scale. */
+  readonly depthQuieterLabel: string;
 }
 
 /**
@@ -225,6 +266,8 @@ export interface Screen {
   readonly swap: SwapScreen | null;
   /** The words of the practice and the counting in a room, or null. */
   readonly practice: PracticeScreen | null;
+  /** The lantern, the count and the depth scales of a room that counts, or null. */
+  readonly chase: ChaseScreen | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
@@ -257,6 +300,39 @@ function roomLabelOf(
     id: room.roomId,
     name: roomNames[room.roomId],
     progress: roomProgressLine(room.roomIndex + 1, snapshot.rooms.length),
+  };
+}
+
+/** The lantern and the chase as the page shows them, or null while a room does not count. */
+function chaseScreenOf(
+  lantern: RoomLantern | null,
+  chase: RoomChase | null,
+): ChaseScreen | null {
+  if (lantern === null || chase === null) {
+    return null;
+  }
+  const span = chase.topLevelDb - chase.floorLevelDb;
+  const depthOf = (side: "left" | "right"): DepthScreen => {
+    const levelDb = chase.deepestCaughtDb[side];
+    return {
+      fraction:
+        levelDb === null || !(span > 0)
+          ? null
+          : Math.min(1, Math.max(0, (chase.topLevelDb - levelDb) / span)),
+      label: deepestCatchLabel(side, levelDb),
+    };
+  };
+  return {
+    lantern: {
+      cells: lantern.cells,
+      cellCount: lantern.cellCount,
+      label: lanternLabel(lantern.cells, lantern.cellCount),
+      darkLine: lantern.cells === 0 ? chaseCopy.lanternDarkLine : null,
+    },
+    caughtLine: caughtCountLine(chase.caughtCount),
+    streakLine: chase.streak >= 2 ? streakLine(chase.streak) : null,
+    depth: { left: depthOf("left"), right: depthOf("right") },
+    depthQuieterLabel: chaseCopy.depthQuieterLabel,
   };
 }
 
@@ -428,6 +504,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     replay: null,
     swap: null,
     practice: null,
+    chase: null,
     soundNotStartedLine: snapshot.activationRefused
       ? visitCopy.soundNotStartedLine
       : null,
@@ -567,6 +644,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         ...base,
         sheet: null,
         room: roomLabelOf(snapshot, snapshot.room),
+        chase: chaseScreenOf(snapshot.lantern ?? null, snapshot.chase ?? null),
         practice:
           snapshot.practice === undefined
             ? null

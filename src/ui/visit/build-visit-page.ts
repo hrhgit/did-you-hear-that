@@ -130,6 +130,31 @@ export interface VisitPage {
     /** Said while a practice sound plays. */
     readonly soundLine: HTMLElement;
   };
+  /**
+   * The lantern, the count and the depth scales of a room that counts. The row with the lantern
+   * stands at the top of the practice panel. The two scales stand at the edges of the page.
+   */
+  readonly chase: {
+    /** The row: the count, the lantern, the sounds caught in a row. */
+    readonly row: HTMLElement;
+    /** The lantern as one picture. Its name says how many lights are left. */
+    readonly lantern: HTMLElement;
+    /** Said while the lantern is dark, over the lines of the counting. */
+    readonly darkLine: HTMLElement;
+    readonly caughtLine: HTMLElement;
+    readonly streakLine: HTMLElement;
+    readonly depth: Readonly<
+      Record<
+        "left" | "right",
+        {
+          /** The scale as one picture. Its name says the quietest catch on its side. */
+          readonly element: HTMLElement;
+          readonly mark: HTMLElement;
+          readonly quieterLabel: HTMLElement;
+        }
+      >
+    >;
+  };
   /** The replay while its sounds play: words beside the house, which stays in full view. */
   readonly replaying: {
     readonly element: HTMLElement;
@@ -374,9 +399,38 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const practiceSound = make("p", "visit-practice-sound");
   practiceSound.setAttribute("role", "status");
   practiceSound.setAttribute("aria-live", "polite");
+  // The chase of a room that counts. Its words and its lights come with each snapshot.
+  const lantern = make("div", "visit-lantern");
+  lantern.setAttribute("role", "img");
+  const caughtLine = make("p", "visit-chase-caught");
+  const chaseStreakLine = make("p", "visit-chase-streak");
+  const chaseRow = make("div", "visit-chase", [
+    caughtLine,
+    lantern,
+    chaseStreakLine,
+  ]);
+  chaseRow.hidden = true;
+  const lanternDarkLine = make("p", "visit-lantern-dark");
+  lanternDarkLine.setAttribute("role", "status");
+  lanternDarkLine.setAttribute("aria-live", "polite");
+  const depthScale = (side: "left" | "right") => {
+    const mark = make("span", "visit-depth-mark");
+    const quieterLabel = make("span", "visit-depth-word");
+    const scale = make("span", "visit-depth-scale", [mark]);
+    const element = make("div", `visit-depth visit-depth-${side}`, [
+      scale,
+      quieterLabel,
+    ]);
+    element.setAttribute("role", "img");
+    element.hidden = true;
+    return { element, mark, quieterLabel };
+  };
+  const depth = { left: depthScale("left"), right: depthScale("right") };
+
   const practice = make("div", "visit-practice", [
+    chaseRow,
     practiceHeading,
-    practiceLines,
+    make("div", "visit-practice-words", [practiceLines, lanternDarkLine]),
     practiceSound,
   ]);
   practice.hidden = true;
@@ -494,6 +548,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     caption,
     rest,
     practice,
+    depth.left.element,
+    depth.right.element,
     replaying,
     frontDoor,
     calibration,
@@ -564,6 +620,14 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       heading: practiceHeading,
       lines: practiceLines,
       soundLine: practiceSound,
+    },
+    chase: {
+      row: chaseRow,
+      lantern,
+      darkLine: lanternDarkLine,
+      caughtLine,
+      streakLine: chaseStreakLine,
+      depth,
     },
     replay: {
       element: replay,

@@ -13,6 +13,7 @@ import {
   recordOfLeakyPage,
   type LeakQuestion,
   type RecordedTrial,
+  type ScreenMoment,
   type ScreenRecord,
 } from "./screen-record";
 
@@ -40,12 +41,35 @@ const ambientWatchMs = 1500;
 
 const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
-/** The page changes that fall in a trial's window: from its presentation up to its decision. */
+/**
+ * The page changes that fall in a trial's window, from its presentation up to its decision, other
+ * than the lantern's.
+ */
 function momentsInWindow(record: ScreenRecord, trial: RecordedTrial): number {
-  return record.moments.filter(
-    (moment) =>
-      moment.atMs >= trial.presentedAtMs && moment.atMs < trial.decidedAtMs,
+  return withoutLantern(
+    record.moments.filter(
+      (moment) =>
+        moment.atMs >= trial.presentedAtMs && moment.atMs < trial.decidedAtMs,
+    ),
   ).length;
+}
+
+/**
+ * The lantern may change between decisions: it follows the visitor's own presses, and the clock
+ * (the game layer of 2026-11-16). That its lights come back only `rechargeMs` after a press or
+ * after the light before, and that a press costs exactly one, is checked on the flow itself
+ * (visit-flow CP3). Here every change of the lantern must be one light, up or down, and nothing
+ * else on the page may change with it. The predictor below still sees every change.
+ */
+function withoutLantern(moments: readonly ScreenMoment[]): ScreenMoment[] {
+  for (const moment of moments) {
+    if (moment.what === "lantern") {
+      expect(moment.lantern).toBeDefined();
+      const { from, to } = moment.lantern ?? { from: 0, to: 0 };
+      expect(Math.abs(to - from)).toBe(1);
+    }
+  }
+  return moments.filter((moment) => moment.what !== "lantern");
 }
 
 describe("when the page draws during a visit", () => {
@@ -64,7 +88,9 @@ describe("when the page draws during a visit", () => {
             expect(run.finalStage).toBe("result");
             expect(record.trials.length).toBeGreaterThan(0);
             for (const trial of record.trials) {
-              expect(momentsBeforeDecision(record, trial)).toEqual([]);
+              expect(
+                withoutLantern(momentsBeforeDecision(record, trial)),
+              ).toEqual([]);
             }
           },
         ),
@@ -144,7 +170,9 @@ describe("when the page draws in the swapped repeat", () => {
     "draws nothing from one decision to the next in the repeated room of a visit that is left alone",
     async () => {
       await assertOverRepeats(false, (record, trial) => {
-        expect(momentsBeforeDecision(record, trial)).toEqual([]);
+        expect(withoutLantern(momentsBeforeDecision(record, trial))).toEqual(
+          [],
+        );
       });
     },
     timeoutMs,

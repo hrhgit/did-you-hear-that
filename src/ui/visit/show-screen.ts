@@ -12,8 +12,8 @@ export interface ScreenView {
   /** Shows a screen. Only text, `hidden` and `disabled` change, and the focus when a sheet changes. */
   show(screen: Screen): void;
   /**
-   * Draws a reaction to a scored trial, a ripple with its line or a line alone, or the ripple of
-   * a sound that is played again.
+   * Draws a reaction to a scored trial: a ripple and a shape for a caught sound, a shape leaving
+   * for one that went by, or a line alone. Or the ripple of a sound that is played again.
    */
   react(reaction: ScreenReaction): void;
   /** The screen shown now. */
@@ -212,6 +212,63 @@ export function createScreenView(options: {
     setLine(panel.heading, practice.heading);
     showLines(panel.lines, practice.lines, "practice");
     setLine(panel.soundLine, practice.soundPlayingLine);
+  };
+
+  /** The lights drawn in the lantern, so that it is filled again only when the count changes. */
+  let lanternCellsDrawn = -1;
+  const showChase = (screen: Screen): void => {
+    const chase = screen.chase;
+    const panel = page.chase;
+    panel.row.hidden = chase === null;
+    panel.depth.left.element.hidden = chase === null;
+    panel.depth.right.element.hidden = chase === null;
+    if (chase === null) {
+      delete page.root.dataset.lantern;
+      setLine(panel.darkLine, null);
+      return;
+    }
+    const { lantern } = chase;
+    if (lanternCellsDrawn !== lantern.cellCount) {
+      lanternCellsDrawn = lantern.cellCount;
+      panel.lantern.replaceChildren(
+        ...Array.from({ length: lantern.cellCount }, () => {
+          const cell = doc.createElement("span");
+          cell.className = "visit-lantern-cell";
+          return cell;
+        }),
+      );
+    }
+    [...panel.lantern.children].forEach((cell, index) => {
+      const lit = index < lantern.cells ? "true" : "false";
+      if ((cell as HTMLElement).dataset.lit !== lit) {
+        (cell as HTMLElement).dataset.lit = lit;
+      }
+    });
+    if (panel.lantern.getAttribute("aria-label") !== lantern.label) {
+      panel.lantern.setAttribute("aria-label", lantern.label);
+    }
+    // A dark lantern dims the lit room, slowly, as every change of brightness here.
+    if (lantern.darkLine === null) {
+      delete page.root.dataset.lantern;
+    } else {
+      page.root.dataset.lantern = "dark";
+    }
+    setLine(panel.darkLine, lantern.darkLine);
+    setText(panel.caughtLine, chase.caughtLine);
+    setLine(panel.streakLine, chase.streakLine);
+    for (const side of ["left", "right"] as const) {
+      const scale = panel.depth[side];
+      const depth = chase.depth[side];
+      scale.element.dataset.caught = depth.fraction === null ? "false" : "true";
+      scale.element.style.setProperty(
+        "--visit-depth",
+        String(depth.fraction ?? 0),
+      );
+      if (scale.element.getAttribute("aria-label") !== depth.label) {
+        scale.element.setAttribute("aria-label", depth.label);
+      }
+      setText(scale.quieterLabel, chase.depthQuieterLabel);
+    }
   };
 
   const showReplay = (screen: Screen): void => {
@@ -445,6 +502,7 @@ export function createScreenView(options: {
       showHeadphoneCheck(screen);
       showNotice(screen);
       showPractice(screen);
+      showChase(screen);
       showReplay(screen);
       showSwap(screen);
       for (const [name, sheet] of Object.entries(sheets)) {
@@ -486,7 +544,12 @@ export function createScreenView(options: {
         return;
       }
       if (reaction.kind === "ripple") {
+        // The sound was caught: its ripple, and its shape showing by that wall.
         motion.ripple(reaction.side);
+        motion.sighting(reaction.side, "caught");
+      } else if (reaction.kind === "slipped") {
+        // The sound went by. Its time to answer is over, and so is its trial.
+        motion.sighting(reaction.side, "slipped");
       }
       caption.say(reaction.line);
     },

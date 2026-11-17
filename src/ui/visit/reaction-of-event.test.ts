@@ -101,6 +101,26 @@ describe("reactionOfEvent", () => {
     },
   );
 
+  it.each(["left", "right"] as const)(
+    "shows a sound that went by on the %s once its trial is scored, and says where",
+    (ear) => {
+      expect(
+        reactionOfEvent(scored(soundTrial(ear, "missed"), "slipped")),
+      ).toEqual({
+        kind: "slipped",
+        side: ear,
+        line: `One went by on your ${ear}.`,
+      });
+      expect(
+        reactionOfEvent(scored(soundTrial(ear, "wrongSide"), "otherSide")),
+      ).toEqual({
+        kind: "slipped",
+        side: ear,
+        line: `That one was on your ${ear}.`,
+      });
+    },
+  );
+
   it("says the house's line for an answer to silence", () => {
     const silence = {
       ...common,

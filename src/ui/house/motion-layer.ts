@@ -17,6 +17,9 @@ import {
   rippleDurationMs,
   rippleGlowStrength,
   rippleRings,
+  sightingAt,
+  sightingDurationMs,
+  type SightingKind,
 } from "../ripple/ripple-rings";
 import type { HouseSection } from "./draw-house-section";
 import { fitViewBox } from "./fit-view-box";
@@ -26,8 +29,9 @@ import { roomGeometry, type RoomGeometry } from "./house-geometry";
 export type RippleSide = "left" | "right";
 
 /**
- * Everything in the house that moves: dust, the lamp, the shadow under the door, and the ripple
- * of a caught sound. It is told which room is lit and when to draw a ripple, and nothing else.
+ * Everything in the house that moves: dust, the lamp, the shadow under the door, the ripple of a
+ * caught sound and the shape of a scored one. It is told which room is lit and when to draw a
+ * ripple or a shape, and nothing else.
  */
 export interface MotionLayer {
   /** The canvas to lay exactly over the drawing of the house. */
@@ -36,6 +40,11 @@ export interface MotionLayer {
   setLitRoom(roomId: GhostSoundId | null): void;
   /** Draws a ripple from one wall of the lit room. Call it only after a trial has been scored. */
   ripple(side: RippleSide): void;
+  /**
+   * Draws the shape of a scored sound by one wall of the lit room: lit and near for a caught
+   * sound, faint and leaving for one that went by. Call it only after a trial has been scored.
+   */
+  sighting(side: RippleSide, kind: SightingKind): void;
   /** Stops drawing and lets go of the page. */
   stop(): void;
 }
@@ -50,6 +59,14 @@ export interface MotionLayerOptions {
 
 interface ActiveRipple {
   readonly side: RippleSide;
+  readonly roomId: GhostSoundId;
+  readonly startedMs: number;
+  readonly reducedMotion: boolean;
+}
+
+interface ActiveSighting {
+  readonly side: RippleSide;
+  readonly kind: SightingKind;
   readonly roomId: GhostSoundId;
   readonly startedMs: number;
   readonly reducedMotion: boolean;
@@ -98,17 +115,18 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
   const reducedMotionQuery = view.matchMedia(
     "(prefers-reduced-motion: reduce)",
   );
+  const rootStyle = view.getComputedStyle(doc.documentElement);
   const lampColour =
-    view
-      .getComputedStyle(doc.documentElement)
-      .getPropertyValue("--color-lamp")
-      .trim() || "#f3b562";
+    rootStyle.getPropertyValue("--color-lamp").trim() || "#f3b562";
+  const graphiteColour =
+    rootStyle.getPropertyValue("--color-graphite").trim() || "#8a93a6";
 
   let litRoom: GhostSoundId | null = null;
   let swungLamp: GhostSoundId | null = null;
   let nudges: LampNudge[] = [];
   let shadow: DoorShadow | null = null;
   let ripples: ActiveRipple[] = [];
+  let sightings: ActiveSighting[] = [];
   let ambientMs = 0;
   let lastFrameMs: number | null = null;
   let frame: number | null = null;
@@ -229,6 +247,87 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
     target.restore();
   };
 
+  /**
+   * The shape of a scored sound: a small hooded figure with a ragged hem, drawn in the pencil's
+   * line. A caught one stands in the lamp's colour a little way in from its wall and rises a
+   * touch. One that went by is a broken grey line that leaves through its wall.
+   */
+  const drawSighting = (
+    target: CanvasRenderingContext2D,
+    sighting: ActiveSighting,
+    nowMs: number,
+  ): void => {
+    const now = sightingAt(sighting.kind, nowMs - sighting.startedMs);
+    if (now === null) {
+      return;
+    }
+    const room = roomGeometry[sighting.roomId];
+    const roomWidth = room.right - room.left;
+    const height = (room.bottom - room.top) * 0.44;
+    const width = height * 0.62;
+    const inward = sighting.side === "left" ? 1 : -1;
+    const wallX = sighting.side === "left" ? room.left : room.right;
+    const caught = sighting.kind === "caught";
+    const drift = sighting.reducedMotion ? 0 : now.drift;
+    // A caught shape stands a fifth of the way in. One that went by starts there and leaves.
+    const x = wallX + inward * roomWidth * (caught ? 0.2 : 0.2 - 0.24 * drift);
+    const y = rippleHeight(room) - (caught ? 6 * drift : 0);
+    const half = width / 2;
+    const top = y - height / 2;
+    const bottom = y + height / 2;
+
+    target.save();
+    traceOutline(target, room);
+    target.clip();
+    target.globalAlpha = now.strength * (caught ? 0.95 : 0.6);
+    target.strokeStyle = caught ? lampColour : graphiteColour;
+    target.fillStyle = caught ? lampColour : graphiteColour;
+    target.lineWidth = caught ? 2.2 : 1.6;
+    target.lineCap = "round";
+    target.lineJoin = "round";
+    target.setLineDash(caught ? [] : [5, 6]);
+    target.beginPath();
+    target.moveTo(x - half, bottom);
+    target.lineTo(x - half, top + half);
+    target.arc(x, top + half, half, Math.PI, 0);
+    target.lineTo(x + half, bottom);
+    // The hem: three scallops back to where the line began.
+    const scallop = width / 3;
+    for (let index = 0; index < 3; index += 1) {
+      const fromX = x + half - index * scallop;
+      target.quadraticCurveTo(
+        fromX - scallop / 2,
+        bottom - height * 0.14,
+        fromX - scallop,
+        bottom,
+      );
+    }
+    target.stroke();
+    if (caught) {
+      target.save();
+      target.globalAlpha *= 0.14;
+      target.fill();
+      target.restore();
+    }
+    // Two eyes, looking into the room.
+    target.setLineDash([]);
+    const eyeY = top + half * 0.95;
+    for (const offset of [-0.32, 0.32]) {
+      target.beginPath();
+      target.ellipse(
+        x + offset * half * 1.1 + inward * half * 0.12,
+        eyeY,
+        half * 0.13,
+        half * 0.2,
+        0,
+        0,
+        2 * Math.PI,
+      );
+      target.fill();
+    }
+    target.restore();
+  };
+
   const draw = (nowMs: number): void => {
     frame = null;
     if (stopped) {
@@ -243,6 +342,10 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
     ripples = ripples.filter(
       (ripple) =>
         nowMs - ripple.startedMs < rippleDurationMs(ripple.reducedMotion),
+    );
+    sightings = sightings.filter(
+      (sighting) =>
+        nowMs - sighting.startedMs < sightingDurationMs(sighting.kind),
     );
 
     if (litRoom === null) {
@@ -271,10 +374,13 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
         for (const ripple of ripples) {
           drawRipple(context, ripple, nowMs);
         }
+        for (const sighting of sightings) {
+          drawSighting(context, sighting, nowMs);
+        }
       }
     }
 
-    if (litRoom !== null || ripples.length > 0) {
+    if (litRoom !== null || ripples.length > 0 || sightings.length > 0) {
       frame = view.requestAnimationFrame(draw);
     } else {
       lastFrameMs = null;
@@ -299,6 +405,19 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
       }
       ripples.push({
         side,
+        roomId: litRoom,
+        startedMs: view.performance.now(),
+        reducedMotion: reducedMotionQuery.matches,
+      });
+      wake();
+    },
+    sighting(side, kind) {
+      if (litRoom === null || stopped) {
+        return;
+      }
+      sightings.push({
+        side,
+        kind,
         roomId: litRoom,
         startedMs: view.performance.now(),
         reducedMotion: reducedMotionQuery.matches,

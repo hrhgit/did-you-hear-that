@@ -8,8 +8,15 @@ import * as frontDoor from "./front-door-copy";
 import { frontDoorCopy } from "./front-door-copy";
 import * as leaving from "./leaving-copy";
 import * as room from "./room-copy";
+import { lanternConfig } from "../config/lantern-config";
 import {
   betweenRoomsLine,
+  caughtCountLine,
+  deepestCatchLabel,
+  lanternLabel,
+  otherSideLine,
+  slippedLine,
+  streakLine,
   caughtLine,
   pitchLabel,
   relativeLevelLabel,
@@ -102,8 +109,9 @@ describe("the house interface's copy", () => {
     ]);
   });
 
-  it("gives the rules as three sentences and explains both ways to answer", () => {
-    expect(rulesCopy.sentences).toHaveLength(3);
+  it("gives the rules as four sentences and explains both ways to answer", () => {
+    // The fourth, about the lantern, came with the game layer of 2026-11-16.
+    expect(rulesCopy.sentences).toHaveLength(4);
     for (const sentence of rulesCopy.sentences) {
       expect(sentence.match(/[.!?]/g)).toHaveLength(1);
       expect(sentence.endsWith(".")).toBe(true);
@@ -204,6 +212,75 @@ describe("caughtLine", () => {
         expect(line).toContain("your calibration");
         expect(findBannedTerms(line, bannedTerms)).toEqual([]);
       }),
+    );
+  });
+});
+
+describe("the lines of the chase (game layer)", () => {
+  const sides = fc.constantFrom("left" as const, "right" as const);
+
+  it("says where a sound went by, or was, naming only its side", () => {
+    fc.assert(
+      fc.property(sides, (side) => {
+        for (const line of [slippedLine(side), otherSideLine(side)]) {
+          expect(line).toContain(`your ${side}`);
+          expect(findBannedTerms(line, bannedTerms)).toEqual([]);
+        }
+      }),
+    );
+  });
+
+  it("counts the lantern, the catches and the row in whole numbers", () => {
+    expect(lanternLabel(2, 3)).toBe("Lantern: 2 of 3 lights");
+    expect(caughtCountLine(0)).toBe("0 caught");
+    expect(streakLine(3)).toBe("3 in a row");
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 9 }),
+        fc.integer({ min: 0, max: 9 }),
+        fc.nat(500),
+        (cellCount, cells, count) => {
+          fc.pre(cells <= cellCount);
+          for (const line of [
+            lanternLabel(cells, cellCount),
+            caughtCountLine(count),
+            streakLine(count),
+          ]) {
+            expect(findBannedTerms(line, bannedTerms)).toEqual([]);
+          }
+        },
+      ),
+    );
+  });
+
+  it("refuses counts that are not whole numbers from 0 up, and a lantern overfull", () => {
+    for (const bad of [-1, 1.5, Number.NaN]) {
+      expect(() => caughtCountLine(bad)).toThrow(RangeError);
+      expect(() => streakLine(bad)).toThrow(RangeError);
+      expect(() => lanternLabel(bad, 3)).toThrow(RangeError);
+    }
+    expect(() => lanternLabel(4, 3)).toThrow(RangeError);
+    expect(() => lanternLabel(0, 0)).toThrow(RangeError);
+  });
+
+  it("labels the quietest catch on a side against the visitor's calibration", () => {
+    expect(deepestCatchLabel("left", null)).toBe(
+      "Nothing caught on your left yet",
+    );
+    fc.assert(
+      fc.property(sides, levels, (side, levelDb) => {
+        const label = deepestCatchLabel(side, levelDb);
+        expect(label).toMatch(/your calibration$/);
+        expect(label).toContain(`your ${side}`);
+        expect(findBannedTerms(label, bannedTerms)).toEqual([]);
+      }),
+    );
+  });
+
+  it("gives the lantern in the rules as many lights as the lantern has", () => {
+    const words = ["", "one", "two", "three", "four", "five", "six"];
+    expect(rulesCopy.sentences.join(" ")).toContain(
+      `a lantern of ${words[lanternConfig.cellCount] ?? ""} lights`,
     );
   });
 });

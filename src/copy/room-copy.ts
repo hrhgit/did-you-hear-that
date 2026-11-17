@@ -92,6 +92,72 @@ export function caughtLine(
   return `You caught it on your ${side}. ${pitchLabel(frequencyHz)}, ${relativeLevelLabel(levelDb)}.`;
 }
 
+/**
+ * What the house says when a sound went by unanswered. Said only once its time to answer is
+ * over, so it gives nothing away that could still be used (the game layer, 2026-11-16).
+ */
+export function slippedLine(side: AnswerSide): string {
+  return `One went by on your ${side}.`;
+}
+
+/** What the house says when the answer named the other side from the sound's. */
+export function otherSideLine(side: AnswerSide): string {
+  return `That one was on your ${side}.`;
+}
+
+/** What the visitor reads about the lantern and the chase inside a room that counts. */
+export const chaseCopy = Object.freeze({
+  /** Said while the lantern is dark, when no answer is taken and the room waits. */
+  lanternDarkLine: "Your lantern is out. Wait for a light to come back.",
+  /** Under each depth scale: the way its mark moves as quieter sounds are caught. */
+  depthQuieterLabel: "quieter",
+});
+
+function requireCount(count: number, what: string): void {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new RangeError(
+      `${what} must be a whole number from 0 up, but got ${String(count)}.`,
+    );
+  }
+}
+
+/** The lantern for a visitor who cannot see it: "Lantern: 2 of 3 lights". */
+export function lanternLabel(cells: number, cellCount: number): string {
+  requireCount(cells, "The lights of a lantern");
+  requireCount(cellCount, "The lights of a full lantern");
+  if (cells > cellCount || cellCount === 0) {
+    throw new RangeError(
+      `A lantern holds from 0 lights to its full count, but got ${String(cells)} of ${String(cellCount)}.`,
+    );
+  }
+  return `Lantern: ${String(cells)} of ${String(cellCount)} lights`;
+}
+
+/** The sounds caught in this room: "4 caught". */
+export function caughtCountLine(count: number): string {
+  requireCount(count, "The sounds caught");
+  return `${String(count)} caught`;
+}
+
+/** The sounds caught one after the other: "3 in a row". */
+export function streakLine(count: number): string {
+  requireCount(count, "The sounds caught in a row");
+  return `${String(count)} in a row`;
+}
+
+/**
+ * The quietest sound caught on one side so far, for the depth scale at that side: "Quietest catch
+ * on your left: 25 dB quieter than your calibration". `levelDb` is null before the first catch.
+ */
+export function deepestCatchLabel(
+  side: AnswerSide,
+  levelDb: number | null,
+): string {
+  return levelDb === null
+    ? `Nothing caught on your ${side} yet`
+    : `Quietest catch on your ${side}: ${relativeLevelLabel(levelDb)}`;
+}
+
 /** How the house announces each room as the one that comes next. */
 const roomIsNext: Readonly<Record<GhostSoundId, string>> = Object.freeze({
   cellar: "The cellar is next",

@@ -320,6 +320,151 @@
   font-style: italic;
 }
 
+/*
+ * The chase of a room that counts: the sounds caught, the lantern, and the sounds caught in a
+ * row, in one line at the top of the practice panel. Each light of the lantern is a small flame
+ * drawn in pencil. A spent light keeps its outline and loses its colour, slowly.
+ */
+.visit-chase {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-bottom: 0.4rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.visit-chase p {
+  min-width: 6.5rem;
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+  font-style: italic;
+}
+
+.visit-chase-caught {
+  text-align: right;
+}
+
+.visit-chase-streak {
+  text-align: left;
+}
+
+/* The streak keeps its place when it is not said, so the lantern never moves. */
+.visit-chase-streak[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.visit-lantern {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.visit-lantern-cell {
+  width: 0.8rem;
+  height: 1.15rem;
+  border: 1.5px solid var(--color-graphite);
+  border-radius: 50% 50% 45% 45% / 62% 62% 38% 38%;
+  background: transparent;
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    background-color 0.6s ease,
+    border-color 0.6s ease,
+    box-shadow 0.6s ease;
+}
+
+.visit-lantern-cell[data-lit="true"] {
+  border-color: var(--color-lamp);
+  background: var(--color-lamp-low);
+  box-shadow: 0 0 0.6rem 0.05rem var(--color-lamp-low);
+}
+
+.visit-practice-words {
+  display: grid;
+}
+
+/* The line of a dark lantern stands where the counting's lines stand, in their place. */
+.visit-practice-words > * {
+  grid-area: 1 / 1;
+}
+
+.visit-lantern-dark {
+  color: var(--color-moonlight);
+  font-style: italic;
+}
+
+.visit[data-lantern="dark"] .visit-practice-lines {
+  visibility: hidden;
+}
+
+/* A dark lantern dims the house, as slowly as every other change of the house's brightness. */
+.visit[data-lantern="dark"][data-house="full"] .visit-house {
+  opacity: 0.45;
+}
+
+/*
+ * The depth scales: one at each edge of the page, from the loudest sound of the room at the top
+ * to the quietest it can make at the bottom. The mark stands at the quietest sound caught on that
+ * side, and moves down, slowly, as quieter ones are caught.
+ */
+.visit-depth {
+  position: absolute;
+  top: calc(var(--visit-bar) + 6.5rem);
+  bottom: calc(var(--visit-caption) + 3.5rem);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 2.5rem;
+  pointer-events: none;
+}
+
+.visit-depth-left {
+  left: 0.6rem;
+}
+
+.visit-depth-right {
+  right: 0.6rem;
+}
+
+.visit-depth-scale {
+  position: relative;
+  flex: 1;
+  width: 0.6rem;
+  border-left: 1.5px solid var(--color-graphite-faint);
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--color-graphite-faint) 0 1px,
+    transparent 1px 12.5%
+  );
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.visit-depth-mark {
+  position: absolute;
+  top: calc(var(--visit-depth, 0) * 100%);
+  left: -0.45rem;
+  width: 1.2rem;
+  height: 0;
+  border-top: 2px solid var(--color-lamp);
+  opacity: 0;
+  transition:
+    top 1.2s ease,
+    opacity 0.6s ease;
+}
+
+.visit-depth[data-caught="true"] .visit-depth-mark {
+  opacity: 1;
+}
+
+.visit-depth-word {
+  color: var(--color-graphite);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 /* A notice with more to say than one line: the further lines follow it, a little quieter. */
 .visit-notice-lines p {
   color: var(--color-graphite);
@@ -934,6 +1079,15 @@ p.visit-swap-turn-back {
     background: none;
   }
 
+  .visit-depth {
+    top: calc(var(--visit-bar) + 0.5rem);
+    bottom: 3.25rem;
+  }
+
+  .visit-chase {
+    justify-content: flex-start;
+  }
+
   .visit-practice {
     inset: var(--visit-bar) auto auto 0;
     align-items: flex-start;
@@ -990,5 +1144,11 @@ p.visit-swap-turn-back {
   .visit-meter-fill,
   .visit-meter-mark {
     transition: none;
+  }
+
+  .visit-depth-mark {
+    transition:
+      top 0.25s ease,
+      opacity 0.25s ease;
   }
 }
