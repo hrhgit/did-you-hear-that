@@ -412,7 +412,8 @@ interface PlannedAction {
  * exact time planned. After every step it looks at the snapshot and plans what the stage asks
  * for: in calibration it starts the calibration sound (the music, or the hiss where the music
  * cannot be loaded), presses louder as the played setting rises until it reaches its target (at
- * most `calibrationRiseMaxDb` above the played setting, as a person holding the button), and keeps
+ * most `calibrationRiseMaxDb` above the played setting, which with the shipped config is the whole
+ * control), and keeps
  * it, or first drags the control as `script.calibrationControl` says; at the headphone check it plays the check and answers; at
  * `rules`, `betweenRooms` and `missedSoundReplay` it proceeds after a rest; while a pause holds it
  * resumes, at the time its disturbance set or at once. Each presented trial goes to the listener,

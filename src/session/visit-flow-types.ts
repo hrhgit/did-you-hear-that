@@ -77,16 +77,16 @@ export interface VisitFlow {
   chooseVisit(visitType: VisitType): void;
   /** Calibration: starts the calibration sound at the bottom of the control: the music, looping, or the hiss repeats where the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
   startCalibration(): void;
-  /** Calibration: moves the control one step louder. The hiss rises by at most 5 dB per repeat, the music by at most 5 dB in 2 seconds. */
+  /** Calibration: moves the control one step louder. The next hiss repeat plays the new setting, and the music reaches it in one ramp of 100 ms. */
   louder(): void;
   /** Calibration: moves the control one step quieter than the setting last played. */
   quieter(): void;
   /**
    * Calibration: puts the target of the control at `settingDb`, for a control that can be dragged
    * or moved by keys. The target is rounded down to the control's grid and held from the bottom of
-   * the control to its top; NaN changes nothing. The sound still starts at the bottom of the control
-   * and still rises by at most 5 dB per repeat of the hiss, or 5 dB in 2 seconds for the music: the
-   * played setting follows the target. Ignored outside calibration and while a pause holds.
+   * the control to its top; NaN changes nothing. The sound still starts at the bottom of the control,
+   * and the played setting follows the target: the next hiss repeat plays it, and the music reaches
+   * it in one ramp of 100 ms. Ignored outside calibration and while a pause holds.
    */
   setCalibrationTarget(settingDb: number): void;
   /** Calibration: keeps the setting last played and moves to the headphone check, or gives the reason it cannot. */

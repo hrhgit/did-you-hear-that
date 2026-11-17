@@ -91,7 +91,13 @@ describe("visit flow regressions", () => {
   // room's first attempt starts at 284 543 ms and presents its first counted trial at 295 886 ms;
   // the first device change at 304 000 ms (in its counting, as before) abandons it; attempt 2
   // starts at 317 570 ms and would play its first practice sound at 319 570 ms, so the second
-  // device change is set at 318 500 ms, after the start and before any sound of attempt 2. The case
+  // device change is set at 318 500 ms, after the start and before any sound of attempt 2.
+  //
+  // The calibration that follows the control (the owner, 2026-11-16) starts at −40 dB and reaches
+  // −27 dB in one repeat, which moved the times once more. The third room's first attempt starts at
+  // 281 230 ms and presents its first counted trial at 292 573 ms; the first device change is set
+  // at 300 700 ms, in its counting; attempt 2 starts at 310 835 ms and would play its first
+  // practice sound at 312 835 ms, so the second device change is set at 311 800 ms. The case
   // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
@@ -109,8 +115,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 304_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 318_500, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 300_700, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 311_800, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };

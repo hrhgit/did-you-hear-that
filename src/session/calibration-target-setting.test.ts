@@ -5,7 +5,7 @@ import { calibrationTargetSettingDb } from "./calibration-target-setting";
 
 const { calibrationSettingMinDb, calibrationSettingStepDb } = audioOutputConfig;
 
-/** The control of the hiss with the shipped config: −60 to −4 dB in steps of 1 dB. */
+/** The control of the hiss with the shipped config: −40 to −4 dB in steps of 1 dB. */
 const control = Object.freeze({
   bottomDb: calibrationSettingMinDb,
   topDb: calibrationSettingTopDb(),
@@ -14,11 +14,11 @@ const control = Object.freeze({
 
 describe("calibrationTargetSettingDb", () => {
   it("is the control of the shipped config this file assumes", () => {
-    expect(control).toEqual({ bottomDb: -60, topDb: -4, stepDb: 1 });
+    expect(control).toEqual({ bottomDb: -40, topDb: -4, stepDb: 1 });
   });
 
   // The table of "The calibration target" in design.md, row by row.
-  it.each([-60, -59, -40, -27, -5, -4])(
+  it.each([-40, -39, -30, -27, -5, -4])(
     "gives a setting on the grid, in range, as itself: %s",
     (settingDb) => {
       expect(calibrationTargetSettingDb(settingDb, control)).toBe(settingDb);
@@ -26,8 +26,8 @@ describe("calibrationTargetSettingDb", () => {
   );
 
   it.each([
-    [-59.5, -60],
-    [-40.000001, -41],
+    [-39.5, -40],
+    [-30.000001, -31],
     [-20.999, -21],
     [-4.5, -5],
   ])(
@@ -42,10 +42,10 @@ describe("calibrationTargetSettingDb", () => {
     expect(calibrationTargetSettingDb(-20 - 1e-6, control)).toBe(-21);
   });
 
-  it.each([-60.5, -61, -1000, -Number.MAX_VALUE, Number.NEGATIVE_INFINITY])(
+  it.each([-40.5, -41, -1000, -Number.MAX_VALUE, Number.NEGATIVE_INFINITY])(
     "gives the bottom below the bottom and for −Infinity: %s",
     (settingDb) => {
-      expect(calibrationTargetSettingDb(settingDb, control)).toBe(-60);
+      expect(calibrationTargetSettingDb(settingDb, control)).toBe(-40);
     },
   );
 

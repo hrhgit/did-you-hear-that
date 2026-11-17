@@ -63,6 +63,28 @@ Checked: the e2e suite ran headless and muted with the lantern. The practice tes
 
 Not done: the `WHOLE_VISIT=1` spec was not run with the lantern, and nobody has played it to tune `rechargeMs`.
 
+## The calibration control of 2026-11-16
+
+Not in this spec. The owner played a visit and found that the music did not follow the control: it rose slowly towards the setting, and started too quietly. The owner decided to drop the limit on how fast the calibration sound rises and to raise its start. Claude Code changed it in this working tree on 2026-11-16 and committed it after `npm run typecheck`, `npm run lint`, `npm run check:copy`, `npx vitest run` and the e2e suite passed.
+
+| What | Before | Now |
+|---|---|---|
+| `calibrationSettingMinDb`, where every calibration starts | −60 dB | −40 dB (about 66 dB below full scale) |
+| `calibrationRiseMaxDb` | 5 dB | 40 dB, the whole control |
+| `calibrationMusicRisePeriodMs` | 2000 ms | 100 ms, one gain step: one exponential ramp reaches the target |
+| Calibration hiss repeats in the shell's per-ear rise limit | held to `upwardStepDb` | exempt, like a replay |
+| Their guards | `<= −60`, `<= 5`, `>= 2000` | `<= −40`, `<= 40`, `>= 100` |
+
+The steering's exception to rule 6 now says the calibration sound follows the control from −40 dB. Rule 4 and every other limit on the ghost sounds are unchanged. The two rise lines of `calibrationCopy` say the sound follows the control.
+
+What changed in tests that held before:
+
+- The tests that walked the old climb (5 dB per repeat, 0.25 dB per 100 ms step) now check that one repeat or one step reaches the target, with targets above the new bottom. The config test that the calibration rise is at most one upward step became a test that it covers the whole control.
+- `tests/properties/visit-flow-regressions.test.ts`, regression 1: the calibration now ends sooner, so the visit's times moved. Its two device changes moved from 304 000 and 318 500 ms to 300 700 and 311 800 ms, so that they still land in the first counted trial of the third room's first attempt and in the first practice sound of its second, as the regression needs. The times were measured with a run of the same visit.
+- `tests/properties/missed-sound-replay-regressions.test.ts`, regression 4: the gaps between replays are compared with `toBeCloseTo(…, 9)` instead of `toEqual`, because the clock now starts at a time where the subtraction gives 1200.0000000000002 ms. The gaps themselves are unchanged.
+
+Not done: nobody has listened to the new start with headphones at a high system volume.
+
 - [x] 1. Add the calibration target
   - Create `src/session/calibration-target-setting.ts` (`calibrationTargetSettingDb(settingDb, { bottomDb, topDb, stepDb })`) and its test, as "The calibration target" in `design.md`: on the grid, itself; between grid settings, rounded down with the tolerance of `next-calibration-setting.ts`; below the bottom and −Infinity, the bottom; above the top and +Infinity, the top; NaN and a value that is not a number, null.
   - Change `src/session/calibration-controller.ts`: `setTarget(settingDb)` sets the target from that function and notifies, and does nothing for null; `louder()` and `quieter()` compute their setting as today and pass it through the same function (D2). `open()` is unchanged: it puts the target at the bottom (D3). The way repeats are played does not change (R3.8). In its test: every row of the table; `louder` and `quieter` give what they gave before; a target set before `open` is at the bottom after it; repeats rise by at most 5 dB towards a target dragged to the top.

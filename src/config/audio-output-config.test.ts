@@ -32,9 +32,11 @@ describe("audioOutputConfig", () => {
       );
     });
 
-    it("lets calibration repeats rise by at most one upward step", () => {
-      expect(audioOutputConfig.calibrationRiseMaxDb).toBeLessThanOrEqual(
-        hearingMethodConfig.upwardStepDb,
+    it("lets the calibration sound reach any setting of the control in one move", () => {
+      const { calibrationRiseMaxDb, calibrationSettingMinDb } =
+        audioOutputConfig;
+      expect(calibrationRiseMaxDb).toBeGreaterThanOrEqual(
+        0 - calibrationSettingMinDb,
       );
     });
 
@@ -74,7 +76,7 @@ describe("audioOutputConfig", () => {
   describe("the calibration music (audible-start design.md, Config)", () => {
     it("has the values of the audible-start design", () => {
       expect(audioOutputConfig.calibrationSettingSpanMinDb).toBe(10);
-      expect(audioOutputConfig.calibrationMusicRisePeriodMs).toBe(2000);
+      expect(audioOutputConfig.calibrationMusicRisePeriodMs).toBe(100);
       expect(audioOutputConfig.calibrationMusicGainStepMs).toBe(100);
       expect(audioOutputConfig.calibrationMusicLoadMaxMs).toBe(10000);
     });
@@ -178,11 +180,12 @@ describe("audioOutputConfig", () => {
       ).toBeGreaterThanOrEqual(20);
     });
 
-    it("keeps the bottom of the calibration control at -60 dB or lower", () => {
+    // Raised from -60 dB by the owner on 2026-11-16 after playing.
+    it("keeps the bottom of the calibration control at -40 dB or lower", () => {
       expect(
         audioOutputConfig.calibrationSettingMinDb,
-        `calibrationSettingMinDb is above -60 dB. A louder first calibration repeat ${loosening}.`,
-      ).toBeLessThanOrEqual(-60);
+        `calibrationSettingMinDb is above -40 dB. A louder first calibration repeat ${loosening}.`,
+      ).toBeLessThanOrEqual(-40);
     });
 
     it("keeps the Keep_Minimum at -27 dB or higher (audible-start D25)", () => {
@@ -192,18 +195,21 @@ describe("audioOutputConfig", () => {
       ).toBeGreaterThanOrEqual(-27);
     });
 
-    it("keeps the rise between calibration repeats at 5 dB or less", () => {
+    // The owner dropped the 5 dB rise limit and the 2 s rise period of the calibration sound on
+    // 2026-11-16 after playing: the sound follows the control. The guards keep the music's rise
+    // a smooth ramp of at least one gain step, and the rise within the whole control.
+    it("keeps the rise between calibration repeats within the whole control, 40 dB or less", () => {
       expect(
         audioOutputConfig.calibrationRiseMaxDb,
-        `calibrationRiseMaxDb is above 5 dB. A larger rise between repeats ${loosening}.`,
-      ).toBeLessThanOrEqual(5);
+        `calibrationRiseMaxDb is above 40 dB. A larger rise between repeats ${loosening}.`,
+      ).toBeLessThanOrEqual(40);
     });
 
-    it("keeps the rise period of the calibration music at 2000 ms or longer", () => {
+    it("keeps the rise period of the calibration music at 100 ms or longer", () => {
       expect(
         audioOutputConfig.calibrationMusicRisePeriodMs,
-        `calibrationMusicRisePeriodMs is below 2000 ms. A faster rise of the calibration music ${loosening}.`,
-      ).toBeGreaterThanOrEqual(2000);
+        `calibrationMusicRisePeriodMs is below 100 ms. A faster rise of the calibration music ${loosening}.`,
+      ).toBeGreaterThanOrEqual(100);
     });
 
     it("keeps the headphone check level at 0 dB or lower", () => {

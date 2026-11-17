@@ -5,8 +5,9 @@ import { audioOutputConfig } from "../../config/audio-output-config";
  * (`.kiro/specs/audible-start/design.md`, "Playing"; R5.3 to R5.5, D6). A pure function.
  *
  * - Rising, it is the lower of the target and `playedDb` plus the rise of one step,
- *   `calibrationRiseMaxDb × calibrationMusicGainStepMs / calibrationMusicRisePeriodMs` (0.25 dB),
- *   so the music rises by at most 5 dB in 2 seconds.
+ *   `calibrationRiseMaxDb × calibrationMusicGainStepMs / calibrationMusicRisePeriodMs`. With the
+ *   shipped config that is the whole control (40 dB), so the music reaches the target in one step:
+ *   the owner dropped the 5 dB in 2 seconds on 2026-11-16 after playing.
  * - Falling, it is the target, reached within the one step.
  * - Never above `topDb`, the Control_Top of the music. A target that is NaN counts as `playedDb`.
  *

@@ -11,7 +11,9 @@ const gridToleranceSteps = 1e-9;
  *   requested.
  * - Otherwise it is the request (NaN counts as the previous setting), limited to at most
  *   `calibrationRiseMaxDb` above the previous setting and to the Control_Range, and rounded down
- *   to the control's grid, `calibrationSettingMinDb + k × calibrationSettingStepDb`.
+ *   to the control's grid, `calibrationSettingMinDb + k × calibrationSettingStepDb`. With the
+ *   shipped config the rise covers the whole control, so the next repeat plays the request: the
+ *   owner dropped the 5 dB per repeat on 2026-11-16 after playing.
  */
 export function nextCalibrationSettingDb(
   requestedDb: number,

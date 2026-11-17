@@ -18,8 +18,7 @@ export const calibrationCopy = Object.freeze({
   whyLine:
     "This tells the house how loud is safe on these headphones at this volume, and gives your result a level to be measured from.",
   /** How the sound follows the control. */
-  riseLine:
-    "The music follows the control a little at a time, so it takes a few seconds to get louder.",
+  riseLine: "The music follows the control as you move it.",
   /** The keys that move the control, as the visit page handles them. */
   keysLine:
     "On a keyboard, the arrow keys move the control one step. Shift with an arrow, Page Up or Page Down move it five steps. Home and End go to the ends. Enter keeps the setting.",
@@ -44,8 +43,7 @@ export const calibrationCopy = Object.freeze({
     againHeading: "Set the hiss again",
     openLine:
       "The calibration sound is a hiss. Move the control until it is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The hiss starts very quietly.",
-    riseLine:
-      "The hiss follows the control a little at a time, so it takes a few seconds to get louder.",
+    riseLine: "The hiss follows the control as you move it.",
     atTopLine:
       "This is as loud as the hiss goes here. If it still sounds too quiet, keep this setting.",
     systemVolumeHighLine:

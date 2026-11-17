@@ -13,27 +13,30 @@ const riseStepDb =
   (calibrationRiseMaxDb * calibrationMusicGainStepMs) /
   calibrationMusicRisePeriodMs;
 
+// The owner dropped the slow rise on 2026-11-16 after playing: the music follows the control,
+// reaching any setting on it in one step's ramp of 100 ms.
 describe("nextCalibrationMusicSettingDb", () => {
-  it("rises by 0.25 dB a step with the shipped config", () => {
-    expect(riseStepDb).toBe(0.25);
-    expect(nextCalibrationMusicSettingDb(-60, -5, -5)).toBe(-59.75);
+  it("rises by up to the whole control in one step with the shipped config", () => {
+    expect(riseStepDb).toBe(40);
+    expect(nextCalibrationMusicSettingDb(-40, -5, -5)).toBe(-5);
   });
 
-  it("never rises by more than 0.25 dB in one step", () => {
-    for (let playedDb = -60; playedDb <= -5; playedDb += 0.7) {
-      for (let targetDb = -60; targetDb <= -5; targetDb += 1) {
+  it("never rises by more than one step's rise", () => {
+    for (let playedDb = -40; playedDb <= -5; playedDb += 0.7) {
+      for (let targetDb = -40; targetDb <= -5; targetDb += 1) {
         const nextDb = nextCalibrationMusicSettingDb(playedDb, targetDb, -5);
-        expect(nextDb - playedDb).toBeLessThanOrEqual(0.25 + 1e-12);
+        expect(nextDb - playedDb).toBeLessThanOrEqual(riseStepDb + 1e-12);
       }
     }
   });
 
-  it("stops at the target when the target is within one step", () => {
+  it("stops at the target", () => {
     expect(nextCalibrationMusicSettingDb(-20.1, -20, -5)).toBe(-20);
+    expect(nextCalibrationMusicSettingDb(-40, -27, -5)).toBe(-27);
   });
 
   it("falls to the target in one step", () => {
-    expect(nextCalibrationMusicSettingDb(-5, -60, -5)).toBe(-60);
+    expect(nextCalibrationMusicSettingDb(-5, -40, -5)).toBe(-40);
     expect(nextCalibrationMusicSettingDb(-12.5, -30, -5)).toBe(-30);
   });
 
@@ -54,7 +57,7 @@ describe("nextCalibrationMusicSettingDb", () => {
     expect(nextCalibrationMusicSettingDb(-30, Number.NaN, -5)).toBe(-30);
   });
 
-  it("takes 22 seconds from the bottom to −5 dB, and 13.2 seconds to −27 dB", () => {
+  it("takes one step from the bottom to −5 dB and to −27 dB", () => {
     const stepsTo = (targetDb: number) => {
       let playedDb = calibrationSettingMinDb;
       let stepCount = 0;
@@ -64,7 +67,7 @@ describe("nextCalibrationMusicSettingDb", () => {
       }
       return stepCount;
     };
-    expect(stepsTo(-5) * calibrationMusicGainStepMs).toBe(22000);
-    expect(stepsTo(-27) * calibrationMusicGainStepMs).toBe(13200);
+    expect(stepsTo(-5) * calibrationMusicGainStepMs).toBe(100);
+    expect(stepsTo(-27) * calibrationMusicGainStepMs).toBe(100);
   });
 });

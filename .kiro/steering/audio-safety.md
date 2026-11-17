@@ -13,7 +13,7 @@ These rules protect the visitor's ears. They outrank every other requirement, in
 5. **Silent means silent.** On a trial for one ear, the other channel carries exact digital zero. On a no-sound trial both channels carry exact digital zero.
 6. **Short sounds.** No single ghost sound lasts longer than the maximum duration in `src/config`.
 
-   Exception, approved by the project owner on 2026-11-16: the calibration music may play without a break while the calibration screen is open and the visitor has started it; it still fades in and out, starts at the bottom of the control and rises by no more than 5 dB in any 2 seconds, and every other sound keeps the limit above.
+   Exception, approved by the project owner on 2026-11-16: the calibration music may play without a break while the calibration screen is open and the visitor has started it; it still fades in and out, starts at the bottom of the control, and every other sound keeps the limit above. On 2026-11-16, after playing, the owner also dropped the limit on how fast the calibration sound rises: the music and the hiss follow the control as the visitor moves it, from a bottom of −40 dB. Rule 4 is unchanged for every ghost sound.
 
 7. **The visitor stays in control.** A visible control stops all sound at once at any moment. Leaving the page or hiding the tab stops all sound.
 8. **Calibration can be undone by the volume keys.** After calibration the page tells the visitor not to raise the system volume, and says the cap only holds if they do not.

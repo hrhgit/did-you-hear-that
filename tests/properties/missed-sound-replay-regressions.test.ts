@@ -200,9 +200,14 @@ describe("missed-sound replay regressions", () => {
       ...Array.from({ length: busyCount }, () => "refused"),
       "scheduled",
     ]);
-    expect(first.map((play) => play.atMs - first[0]!.atMs)).toEqual(
-      first.map((_, index) => index * missedSoundReplayConfig.replayGapMs),
-    );
+    // The clock starts where the calibration ended, so a difference of two times may differ from
+    // the gap in its last bit (1200.0000000000002 after the calibration of 2026-11-16 got faster).
+    first.forEach((play, index) => {
+      expect(play.atMs - first[0]!.atMs).toBeCloseTo(
+        index * missedSoundReplayConfig.replayGapMs,
+        9,
+      );
+    });
     expect(new Set(first.map((play) => play.request.levelDb)).size).toBe(1);
     expect(harness.events.map(({ event }) => event.sound.position)).toEqual(
       Array.from({ length: soundCount }, (_, index) => index + 1),

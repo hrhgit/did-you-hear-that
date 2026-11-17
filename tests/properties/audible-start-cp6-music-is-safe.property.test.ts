@@ -239,7 +239,7 @@ function checkAutomation(
 }
 
 describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)", () => {
-  it("stays within the ceiling, rises by at most 5 dB in 2 s from the bottom, fades in and out, stops on every stop and plays alone; the hiss where it cannot be used", async () => {
+  it("stays within the ceiling, rises by at most the configured rise from the bottom, fades in and out, stops on every stop and plays alone; the hiss where it cannot be used", async () => {
     await fc.assert(
       fc.asyncProperty(
         seedArbitrary,

@@ -132,7 +132,8 @@ describe("playVisit", () => {
     [undefined, [], true],
     ["presses" as const, [], true],
     ["target" as const, [-20], false],
-    ["both" as const, [-40], true],
+    // Halfway between the bottom of the control, -40 dB, and the setting.
+    ["both" as const, [-30], true],
   ])(
     "calibrates by %s: drags %j, presses louder: %s, and keeps its setting",
     async (calibrationControl, drags, presses) => {
@@ -237,22 +238,22 @@ describe("playVisit", () => {
     const drags = harness.actions.filter(
       (action) => action.name === "setCalibrationTarget",
     );
-    expect(drags.map((action) => action.args[0])).toEqual([-43.5]);
+    expect(drags.map((action) => action.args[0])).toEqual([-33.5]);
     const final = harness.flow.snapshot();
     if (final.stage !== "result") {
       throw new Error("The visit did not reach its result.");
     }
     expect(final.visitLog.calibrations[0]?.settingDb).toBe(-27);
-    // The first press of louder after the drag moves the target from −44, where the flow put it.
+    // The first press of louder after the drag moves the target from −34, where the flow put it.
     const calibrationSnapshots = harness.snapshots.flatMap((recorded) =>
       recorded.snapshot.stage === "calibration" ? [recorded.snapshot] : [],
     );
     expect(
       calibrationSnapshots.map((snapshot) => snapshot.targetSettingDb),
-    ).toContain(-44);
+    ).toContain(-34);
     expect(
       calibrationSnapshots.map((snapshot) => snapshot.targetSettingDb),
-    ).not.toContain(-43.5);
+    ).not.toContain(-33.5);
   });
 
   /** A visitor whose ears are 25 dB apart, so that every floor offers the swapped repeat. */

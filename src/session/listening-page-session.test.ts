@@ -168,7 +168,7 @@ describe("createListeningPageSession", () => {
       playedSettingDb: calibrationSettingMinDb,
       line: calibrationCopy.openLine,
     });
-    for (let press = 0; press < 40; press += 1) {
+    for (let press = 0; press < 20; press += 1) {
       session.louder();
     }
     for (let elapsedMs = 0; elapsedMs < 20_000; elapsedMs += 10) {
@@ -176,7 +176,7 @@ describe("createListeningPageSession", () => {
     }
     session.keepCalibration();
     expect(session.snapshot().calibration.kept).toMatchObject({
-      settingDb: calibrationSettingMinDb + 40,
+      settingDb: calibrationSettingMinDb + 20,
       anchor: "music",
     });
     expect(backend.loopTimeline().at(-1)).toMatchObject({ kind: "stopLoop" });

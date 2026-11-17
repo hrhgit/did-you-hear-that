@@ -336,8 +336,8 @@ describe("createAudioOutput", () => {
       expect(
         output.playCalibrationRepeat({ requestedSettingDb: -60, random }),
       ).toMatchObject({ reason: "notRunning" });
-      // The eight calibration repeats from -60 to -25 dB, and nothing after the stop.
-      expect(backend.scheduled().length).toBe(8);
+      // The two calibration repeats, -40 and -25 dB, and nothing after the stop.
+      expect(backend.scheduled().length).toBe(2);
     });
   });
 
@@ -748,9 +748,9 @@ describe("createAudioOutput", () => {
         expect(backend.calls.slice(callCount + 1)).toEqual([
           { kind: reason === "pageLeft" ? "close" : "suspend" },
         ]);
-        // Eight calibration repeats and the one sound before the stop, nothing after it.
+        // Two calibration repeats and the one sound before the stop, nothing after it.
         timer.advanceBy(60_000);
-        expect(backend.scheduled().length).toBe(9);
+        expect(backend.scheduled().length).toBe(3);
 
         // The busy interval ended with the stop, so a sound may start at once after activate.
         await output.activate();
@@ -811,7 +811,7 @@ describe("createAudioOutput", () => {
       const { backend, output } = setup();
       await output.activate();
       output.beginCalibration();
-      playRepeatsTo(output, backend, -45);
+      playRepeatsTo(output, backend, -35);
       backend.fire("deviceChanged");
       await output.activate();
       expect(output.keepCalibration()).toEqual({
@@ -819,7 +819,7 @@ describe("createAudioOutput", () => {
         reason: "noRepeatPlayed",
       });
       expect(
-        output.playCalibrationRepeat({ requestedSettingDb: -45, random }),
+        output.playCalibrationRepeat({ requestedSettingDb: -35, random }),
       ).toMatchObject({ settingDb: calibrationSettingMinDb });
     });
 
@@ -1142,22 +1142,23 @@ describe("createAudioOutput", () => {
       expect(backend.scheduled()).toEqual([]);
     });
 
-    it("rises towards the target by at most 0.25 dB a step, one exponential ramp per step that never overlaps the one before", async () => {
+    // The owner dropped the slow rise on 2026-11-16 after playing: one ramp reaches the target.
+    it("rises to the target in one exponential ramp of one step, and ramps never overlap", async () => {
       const { backend, output, advance } = await playingMusic();
       const steps: number[] = [];
       output.onCalibrationMusicStep((settingDb) => steps.push(settingDb));
-      output.setCalibrationMusicTarget(-58);
-      advance(10 * calibrationMusicGainStepMs);
+      output.setCalibrationMusicTarget(-30);
+      advance(5 * calibrationMusicGainStepMs);
+      output.setCalibrationMusicTarget(-12);
+      advance(5 * calibrationMusicGainStepMs);
       const riseStepDb =
         (calibrationRiseMaxDb * calibrationMusicGainStepMs) /
         calibrationMusicRisePeriodMs;
-      expect(steps).toEqual([
-        -59.75, -59.5, -59.25, -59, -58.75, -58.5, -58.25, -58,
-      ]);
+      expect(steps).toEqual([-30, -12]);
       const ramps = loopCalls(backend).filter(
         (call) => call.kind === "rampLoopLevel",
       );
-      expect(ramps).toHaveLength(8);
+      expect(ramps).toHaveLength(2);
       let previousEndMs = 0;
       let previousGain = musicGainAt(musicSamples(), calibrationSettingMinDb);
       for (const ramp of ramps) {
@@ -1172,14 +1173,15 @@ describe("createAudioOutput", () => {
         previousEndMs = ramp.endMs;
         previousGain = ramp.levelGain;
       }
-      expect(output.calibrationMusicSettingDb()).toBe(-58);
+      expect(output.calibrationMusicSettingDb()).toBe(-12);
     });
 
     it("waits for the remainder when a step comes before the last ramp has ended on the audio clock", async () => {
       const { backend, timer, output } = await playingMusic();
-      output.setCalibrationMusicTarget(-50);
+      output.setCalibrationMusicTarget(-30);
       backend.advanceClockBy(calibrationMusicGainStepMs);
       timer.advanceBy(calibrationMusicGainStepMs);
+      output.setCalibrationMusicTarget(-20);
       const rampsAfterFirst = loopCalls(backend).length;
       // The timer runs ahead of the audio clock: the next step finds the ramp still running.
       backend.advanceClockBy(calibrationMusicGainStepMs / 2);
@@ -1199,21 +1201,21 @@ describe("createAudioOutput", () => {
 
     it("falls to a lower target within one step", async () => {
       const { backend, output, advance } = await playingMusic();
-      output.setCalibrationMusicTarget(-50);
+      output.setCalibrationMusicTarget(-30);
       advance(45 * calibrationMusicGainStepMs);
-      expect(output.calibrationMusicSettingDb()).toBe(-50);
-      output.setCalibrationMusicTarget(-58);
+      expect(output.calibrationMusicSettingDb()).toBe(-30);
+      output.setCalibrationMusicTarget(-38);
       advance(calibrationMusicGainStepMs);
       const last = loopCalls(backend).at(-1);
       expect(last).toMatchObject({ kind: "rampLoopLevel" });
       if (last?.kind === "rampLoopLevel") {
         expect(last.levelGain).toBeCloseTo(
-          musicGainAt(musicSamples(), -58),
+          musicGainAt(musicSamples(), -38),
           12,
         );
       }
       advance(calibrationMusicGainStepMs);
-      expect(output.calibrationMusicSettingDb()).toBe(-58);
+      expect(output.calibrationMusicSettingDb()).toBe(-38);
     });
 
     it("never rises above the Control_Top, and keeps the level gain within the ceiling on the measured peak", async () => {
@@ -1308,19 +1310,19 @@ describe("createAudioOutput", () => {
 
     it("keeps the Played_Setting reached, rounded down to the grid, and stops the music", async () => {
       const { backend, output, advance } = await playingMusic();
-      const targetDb = calibrationSettingKeepMinDb + 3;
-      output.setCalibrationMusicTarget(targetDb);
-      // Stop half way through a ramp that rises past a grid setting.
-      const stepsToTarget =
-        ((targetDb - calibrationSettingMinDb) * calibrationMusicRisePeriodMs) /
-        (calibrationRiseMaxDb * calibrationMusicGainStepMs);
-      advance((stepsToTarget - 2) * calibrationMusicGainStepMs);
+      // A setting between grid settings, reached and held.
+      const reachedDb = calibrationSettingKeepMinDb + 2.5;
+      output.setCalibrationMusicTarget(reachedDb);
+      advance(5 * calibrationMusicGainStepMs);
+      expect(output.calibrationMusicSettingDb()).toBe(reachedDb);
+      // Stop half way through the ramp to a higher target: reached is where that ramp began.
+      output.setCalibrationMusicTarget(reachedDb + 10);
+      advance(calibrationMusicGainStepMs);
       backend.advanceClockBy(calibrationMusicGainStepMs / 2);
-      // The last ramp runs from targetDb - 0.5 to targetDb - 0.25 dB: reached is targetDb - 0.5.
       const kept = output.keepCalibration();
       expect(kept).toMatchObject({
         kind: "kept",
-        settingDb: targetDb - calibrationSettingStepDb,
+        settingDb: reachedDb - calibrationSettingStepDb / 2,
       });
       expect(loopCalls(backend).at(-1)).toMatchObject({
         kind: "stopLoop",
@@ -1395,7 +1397,7 @@ describe("createAudioOutput", () => {
         kind: "refused",
         reason: "notReady",
       });
-      const played = playRepeatsTo(output, backend, -50);
+      const played = playRepeatsTo(output, backend, -30);
       expect(played[0]).toBe(calibrationSettingMinDb);
       expect(
         backend.loopTimeline().filter((call) => call.kind !== "fadeToSilence"),

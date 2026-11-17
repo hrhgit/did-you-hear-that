@@ -11,7 +11,9 @@ import type { SoundId } from "./sound-id";
  * fade, the stop fade and the headphone check level are guarded against loosening by the config
  * test (D32). Making one stricter is always allowed. Loosening one needs the project owner's
  * approval first. The rise period of the calibration music is guarded the same way
- * (`.kiro/specs/audible-start/design.md`, Config).
+ * (`.kiro/specs/audible-start/design.md`, Config). On 2026-11-16 the owner raised the bottom to
+ * −40 dB and dropped the slow rise of the calibration sound after playing; the guards now hold
+ * those values.
  */
 export interface AudioOutputConfig {
   /** The raised-cosine fade the output stage multiplies into each end of every buffer. */
@@ -93,12 +95,15 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   },
   // D6: eight stairs renders in a row above the bound happen about once in 10^10
   renderAttemptsMaxCount: 8,
-  // D8: about 86 dB below full scale for the calibration sound. Guarded (D32)
-  calibrationSettingMinDb: -60,
+  // D8: about 66 dB below full scale for the calibration sound. Raised from -60 by the owner on
+  // 2026-11-16 after playing: the first seconds were too quiet to hear. Guarded (D32)
+  calibrationSettingMinDb: -40,
   // D8
   calibrationSettingStepDb: 1,
-  // D8: audio-safety rule 4 applied to the calibration noise. Guarded (D32)
-  calibrationRiseMaxDb: 5,
+  // The whole control: the calibration sound follows the control as it moves. The 5 dB limit of
+  // audio-safety rule 4 on the calibration sound was dropped by the owner on 2026-11-16 after
+  // playing. Guarded (D32)
+  calibrationRiseMaxDb: 40,
   // D10: a lower setting means a very high system volume. Guarded (D32). Raised from -40 by
   // audible-start D25: at -27 every room keeps 30 dB of playable range below the anchor
   calibrationSettingKeepMinDb: -27,
@@ -110,10 +115,11 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   roomTopMinDb: 0,
   // audible-start D9: the fewest dB of settings that can be kept, the brief's own figure
   calibrationSettingSpanMinDb: 10,
-  // audible-start brief: "5 dB per 2 seconds", the exception to rule 6 approved by the owner on
-  // 2026-11-16. Guarded: a shorter period is a faster rise
-  calibrationMusicRisePeriodMs: 2000,
-  // audible-start D6: steps of 100 ms, each at most 0.25 dB
+  // One gain step: the music reaches any setting on the control in one ramp of 100 ms. Was
+  // "5 dB per 2 seconds" (audible-start brief); the owner dropped that limit on 2026-11-16 after
+  // playing, because the music lagged the control. Guarded: a shorter period is a faster rise
+  calibrationMusicRisePeriodMs: 100,
+  // audible-start D6: steps of 100 ms, each an exponential ramp, so a rise has no click
   calibrationMusicGainStepMs: 100,
   // audible-start D4: after 10 s without the music, the hiss
   calibrationMusicLoadMaxMs: 10000,

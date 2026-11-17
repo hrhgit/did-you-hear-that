@@ -113,7 +113,8 @@ describe("createCalibrationController", () => {
     }
   });
 
-  it("shows the played setting, which rises by at most calibrationRiseMaxDb per repeat (R16.2)", async () => {
+  // The owner dropped the 5 dB limit on 2026-11-16 after playing: the next repeat plays the target.
+  it("shows the played setting, which reaches the target at the next repeat (R16.2)", async () => {
     const { controller, advanceToNextRepeat } = await setup();
     controller.open();
     for (let press = 0; press < 12; press += 1) {
@@ -123,14 +124,11 @@ describe("createCalibrationController", () => {
       targetSettingDb: calibrationSettingMinDb + 12,
       playedSettingDb: calibrationSettingMinDb,
     });
+    expect(calibrationRiseMaxDb).toBeGreaterThanOrEqual(12);
 
     advanceToNextRepeat();
     expect(controller.snapshot().playedSettingDb).toBe(
-      calibrationSettingMinDb + calibrationRiseMaxDb,
-    );
-    advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(
-      calibrationSettingMinDb + 2 * calibrationRiseMaxDb,
+      calibrationSettingMinDb + 12,
     );
     advanceToNextRepeat();
     expect(controller.snapshot().playedSettingDb).toBe(
@@ -145,11 +143,11 @@ describe("createCalibrationController", () => {
       controller.louder();
     }
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(-55);
+    expect(controller.snapshot().playedSettingDb).toBe(-30);
     controller.quieter();
-    expect(controller.snapshot().targetSettingDb).toBe(-56);
+    expect(controller.snapshot().targetSettingDb).toBe(-31);
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(-56);
+    expect(controller.snapshot().playedSettingDb).toBe(-31);
   });
 
   it("keeps the target within the control", async () => {
@@ -231,14 +229,14 @@ describe("createCalibrationController", () => {
   it("keeps the setting last played, ends the loop and shows the kept line (R16.4, R16.8)", async () => {
     const { backend, controller, advance, advanceToNextRepeat } = await setup();
     controller.open();
-    for (let press = 0; press < 40; press += 1) {
+    for (let press = 0; press < 20; press += 1) {
       controller.louder();
     }
     for (let repeat = 0; repeat < 8; repeat += 1) {
       advanceToNextRepeat();
     }
     const played = controller.snapshot().playedSettingDb;
-    expect(played).toBe(calibrationSettingMinDb + 40);
+    expect(played).toBe(calibrationSettingMinDb + 20);
     expect(played).toBeGreaterThanOrEqual(calibrationSettingKeepMinDb);
     expect(controller.snapshot().line).toBe(calibrationCopy.hiss.openLine);
 
@@ -339,7 +337,8 @@ describe("createCalibrationController", () => {
       });
     });
 
-    it("plays the repeats towards a target dragged to the top at most calibrationRiseMaxDb apart (R3.8)", async () => {
+    // The owner dropped the 5 dB limit on 2026-11-16 after playing: the next repeat is the top.
+    it("plays the next repeat at a target dragged to the top (R3.8)", async () => {
       const { controller, advanceToNextRepeat } = await setup();
       controller.open();
       controller.setTarget(Number.POSITIVE_INFINITY);
@@ -348,10 +347,7 @@ describe("createCalibrationController", () => {
         advanceToNextRepeat();
         played.push(controller.snapshot().playedSettingDb);
       }
-      expect(played.slice(0, 13)).toEqual([
-        -60, -55, -50, -45, -40, -35, -30, -25, -20, -15, -10, -5, -4,
-      ]);
-      expect(played.slice(13)).toEqual(Array<number>(8).fill(-4));
+      expect(played).toEqual([-40, ...Array<number>(20).fill(-4)]);
       expect(controller.snapshot()).toMatchObject({
         targetSettingDb: calibrationSettingTopDb(),
         atTop: true,
@@ -361,14 +357,14 @@ describe("createCalibrationController", () => {
     it("lets louder and quieter go on from a dragged target as before", async () => {
       const { controller, advanceToNextRepeat } = await setup();
       controller.open();
-      controller.setTarget(-58);
+      controller.setTarget(-38);
       controller.louder();
-      expect(controller.snapshot().targetSettingDb).toBe(-57);
+      expect(controller.snapshot().targetSettingDb).toBe(-37);
       advanceToNextRepeat();
-      expect(controller.snapshot().playedSettingDb).toBe(-57);
-      controller.setTarget(-30);
+      expect(controller.snapshot().playedSettingDb).toBe(-37);
+      controller.setTarget(-20);
       controller.quieter();
-      expect(controller.snapshot().targetSettingDb).toBe(-58);
+      expect(controller.snapshot().targetSettingDb).toBe(-38);
     });
   });
 
@@ -512,26 +508,29 @@ describe("createCalibrationController with the calibration music (audible-start 
     });
   });
 
-  it("hands the target to the shell, and the played setting follows the settings the shell's steps reach, at most 0.25 dB apart", async () => {
+  // The owner dropped the slow rise on 2026-11-16 after playing: one step reaches the target.
+  it("hands the target to the shell, and the played setting follows the settings the shell's steps reach", async () => {
     const { controller, advance } = await musicSetup();
     controller.open();
-    controller.setTarget(-50);
+    controller.setTarget(-30);
     const played: number[] = [];
     for (let step = 0; step < 50; step += 1) {
       advance(calibrationMusicGainStepMs);
       played.push(controller.snapshot().playedSettingDb ?? Number.NaN);
     }
     // A step is shown once its ramp has ended, at the next step.
-    expect(played.slice(0, 3)).toEqual([-60, -59.75, -59.5]);
+    expect(played.slice(0, 3)).toEqual([-40, -30, -30]);
     for (let index = 1; index < played.length; index += 1) {
-      expect(played[index] - played[index - 1]).toBeLessThanOrEqual(0.25);
+      expect(played[index] - played[index - 1]).toBeLessThanOrEqual(
+        calibrationRiseMaxDb,
+      );
     }
     advance(calibrationMusicGainStepMs);
-    expect(controller.snapshot().playedSettingDb).toBe(-50);
+    expect(controller.snapshot().playedSettingDb).toBe(-30);
     controller.quieter();
-    expect(controller.snapshot().targetSettingDb).toBe(-51);
+    expect(controller.snapshot().targetSettingDb).toBe(-31);
     advance(3 * calibrationMusicGainStepMs);
-    expect(controller.snapshot().playedSettingDb).toBe(-51);
+    expect(controller.snapshot().playedSettingDb).toBe(-31);
   });
 
   it("rises to the music's top of −5 dB, says it is at the top, and keeps the target within it", async () => {

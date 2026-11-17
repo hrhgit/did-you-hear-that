@@ -1048,7 +1048,8 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
 });
 
 describe('createVisitFlow: the calibration target (audible-start design.md, "The calibration target")', () => {
-  it("takes a drag to the top at once and plays the repeats towards it at most 5 dB apart (R3.2, R3.4, R3.8)", async () => {
+  // The owner dropped the 5 dB limit on 2026-11-16 after playing: the next repeat is the top.
+  it("takes a drag to the top at once and plays the next repeat there (R3.2, R3.4, R3.8)", async () => {
     const harness = createHarness();
     await toCalibration(harness);
     harness.flow.startCalibration();
@@ -1071,9 +1072,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
       }
       harness.advance(100);
     }
-    expect(played).toEqual([
-      -60, -55, -50, -45, -40, -35, -30, -25, -20, -15, -10, -5, -4,
-    ]);
+    expect(played).toEqual([-40, -4]);
     expect(harness.flow.snapshot()).toMatchObject({
       targetSettingDb: calibrationSettingTopDb(),
       playedSettingDb: calibrationSettingTopDb(),

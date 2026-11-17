@@ -65,7 +65,7 @@ export interface CalibrationController {
    * Puts the target at `settingDb`, rounded down to the control's grid and held within the
    * control (audible-start R3.2 to R3.4, D1). NaN or a value that is not a number changes
    * nothing. The repeats still start at the bottom and rise by at most `calibrationRiseMaxDb` per
-   * repeat towards the target. Before `open`, the target changes, and `open` puts it at the
+   * repeat towards the target, which with the shipped config is the whole control. Before `open`, the target changes, and `open` puts it at the
    * bottom (D3).
    */
   setTarget(settingDb: number): void;

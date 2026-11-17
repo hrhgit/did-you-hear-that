@@ -267,7 +267,7 @@ const refused = <Reason extends string>(
  * `activate` that creates the context, and the hiss is used for the life of the shell if it
  * cannot be. It starts at the bottom of the control with the output fade, rises by at most
  * `calibrationRiseMaxDb` per `calibrationMusicRisePeriodMs` in steps of the injected timer that
- * never overlap on the audio clock, stays within the ceiling on its measured peak, and stops with
+ * never overlap on the audio clock (with the shipped config, to any target in one step), stays within the ceiling on its measured peak, and stops with
  * the stop fade. While it plays, and until its stop fade ends, every other sound is `busy`.
  */
 export function createAudioOutput(options: {
@@ -737,8 +737,12 @@ export function createAudioOutput(options: {
       earChoice: sound.earChoice,
       requestedLevelDb: sound.levelDb,
       calibrationGain: sound.calibrationGain,
+      // A replay, and a calibration repeat, which follows the control (the owner, 2026-11-16),
+      // are not held to the rise limit.
       previousAppliedGain:
-        sound.purpose === "replay" ? null : { ...previousGain },
+        sound.purpose === "replay" || sound.purpose === "calibration"
+          ? null
+          : { ...previousGain },
     });
     if (prepared.kind === "refused") {
       return refused(prepared.reason);
