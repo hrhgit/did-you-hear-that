@@ -120,6 +120,10 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
     rootStyle.getPropertyValue("--color-lamp").trim() || "#f3b562";
   const graphiteColour =
     rootStyle.getPropertyValue("--color-graphite").trim() || "#8a93a6";
+  const moonlightColour =
+    rootStyle.getPropertyValue("--color-moonlight").trim() || "#e6e1d6";
+  const nightColour =
+    rootStyle.getPropertyValue("--color-night").trim() || "#080b12";
 
   let litRoom: GhostSoundId | null = null;
   let swungLamp: GhostSoundId | null = null;
@@ -248,9 +252,11 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
   };
 
   /**
-   * The shape of a scored sound: a small hooded figure with a ragged hem, drawn in the pencil's
-   * line. A caught one stands in the lamp's colour a little way in from its wall and rises a
-   * touch. One that went by is a broken grey line that leaves through its wall.
+   * The shape of a scored sound: the house's ghost, a pale rounded figure with two tall dark eyes
+   * and a hem of three soft lobes that flicks into a tail towards the wall it came through. A
+   * caught one stands a little way in from its wall in a faint violet glow, lit at its edge by the
+   * lamp, and rises a touch. One that went by is a broken grey line that leaves through its wall.
+   * An original drawing in the spirit of the Kiro ghost, not its logo.
    */
   const drawSighting = (
     target: CanvasRenderingContext2D,
@@ -263,67 +269,124 @@ export function startMotionLayer(options: MotionLayerOptions): MotionLayer {
     }
     const room = roomGeometry[sighting.roomId];
     const roomWidth = room.right - room.left;
-    const height = (room.bottom - room.top) * 0.44;
-    const width = height * 0.62;
+    const caught = sighting.kind === "caught";
+    const height = (room.bottom - room.top) * (caught ? 0.5 : 0.44);
+    const width = height * 0.66;
     const inward = sighting.side === "left" ? 1 : -1;
     const wallX = sighting.side === "left" ? room.left : room.right;
-    const caught = sighting.kind === "caught";
     const drift = sighting.reducedMotion ? 0 : now.drift;
-    // A caught shape stands a fifth of the way in. One that went by starts there and leaves.
+    // A caught ghost stands a fifth of the way in. One that went by starts there and leaves.
     const x = wallX + inward * roomWidth * (caught ? 0.2 : 0.2 - 0.24 * drift);
     const y = rippleHeight(room) - (caught ? 6 * drift : 0);
     const half = width / 2;
     const top = y - height / 2;
     const bottom = y + height / 2;
+    // The side the ghost came from, towards its wall, and the side it faces.
+    const back = -inward;
+
+    const traceBody = (): void => {
+      target.beginPath();
+      // From the hem on the side it faces, up a side that swells a little, over the head.
+      target.moveTo(x + inward * half, bottom - height * 0.06);
+      target.bezierCurveTo(
+        x + inward * half * 1.08,
+        top + height * 0.62,
+        x + inward * half * 1.02,
+        top + half,
+        x + inward * half,
+        top + half,
+      );
+      if (inward > 0) {
+        target.arc(x, top + half, half, 0, Math.PI, true);
+      } else {
+        target.arc(x, top + half, half, Math.PI, 0, false);
+      }
+      // Down the side it came from, out into the tail.
+      target.bezierCurveTo(
+        x + back * half * 1.04,
+        top + height * 0.6,
+        x + back * half * 1.06,
+        bottom - height * 0.2,
+        x + back * half * 1.42,
+        bottom - height * 0.16,
+      );
+      target.quadraticCurveTo(
+        x + back * half * 1.18,
+        bottom + height * 0.02,
+        x + back * half * 0.62,
+        bottom - height * 0.04,
+      );
+      // Two more lobes back to where the line began.
+      const lobe = (half * 1.62) / 2;
+      for (let index = 0; index < 2; index += 1) {
+        const fromX = x + back * half * 0.62 + inward * index * lobe;
+        target.quadraticCurveTo(
+          fromX + inward * lobe * 0.5,
+          bottom + height * 0.09,
+          fromX + inward * lobe,
+          bottom - height * 0.06,
+        );
+      }
+      target.closePath();
+    };
 
     target.save();
     traceOutline(target, room);
     target.clip();
-    target.globalAlpha = now.strength * (caught ? 0.95 : 0.6);
-    target.strokeStyle = caught ? lampColour : graphiteColour;
-    target.fillStyle = caught ? lampColour : graphiteColour;
-    target.lineWidth = caught ? 2.2 : 1.6;
     target.lineCap = "round";
     target.lineJoin = "round";
-    target.setLineDash(caught ? [] : [5, 6]);
-    target.beginPath();
-    target.moveTo(x - half, bottom);
-    target.lineTo(x - half, top + half);
-    target.arc(x, top + half, half, Math.PI, 0);
-    target.lineTo(x + half, bottom);
-    // The hem: three scallops back to where the line began.
-    const scallop = width / 3;
-    for (let index = 0; index < 3; index += 1) {
-      const fromX = x + half - index * scallop;
-      target.quadraticCurveTo(
-        fromX - scallop / 2,
-        bottom - height * 0.14,
-        fromX - scallop,
-        bottom,
-      );
-    }
-    target.stroke();
     if (caught) {
-      target.save();
-      target.globalAlpha *= 0.14;
-      target.fill();
-      target.restore();
-    }
-    // Two eyes, looking into the room.
-    target.setLineDash([]);
-    const eyeY = top + half * 0.95;
-    for (const offset of [-0.32, 0.32]) {
-      target.beginPath();
-      target.ellipse(
-        x + offset * half * 1.1 + inward * half * 0.12,
-        eyeY,
-        half * 0.13,
-        half * 0.2,
-        0,
-        0,
-        2 * Math.PI,
+      target.globalAlpha = now.strength;
+      // A faint violet glow around it.
+      const glow = target.createRadialGradient(
+        x,
+        y,
+        half * 0.4,
+        x,
+        y,
+        height * 0.9,
       );
+      glow.addColorStop(0, "rgba(167, 123, 255, 0.34)");
+      glow.addColorStop(1, "rgba(167, 123, 255, 0)");
+      target.fillStyle = glow;
+      target.fillRect(x - height, y - height, height * 2, height * 2);
+      traceBody();
+      target.fillStyle = moonlightColour;
+      target.globalAlpha = now.strength * 0.94;
       target.fill();
+      target.globalAlpha = now.strength;
+      target.strokeStyle = lampColour;
+      target.lineWidth = 1.8;
+      target.stroke();
+    } else {
+      target.globalAlpha = now.strength * 0.6;
+      target.strokeStyle = graphiteColour;
+      target.lineWidth = 1.6;
+      target.setLineDash([5, 6]);
+      traceBody();
+      target.stroke();
+      target.setLineDash([]);
+    }
+    // Two tall eyes, looking into the room.
+    const eyeY = top + half * 1.02;
+    for (const offset of [-0.34, 0.3]) {
+      const eyeX = x + offset * half + inward * half * 0.16;
+      target.beginPath();
+      target.ellipse(eyeX, eyeY, half * 0.14, half * 0.25, 0, 0, 2 * Math.PI);
+      target.fillStyle = caught ? nightColour : graphiteColour;
+      target.fill();
+      if (caught) {
+        target.beginPath();
+        target.arc(
+          eyeX + inward * half * 0.04,
+          eyeY - half * 0.1,
+          half * 0.045,
+          0,
+          2 * Math.PI,
+        );
+        target.fillStyle = moonlightColour;
+        target.fill();
+      }
     }
     target.restore();
   };

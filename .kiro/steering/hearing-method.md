@@ -101,8 +101,8 @@ Every number below lives in `src/config` and is expected to change after listeni
 | Starting level | 10 dB below the anchor |
 | Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16: the anchor is now a comfortable music volume, likely louder than rubbed hands, and the lower cap keeps the loudest sound no louder at the ear than before |
 | Quietest playable level | 70 dB below the anchor, or higher: the level at which a sound's RMS is 84 dB below full scale with the visitor's calibration (the playable floor) |
-| Response window after a sound starts | 2.0 s |
-| Gap between trials | random, 1.5 to 4.0 s |
+| Response window after a sound starts | 1.8 s. Shortened from 2.0 s on 2026-11-16 by the owner after playing: a room took too long |
+| Gap between trials | random, 1.0 to 2.5 s. Shortened from 1.5 to 4.0 s on 2026-11-16 for the same reason |
 | Share of no-sound trials | 15 to 25 percent |
 | False alarm rate that marks a visit unreliable, applied to each room | above 30 percent |
 | False alarm rate over a whole visit that marks the visit unreliable | above 20 percent |

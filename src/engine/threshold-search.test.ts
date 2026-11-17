@@ -128,7 +128,7 @@ describe("createThresholdSearch", () => {
           ear: "right",
           levelDb: -25,
           direction: "first",
-          gapBeforeMs: 1500 + Math.floor(0.5 * 2501),
+          gapBeforeMs: 1000 + Math.floor(0.5 * 1501),
         },
       });
       expect(random.calls).toBe(3);
@@ -181,7 +181,7 @@ describe("createThresholdSearch", () => {
         kind: "noSound",
         trialNumber: 1,
         phase: "search",
-        gapBeforeMs: 1500 + Math.floor(0.3 * 2501),
+        gapBeforeMs: 1000 + Math.floor(0.3 * 1501),
       });
       expect(random.calls).toBe(2);
     });
@@ -243,7 +243,7 @@ describe("createThresholdSearch", () => {
       expect(next).toMatchObject({
         kind: "sound",
         ear: "right",
-        gapBeforeMs: 1500,
+        gapBeforeMs: 1000,
       });
       expect(random.calls - callsBefore).toBe(2);
     });
@@ -252,12 +252,12 @@ describe("createThresholdSearch", () => {
   describe("draw 3: the gap", () => {
     it("gives the minimum gap for a draw of 0", () => {
       const random = createStubRandom(0.9, [0.5, 0.3, 0]);
-      expect(trialOf(create(random).current()).gapBeforeMs).toBe(1500);
+      expect(trialOf(create(random).current()).gapBeforeMs).toBe(1000);
     });
 
     it("gives the maximum gap for the largest possible draw", () => {
       const random = createStubRandom(0.9, [0.5, 0.3, largestDraw]);
-      expect(trialOf(create(random).current()).gapBeforeMs).toBe(4000);
+      expect(trialOf(create(random).current()).gapBeforeMs).toBe(2500);
     });
   });
 
@@ -277,7 +277,7 @@ describe("createThresholdSearch", () => {
         kind: "noSound",
         trialNumber,
         phase: "closing",
-        gapBeforeMs: 1500 + Math.floor(0.9 * 2501),
+        gapBeforeMs: 1000 + Math.floor(0.9 * 1501),
       })),
     );
     const finished = steps.at(-1);

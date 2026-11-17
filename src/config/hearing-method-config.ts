@@ -72,12 +72,14 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   capRelativeToAnchorDb: 5,
   // "Quietest playable level | 70 dB below the anchor"
   floorDb: -70,
-  // "Response window after a sound starts | 2.0 s"
-  responseWindowMs: 2000,
-  // "Gap between trials | random, 1.5 to 4.0 s" (lower limit)
-  gapBetweenTrialsMinMs: 1500,
-  // "Gap between trials | random, 1.5 to 4.0 s" (upper limit)
-  gapBetweenTrialsMaxMs: 4000,
+  // "Response window after a sound starts | 1.8 s". Shortened from 2.0 s by the owner on 2026-11-16
+  // after playing, because a room took too long. Still longer than the longest ghost sound
+  responseWindowMs: 1800,
+  // "Gap between trials | random, 1.0 to 2.5 s" (lower limit). Was 1.5 to 4.0 s until the owner
+  // shortened it on 2026-11-16 after playing
+  gapBetweenTrialsMinMs: 1000,
+  // "Gap between trials | random, 1.0 to 2.5 s" (upper limit)
+  gapBetweenTrialsMaxMs: 2500,
   // "Share of no-sound trials | 15 to 25 percent" (lower limit)
   noSoundTrialShareMinFraction: 0.15,
   // "Share of no-sound trials | 15 to 25 percent" (upper limit)

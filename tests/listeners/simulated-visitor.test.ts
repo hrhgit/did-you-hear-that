@@ -276,7 +276,7 @@ describe("playVisit", () => {
       firstCheckAnswer: "heard",
       pressDelayMaxMs: 1000,
       // Back to the picture once the room has begun, so that the test stays short.
-      events: [{ atMs: 60_000, action: "proceed", resumeAfterMs: null }],
+      events: [{ atMs: 40_000, action: "proceed", resumeAfterMs: null }],
       turnsBack: false,
     };
     const harness = createVisitHarness({

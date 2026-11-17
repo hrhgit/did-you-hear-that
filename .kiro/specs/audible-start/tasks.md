@@ -63,6 +63,14 @@ Checked: the e2e suite ran headless and muted with the lantern. The practice tes
 
 Not done: the `WHOLE_VISIT=1` spec was not run with the lantern, and nobody has played it to tune `rechargeMs`.
 
+## The pace and the ghost of 2026-11-16
+
+Not in this spec. The owner played and found a room too long, and asked for the ghost to be drawn after the Kiro ghost. Claude Code changed both in this working tree on 2026-11-16 and committed them after `npm run typecheck`, `npm run lint`, `npm run check:copy`, `npx vitest run` and the e2e suite passed.
+
+- **The pace.** Simulated visitors (psychometric listeners, quick visit, six threshold pairs, three rooms each) took about 80 s a room, 12 to 32 counted trials at about 4.3 s each. The gap between trials went from 1.5–4.0 s to 1.0–2.5 s and the response window from 2.0 s to 1.8 s, in `hearingMethodConfig` and the steering's Initial values table; the same visitors then took about 56 s a room. The window stays longer than the longest ghost sound (1.4 s), as the config test asks. Fewer trials were measured and not taken: with 1500 plausible listeners, a limit of 14 trials per ear instead of 20 moved the median room from 30 to 28 trials but the accurate ears from 48.7 % to 40.3 %.
+- **Tests restated for the pace.** The gap literals of `src/engine/threshold-search.test.ts` follow the new range. In `tests/listeners/simulated-visitor.test.ts` the visitor leaves the swapped room at 40 s instead of 60 s, because the room now ends before 60 s and the test is about leaving before its end. `tests/properties/visit-flow-regressions.test.ts` regression 1 moved its device changes to 232 000 and 242 900 ms, measured on the same visit, so that they still fall in the third room's counting and between its second attempt's start and first sound.
+- **The ghost.** The Kiroween rules forbid using the sponsor's logos and marks without its written consent, so the house draws a ghost of its own in that spirit, not the logo: a pale rounded figure with two tall dark eyes looking into the room, three soft lobes at its hem and a tail flicking towards the wall it came through, in a faint violet glow, edged by the lamp. A sound that went by is the same shape as a broken grey line, as before.
+
 ## The calibration control of 2026-11-16
 
 Not in this spec. The owner played a visit and found that the music did not follow the control: it rose slowly towards the setting, and started too quietly. The owner decided to drop the limit on how fast the calibration sound rises and to raise its start. Claude Code changed it in this working tree on 2026-11-16 and committed it after `npm run typecheck`, `npm run lint`, `npm run check:copy`, `npx vitest run` and the e2e suite passed.
