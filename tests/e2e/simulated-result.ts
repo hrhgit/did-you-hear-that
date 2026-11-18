@@ -1,4 +1,5 @@
 import type { VisitType } from "../../src/config/hearing-method-config";
+import { visitFlowConfig } from "../../src/config/visit-flow-config";
 import type { VisitToSave } from "../../src/session/result-page-types";
 import type { ResultSnapshot } from "../../src/session/visit-flow-types";
 import type { ExtremeListenerName } from "../listeners/extreme-listeners";
@@ -12,8 +13,10 @@ import { createVisitHarness } from "../properties/visit-flow-harness";
 
 /**
  * A whole visit played in Node by a simulated visitor, on the fake audio backend and the manual
- * timer, up to its result. The browser tests of the result page hand its log and summary to the
- * page, so the page is drawn from what the visit flow really gives and no sound is ever played.
+ * timer, up to its result. It is a visit in the one room: as many searches take turns as the
+ * shipped site runs together (one-room design.md, D1). The browser tests of the result page hand
+ * its log and summary to the page, so the page is drawn from what the visit flow really gives and
+ * no sound is ever played.
  */
 
 /** Who walks through the house: a listener with a threshold in each ear, or one of the extremes. */
@@ -25,7 +28,8 @@ export type SimulatedVisitor =
     }
   | { readonly kind: "extreme"; readonly name: ExtremeListenerName };
 
-function listenerOf(visitor: SimulatedVisitor): VisitorListenerSpec {
+/** The listener behind a simulated visitor. */
+export function listenerOf(visitor: SimulatedVisitor): VisitorListenerSpec {
   if (visitor.kind === "extreme") {
     return { kind: "extreme", name: visitor.name, seed: 31 };
   }
@@ -61,7 +65,11 @@ async function playToResult(
   seed: number,
   repeat: SimulatedRepeat | null,
 ): Promise<ResultSnapshot> {
-  const harness = createVisitHarness({ seed, performanceOffsetMs: 4321 });
+  const harness = createVisitHarness({
+    seed,
+    performanceOffsetMs: 4321,
+    roomsTogetherMaxCount: visitFlowConfig.roomsTogetherMaxCount,
+  });
   const run = await playVisit(harness, {
     visitType,
     calibrationTargetDb: -22,

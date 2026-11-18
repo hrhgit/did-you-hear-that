@@ -3,18 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { VisitTrial } from "../../src/session/visit-flow-types";
 import { playVisit } from "../listeners/simulated-visitor";
 import { visitRunArbitrary } from "./visit-flow-arbitraries";
-import { createVisitHarness } from "./visit-flow-harness";
+import { createVisitHarness, roomRuns } from "./visit-flow-harness";
 import {
   observeVisit,
   sameTrialPlace,
   visitStartMs,
   type PracticePresentedEntry,
   type PresentedEntry,
+  type ReminderPresentedEntry,
 } from "./visit-flow-timeline";
 
 // CP2. The log holds exactly the played trials, in order (Universal; visit-flow design.md, CP2;
 // R10.1, R10.2, R7.11, R12.3, R12.4; brief property 1). The visits render with the worst-case
-// renderers (D26, audio-output D43).
+// renderers (D26, audio-output D43). The property holds however the rooms run (one-room
+// design.md, D1): one after another, and taking turns in one room.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -33,9 +35,9 @@ const isExactZero = (samples: Float32Array): boolean =>
   samples.every((sample) => Object.is(sample, 0));
 
 describe("visit flow CP2. The log holds exactly the played trials, in order (Universal; R10.1, R10.2)", () => {
-  it(
-    "logs every presented trial once, in order, as the sounds the backend was given and as scored or discarded",
-    async () => {
+  it.each(roomRuns)(
+    "logs every presented trial once, in order, as the sounds the backend was given and as scored or discarded ($name)",
+    async ({ roomsTogetherMaxCount }) => {
       await fc.assert(
         fc.asyncProperty(
           visitRunArbitrary({ withEnding: false }),
@@ -43,6 +45,7 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
             const harness = createVisitHarness({
               seed: visitRun.seed,
               performanceOffsetMs: visitRun.performanceOffsetMs,
+              roomsTogetherMaxCount,
             });
             const timeline = observeVisit(harness);
             const run = await playVisit(timeline.driver, visitRun.script);
@@ -99,7 +102,10 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
 
             // The sound trials are the backend's schedule calls in rooms, one ear each.
             const roomSchedules = harness.schedules.filter(
-              (schedule) => schedule.stage === "room" && !schedule.practice,
+              (schedule) =>
+                schedule.stage === "room" &&
+                !schedule.practice &&
+                schedule.purpose === "trial",
             );
             const soundTrials = trials.filter(
               (trial) => trial.kind === "sound",
@@ -171,10 +177,53 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               expect(isExactZero(schedule[other])).toBe(true);
             });
 
-            // Discarded exactly when a pause (a device change included) came before its decision,
-            // or the visitor's lantern went dark: a room presents nothing that cannot be
-            // answered, so it takes the trial back and presents it again when a cell is back
-            // (the game layer, 2026-11-16).
+            // Reminder sounds after a long quiet (the game layer, 2026-11-17) are logged apart too,
+            // one for one with the reminders presented, each a reminder schedule on its ear. A
+            // chime follows each caught sound and is no trial.
+            const reminderPresented = entries.filter(
+              (entry): entry is ReminderPresentedEntry =>
+                entry.kind === "reminderPresented",
+            );
+            const reminders = snapshot.visitLog.reminders ?? [];
+            expect(reminders).toHaveLength(reminderPresented.length);
+            reminders.forEach((reminder, index) => {
+              const shown = reminderPresented[index];
+              expect(reminder.order).toBe(index + 1);
+              expect({
+                roomIndex: reminder.roomIndex,
+                ear: reminder.ear,
+                levelDb: reminder.requestedLevelDb,
+                windowStartMs: reminder.windowStartMs,
+                presentedAtMs: reminder.presentedAtMs,
+              }).toEqual({
+                roomIndex: shown?.trial.roomIndex,
+                ear: shown?.trial.ear,
+                levelDb: shown?.trial.levelDb,
+                windowStartMs: (shown?.trial.windowStartMs ?? 0) - startMs,
+                presentedAtMs: (shown?.atMs ?? 0) - startMs,
+              });
+            });
+            const reminderSchedules = harness.schedules.filter(
+              (schedule) => schedule.purpose === "reminder",
+            );
+            expect(reminderSchedules).toHaveLength(reminders.length);
+            reminderSchedules.forEach((schedule, index) => {
+              const ear = reminders[index]?.ear ?? "left";
+              const other = ear === "left" ? "right" : "left";
+              expect(hasSound(schedule[ear])).toBe(true);
+              expect(isExactZero(schedule[other])).toBe(true);
+            });
+            const scheduledInRooms = harness.schedules.filter(
+              (schedule) => schedule.stage === "room",
+            );
+            for (const schedule of scheduledInRooms) {
+              expect(["trial", "practice", "reminder", "chime"]).toContain(
+                schedule.purpose,
+              );
+            }
+
+            // Discarded exactly when a pause (a device change included) came before its decision.
+            // A dark lantern stops nothing (the game layer, 2026-11-17).
             presented.forEach((shown, index) => {
               const trial = trials[index];
               if (trial === undefined) {
@@ -188,9 +237,7 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
                       entry.event.kind === "trialScored" &&
                       sameTrialPlace(entry.event.trial, shown.trial)) ||
                     (entry.kind === "snapshot" &&
-                      (entry.snapshot.pause !== null ||
-                        (entry.snapshot.stage === "room" &&
-                          entry.snapshot.lantern?.cells === 0))),
+                      entry.snapshot.pause !== null),
                 );
               expect(next).toBeDefined();
               if (next?.kind === "snapshot") {

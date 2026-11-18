@@ -165,6 +165,42 @@ export function wingLine(wing: WingWords): string {
   }
 }
 
+/**
+ * A wing's level in two parts for the floor's card: `value`, set large, and `note`, which
+ * finishes it in small type. Together they say what `wingLine` says, and a found level is still
+ * labelled as relative to the visitor's calibration.
+ */
+export interface WingValueWords {
+  readonly value: string;
+  readonly note: string;
+}
+
+/** The two parts of a wing's level: "30 dB quieter" and "than your calibration". */
+export function wingValue(wing: WingWords): WingValueWords {
+  requireWing(wing);
+  switch (wing.state) {
+    case "found": {
+      const whole = Math.round(wing.thresholdDb as number);
+      if (whole === 0) {
+        return { value: "As loud", note: "as your calibration" };
+      }
+      return {
+        value: `${String(Math.abs(whole))} dB ${whole < 0 ? "quieter" : "louder"}`,
+        note: "than your calibration",
+      };
+    }
+    case "betterThanFloor":
+      return { value: "Quieter still", note: "than this house can whisper" };
+    case "worseThanCap":
+      return {
+        value: "Not caught",
+        note: "even the loudest sound the house may play here went by",
+      };
+    case "unreliable":
+      return { value: "No level", note: "this room should be visited again" };
+  }
+}
+
 /** Why a wing is unreliable, in one line. */
 export function unreliableReasonLine(reason: UnreliableReasonName): string {
   requireReason(reason);

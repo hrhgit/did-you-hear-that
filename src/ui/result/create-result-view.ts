@@ -1,4 +1,11 @@
+import { hearingMethodConfig } from "../../config/hearing-method-config";
+import type { GhostSoundId } from "../../config/sound-id";
 import { leavingCopy } from "../../copy/leaving-copy";
+import {
+  focusFloorLabel,
+  pictureKeyCopy,
+  resultFocusCopy,
+} from "../../copy/result-focus-copy";
 import {
   chaseScoreCopy,
   longestRowLine,
@@ -8,6 +15,11 @@ import {
 } from "../../copy/result-page-copy";
 import { roomNames } from "../../copy/room-copy";
 import { chaseScoreOf } from "../../session/chase-score";
+import {
+  resultFocus,
+  type FocusPointKind,
+  type ResultFocus,
+} from "../../session/result-focus";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import type {
   FindEarlierVisit,
@@ -20,12 +32,27 @@ import type {
   VisitArchive,
   VisitToSave,
 } from "../../session/result-page-types";
+import { drawCreature } from "../room/creature-art";
 import { drawResultSection } from "./draw-result-section";
 import { savePictureAsImage } from "./save-picture";
 import { repeatComparisonBlock } from "./show-repeat-comparison";
 
 /** The seed of the pencil that draws the result, so the house looks the same every time. */
 const resultDrawingSeed = 1887;
+
+/** How long a floor's words glow after the focus card took the visitor to them. */
+const calledGlowMs = 1800;
+
+/** The marks of the drawing, in the order the key under it lists them. */
+type PictureMark = "light" | "creature" | "dark" | "hatched" | "earlier";
+
+const pictureMarks: readonly PictureMark[] = [
+  "light",
+  "creature",
+  "dark",
+  "hatched",
+  "earlier",
+];
 
 /** What the result view is given. Everything that reads or keeps a visit comes in from outside. */
 export interface ResultViewOptions {
@@ -114,39 +141,53 @@ export function createResultView(options: ResultViewOptions): ResultView {
     backToThisVisitButton,
   ]);
   const falseAlarmLine = make("p", "result-silence visit-voice");
-  const noticeHeading = make("h2", "result-notice-heading");
-  const noticeLine = make("p", "visit-voice");
-  const notice = make("div", "result-notice", [noticeHeading, noticeLine]);
   // After a swapped repeat: the headphones may still be the other way round.
   const turnBack = make("p", "result-turn-back");
   turnBack.setAttribute("role", "status");
   turnBack.hidden = true;
-  // The score of the chase: the game's side of the visit, from the same log as the picture.
-  const scoreTotal = make("p", "result-score-total");
-  const scoreRow = make("p", "result-score-row");
-  const scoreRooms = make("ul", "result-score-rooms");
-  const score = make("section", "result-score", [
-    make("h2", "result-score-heading", [chaseScoreCopy.heading]),
-    make("div", "result-score-lines", [scoreTotal, scoreRow]),
-    scoreRooms,
-  ]);
   const head = make("header", "result-head", [
     heading,
     make("p", "result-meta", [dateLabel, visitTypeLabel]),
-    score,
     turnBack,
     shownVisit,
     falseAlarmLine,
-    notice,
+  ]);
+
+  // What stands out: the one thing the page puts first, and what to do next. When the whole
+  // visit is unreliable it holds the visit notice.
+  const focusHeading = make("h2", "result-focus-heading");
+  focusHeading.id = "result-focus-heading";
+  const focusLine = make("p", "result-focus-line");
+  const focusPoints = make("ul", "result-focus-points");
+  const focus = make("section", "result-focus", [
+    make("p", "result-focus-eyebrow", [resultFocusCopy.eyebrow]),
+    focusHeading,
+    focusLine,
+    focusPoints,
+  ]);
+  focus.setAttribute("aria-labelledby", focusHeading.id);
+
+  // The score of the chase: the game's side of the visit, from the same log as the picture. It
+  // counts catches only, never levels.
+  const scoreTiles = make("div", "result-score-tiles");
+  const scoreRooms = make("ul", "result-score-rooms");
+  const score = make("section", "result-score", [
+    make("h2", "result-score-heading", [chaseScoreCopy.heading]),
+    scoreTiles,
+    scoreRooms,
   ]);
 
   // The picture, and the control that saves it as an image.
   const drawing = make("div", "result-drawing");
   drawing.setAttribute("role", "img");
+  // What each mark of the drawing means: only the marks the picture holds.
+  const pictureKey = make("ul", "result-key");
+  pictureKey.setAttribute("aria-label", pictureKeyCopy.label);
   const savePictureButton = button(resultPageCopy.savePictureButton);
   const pictureStatus = status();
   const figure = make("div", "result-figure", [
-    drawing,
+    make("div", "result-frame", [drawing]),
+    pictureKey,
     make("div", "result-figure-controls", [savePictureButton, pictureStatus]),
   ]);
 
@@ -237,8 +278,10 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const element = make("section", "result", [
     make("div", "result-page", [
       head,
+      focus,
       figure,
       limits,
+      score,
       make("div", "result-words", [floorList, comparisonLine]),
       keep,
       saved,
@@ -296,27 +339,124 @@ export function createResultView(options: ResultViewOptions): ResultView {
     return null;
   };
 
-  const wingWords = (label: string, wing: PictureWing): HTMLElement => {
+  /** Words that are read out but not shown, beside a shown form that is not read out. */
+  const spoken = (line: string): HTMLElement =>
+    make("span", "result-spoken", [line]);
+  const shownOnly = <T extends HTMLElement>(element: T): T => {
+    element.setAttribute("aria-hidden", "true");
+    return element;
+  };
+
+  /** A room's creature, small, in a round frame of its colour. */
+  const creatureBadge = (
+    roomId: GhostSoundId,
+    className: string,
+  ): HTMLElement => {
+    const badge = make("span", `result-badge ${className}`, [
+      drawCreature(doc, roomId, "awake"),
+    ]);
+    badge.dataset.creature = roomId;
+    badge.setAttribute("aria-hidden", "true");
+    return badge;
+  };
+
+  const wingWords = (
+    side: "left" | "right",
+    label: string,
+    wing: PictureWing,
+  ): HTMLElement => {
+    // The level large and its note small. Read out, it is the wing's line in full.
     const words = make("div", "result-wing", [
       make("span", "result-wing-side", [label]),
-      make("p", "visit-voice", [wing.line]),
+      shownOnly(make("p", "result-wing-value", [wing.valueLabel])),
+      shownOnly(make("p", "result-wing-note", [wing.valueNote])),
+      make("p", "result-wing-line", [spoken(wing.line)]),
     ]);
     words.dataset.state = wing.state;
+    words.dataset.side = side;
     if (wing.reasonLine !== null) {
-      words.append(make("p", "visit-quiet", [wing.reasonLine]));
+      words.append(
+        make("p", "visit-quiet result-wing-reason", [wing.reasonLine]),
+      );
     }
     return words;
   };
 
-  const floorWords = (floor: PictureFloor): HTMLElement => {
+  /** The floors' words on the page now, by room, for the focus card to lead to. */
+  const floorItems = new Map<GhostSoundId, HTMLElement>();
+  let calledTimer: number | null = null;
+
+  /** Lights one floor of the drawing and dims the others, or lights them all again for null. */
+  const pickFloor = (roomId: GhostSoundId | null): void => {
+    const section = drawing.querySelector("svg");
+    if (section === null) {
+      return;
+    }
+    section.setAttribute("data-picking", roomId === null ? "false" : "true");
+    for (const floor of section.querySelectorAll(".result-floor")) {
+      floor.setAttribute(
+        "data-picked",
+        floor.getAttribute("data-room") === roomId ? "true" : "false",
+      );
+    }
+  };
+  const picksFloor = (element: HTMLElement, roomId: GhostSoundId): void => {
+    element.addEventListener("pointerenter", () => {
+      pickFloor(roomId);
+    });
+    element.addEventListener("pointerleave", () => {
+      pickFloor(null);
+    });
+    element.addEventListener("focusin", () => {
+      pickFloor(roomId);
+    });
+    element.addEventListener("focusout", () => {
+      pickFloor(null);
+    });
+  };
+
+  /** Takes the visitor to a floor's words, which glow for a moment. */
+  const callFloor = (roomId: GhostSoundId): void => {
+    const item = floorItems.get(roomId);
+    if (item === undefined) {
+      return;
+    }
+    const still = view.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    item.scrollIntoView({
+      block: "center",
+      behavior: still ? "auto" : "smooth",
+    });
+    item.focus({ preventScroll: true });
+    for (const other of floorItems.values()) {
+      other.removeAttribute("data-called");
+    }
+    item.setAttribute("data-called", "true");
+    if (calledTimer !== null) {
+      view.clearTimeout(calledTimer);
+    }
+    calledTimer = view.setTimeout(() => {
+      item.removeAttribute("data-called");
+      calledTimer = null;
+    }, calledGlowMs);
+  };
+
+  /** One floor in words. `standsOutFor` is why the focus card names it, or null. */
+  const floorWords = (
+    floor: PictureFloor,
+    standsOutFor: FocusPointKind | null,
+  ): HTMLElement => {
+    const roomId = floor.room.roomId;
     const item = make("li", "result-floor-words", [
-      make("h3", "result-floor-heading", [
-        make("span", "result-floor-name", [floor.roomName]),
-        make("span", "result-floor-pitch", [floor.pitchLabel]),
+      make("div", "result-floor-top", [
+        creatureBadge(roomId, "result-floor-badge"),
+        make("h3", "result-floor-heading", [
+          make("span", "result-floor-name", [floor.roomName]),
+          make("span", "result-floor-pitch", [floor.pitchLabel]),
+        ]),
       ]),
       make("div", "result-wings", [
-        wingWords(resultPageCopy.leftLabel, floor.left),
-        wingWords(resultPageCopy.rightLabel, floor.right),
+        wingWords("left", resultPageCopy.leftLabel, floor.left),
+        wingWords("right", resultPageCopy.rightLabel, floor.right),
       ]),
       make("p", "result-difference", [
         make("span", "result-difference-heading", [
@@ -330,7 +470,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
         make("p", "visit-quiet result-floor-line", [floor.playableFloorLine]),
       );
     }
-    item.dataset.room = floor.room.roomId;
+    item.dataset.room = roomId;
+    item.dataset.creature = roomId;
+    item.dataset.standsOut = standsOutFor ?? "none";
+    item.id = `result-floor-${roomId}`;
+    item.tabIndex = -1;
+    picksFloor(item, roomId);
     const offer = floor.swappedRepeat;
     if (offer !== null) {
       const swapButton = button(offer.buttonLabel);
@@ -354,6 +499,115 @@ export function createResultView(options: ResultViewOptions): ResultView {
       );
     }
     return item;
+  };
+
+  /** The focus of the result on the page now, or null when nothing is shown. */
+  const focusOf = (picture: ResultPicture): ResultFocus | null => {
+    if (shownSaved !== null) {
+      return resultFocus({
+        picture,
+        summary: shownSaved.summary,
+        floorDb: shownSaved.floorDb,
+        swappedRepeatDifferenceDb: shownSaved.swappedRepeatDifferenceDb,
+        canStillSave: false,
+      });
+    }
+    if (live !== null) {
+      return resultFocus({
+        picture,
+        summary: live.summary,
+        floorDb: hearingMethodConfig.floorDb,
+        swappedRepeatDifferenceDb:
+          hearingMethodConfig.swappedRepeatDifferenceDb,
+        canStillSave: liveSavedId === null,
+      });
+    }
+    return null;
+  };
+
+  const drawFocus = (focusNow: ResultFocus | null): void => {
+    focus.hidden = focusNow === null;
+    if (focusNow === null) {
+      return;
+    }
+    focus.dataset.kind = focusNow.kind;
+    focusHeading.textContent = focusNow.heading;
+    focusLine.textContent = focusNow.line;
+    focusPoints.hidden = focusNow.points.length === 0;
+    focusPoints.replaceChildren(
+      ...focusNow.points.map((point) => {
+        const go = make("button", "result-focus-floor", [
+          creatureBadge(point.roomId, "result-focus-badge"),
+          make("span", "result-focus-floor-label", [
+            focusFloorLabel(point.roomName, point.pitchLabel),
+          ]),
+        ]);
+        go.type = "button";
+        go.setAttribute("aria-controls", `result-floor-${point.roomId}`);
+        go.addEventListener("click", () => {
+          callFloor(point.roomId);
+        });
+        picksFloor(go, point.roomId);
+        const entry = make("li", "result-focus-point", [
+          go,
+          make("p", "result-focus-point-line", [point.line]),
+        ]);
+        entry.dataset.kind = point.kind;
+        entry.dataset.creature = point.roomId;
+        return entry;
+      }),
+    );
+  };
+
+  /** The marks a picture holds. */
+  const marksOf = (picture: ResultPicture): ReadonlySet<PictureMark> => {
+    const marks = new Set<PictureMark>();
+    for (const floor of picture.floors) {
+      for (const wing of [floor.left, floor.right]) {
+        if (wing.lightDepthFraction === null) {
+          marks.add("hatched");
+        } else if (wing.lightDepthFraction > 0) {
+          marks.add("light");
+          marks.add("creature");
+        }
+        if (wing.state === "worseThanCap") {
+          marks.add("dark");
+        }
+        if ((wing.earlier?.outlineDepthFraction ?? 0) > 0) {
+          marks.add("earlier");
+        }
+      }
+    }
+    return marks;
+  };
+
+  const drawKey = (picture: ResultPicture): void => {
+    const marks = marksOf(picture);
+    // The creature in the key is the first one the drawing shows, from the top of the house.
+    const firstLit = [...picture.floors]
+      .reverse()
+      .find((floor) =>
+        [floor.left, floor.right].some(
+          (wing) => (wing.lightDepthFraction ?? 0) > 0,
+        ),
+      )?.room.roomId;
+    pictureKey.replaceChildren(
+      ...pictureMarks
+        .filter((mark) => marks.has(mark))
+        .map((mark) => {
+          const swatch =
+            mark === "creature" && firstLit !== undefined
+              ? creatureBadge(firstLit, "result-key-swatch")
+              : shownOnly(make("span", "result-key-swatch"));
+          const item = make("li", "result-key-item", [
+            swatch,
+            make("span", "", [pictureKeyCopy[mark]]),
+          ]);
+          item.dataset.mark = mark;
+          return item;
+        }),
+    );
+    pictureKey.hidden = marks.size === 0;
   };
 
   /** Draws the picture and the line about the earlier visit. Called on every change of the name. */
@@ -471,6 +725,9 @@ export function createResultView(options: ResultViewOptions): ResultView {
     if (picture === null) {
       return;
     }
+    const focusNow = focusOf(picture);
+    drawFocus(focusNow);
+    drawKey(picture);
     heading.textContent = picture.heading;
     drawing.setAttribute("aria-label", picture.heading);
     dateLabel.textContent = picture.dateLabel;
@@ -480,20 +737,35 @@ export function createResultView(options: ResultViewOptions): ResultView {
     score.hidden = shownLog === null;
     if (shownLog !== null) {
       const chase = chaseScoreOf(shownLog);
-      scoreTotal.textContent = totalCaughtLine(chase.caughtCount);
-      scoreRow.textContent = longestRowLine(chase.longestRow);
+      // A count large and its label small. Read out, it is the count's line in full.
+      const tile = (count: number, label: string, line: string): HTMLElement =>
+        make("p", "result-score-tile", [
+          shownOnly(make("span", "result-score-number", [String(count)])),
+          shownOnly(make("span", "result-score-label", [label])),
+          spoken(line),
+        ]);
+      scoreTiles.replaceChildren(
+        tile(
+          chase.caughtCount,
+          chaseScoreCopy.caughtLabel,
+          totalCaughtLine(chase.caughtCount),
+        ),
+        tile(
+          chase.longestRow,
+          chaseScoreCopy.rowLabel,
+          longestRowLine(chase.longestRow),
+        ),
+      );
       scoreRooms.replaceChildren(
         ...chase.rooms.map((room) =>
-          make("li", "", [
-            roomCaughtLine(roomNames[room.roomId], room.caughtCount),
+          make("li", "result-score-room", [
+            creatureBadge(room.roomId, "result-score-badge"),
+            make("span", "", [
+              roomCaughtLine(roomNames[room.roomId], room.caughtCount),
+            ]),
           ]),
         ),
       );
-    }
-    notice.hidden = picture.visitNotice === null;
-    if (picture.visitNotice !== null) {
-      noticeHeading.textContent = picture.visitNotice.heading;
-      noticeLine.textContent = picture.visitNotice.line;
     }
     limitsHeading.textContent = picture.limitsStatement.heading;
     limitsList.replaceChildren(
@@ -501,7 +773,21 @@ export function createResultView(options: ResultViewOptions): ResultView {
         make("li", "", [sentence]),
       ),
     );
-    floorList.replaceChildren(...[...picture.floors].reverse().map(floorWords));
+    const standingOut = new Map(
+      focusNow?.points.map((point) => [point.roomId, point.kind] as const) ??
+        [],
+    );
+    floorItems.clear();
+    floorList.replaceChildren(
+      ...[...picture.floors].reverse().map((floor) => {
+        const item = floorWords(
+          floor,
+          standingOut.get(floor.room.roomId) ?? null,
+        );
+        floorItems.set(floor.room.roomId, item);
+        return item;
+      }),
+    );
 
     shownVisit.hidden = shownSaved === null;
     if (shownSaved !== null) {
@@ -654,6 +940,11 @@ export function createResultView(options: ResultViewOptions): ResultView {
       drawnKey = null;
       element.hidden = true;
       drawing.replaceChildren();
+      floorItems.clear();
+      if (calledTimer !== null) {
+        view.clearTimeout(calledTimer);
+        calledTimer = null;
+      }
     },
   };
 }

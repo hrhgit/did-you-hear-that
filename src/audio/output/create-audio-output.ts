@@ -141,7 +141,7 @@ export interface PlayRequest {
   readonly levelDb: number;
   readonly purpose: Extract<
     Purpose,
-    "trial" | "practice" | "replay" | "listening"
+    "trial" | "practice" | "replay" | "listening" | "reminder" | "chime"
   >;
   readonly random: RandomSource;
 }
@@ -169,8 +169,20 @@ export interface AudioOutput {
   rangeReport(): RangeReport | null;
   playHeadphoneCheck(random: RandomSource): PlayOutcome;
 
-  beginRoom(): void;
+  /**
+   * Marks the start of a room. It began a span of the rise limit (audio-safety rule 4) until the
+   * owner dropped that rule on 2026-11-17, and now does nothing; the options are kept so that
+   * callers need not change.
+   */
+  beginRoom(options?: BeginRoomOptions): void;
   play(request: PlayRequest): PlayOutcome;
+  /**
+   * Fades the sound under way to exact zero over the stop fade, without stopping the output and
+   * without telling any stop listener, so the next sound may start once the fade has ended. Does
+   * nothing while no sound plays, while the calibration music plays, or when the output is not
+   * running. The room uses it to cut a caught sound short (the game layer, 2026-11-17).
+   */
+  fadeOutSound(): void;
 
   clampLog(): readonly ClampLogEntry[];
   timestampPair(): TimestampPair | null;
@@ -211,6 +223,14 @@ export interface CalibrationMusicOutput {
   /** Fades the music to exact zero over the stop fade. Does nothing when it is not playing. */
   stopCalibrationMusic(): void;
 }
+
+/** What `beginRoom` takes. Nothing of it has an effect since the rise limit was dropped. */
+export interface BeginRoomOptions {
+  readonly riseLimitPer?: RiseLimitScope;
+}
+
+/** See `BeginRoomOptions`. */
+export type RiseLimitScope = "ear" | "sound";
 
 interface SoundToSchedule {
   readonly soundId: SoundId;
@@ -294,7 +314,6 @@ export function createAudioOutput(options: {
   let keptSettingDb: number | null = null;
   let calibrating = false;
   let lastRepeatSettingDb: number | null = null;
-  let previousGain: Record<Ear, number | null> = { left: null, right: null };
   let busyEndMs: number | null = null;
   const clampEntries: ClampLogEntry[] = [];
   const stopListeners = new Set<(event: StopEvent) => void>();
@@ -357,7 +376,6 @@ export function createAudioOutput(options: {
     keptSettingDb = null;
     lastRepeatSettingDb = null;
     lastMusicSettingDb = null;
-    previousGain = { left: null, right: null };
   };
 
   const setSound = (next: CalibrationSound): void => {
@@ -737,12 +755,6 @@ export function createAudioOutput(options: {
       earChoice: sound.earChoice,
       requestedLevelDb: sound.levelDb,
       calibrationGain: sound.calibrationGain,
-      // A replay, and a calibration repeat, which follows the control (the owner, 2026-11-16),
-      // are not held to the rise limit.
-      previousAppliedGain:
-        sound.purpose === "replay" || sound.purpose === "calibration"
-          ? null
-          : { ...previousGain },
     });
     if (prepared.kind === "refused") {
       return refused(prepared.reason);
@@ -755,11 +767,6 @@ export function createAudioOutput(options: {
       startMs,
     );
     busyEndMs = endMs;
-    const earsPlayed: readonly Ear[] =
-      sound.earChoice === "both" ? ["left", "right"] : [sound.earChoice];
-    for (const ear of earsPlayed) {
-      previousGain[ear] = prepared.appliedGain;
-    }
     if (prepared.clampLimit !== null) {
       clampEntries.push(
         Object.freeze({
@@ -997,7 +1004,19 @@ export function createAudioOutput(options: {
     },
 
     beginRoom() {
-      previousGain = { left: null, right: null };
+      // Nothing to begin since the rise limit was dropped (the owner, 2026-11-17).
+    },
+
+    fadeOutSound() {
+      if (state.kind !== "running" || musicPlaying || busyEndMs === null) {
+        return;
+      }
+      const nowMs = backend.currentTimeMs();
+      if (busyEndMs <= nowMs) {
+        return;
+      }
+      backend.fadeToSilence(stopFadeMs);
+      busyEndMs = Math.min(busyEndMs, nowMs + stopFadeMs);
     },
 
     play(request): PlayOutcome {

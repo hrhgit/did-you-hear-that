@@ -22,6 +22,7 @@ export function swappedEarpieceOutput(output: AudioOutput): AudioOutput {
     playHeadphoneCheck: output.playHeadphoneCheck,
     beginRoom: output.beginRoom,
     play: (request) => output.play({ ...request, ear: earpieces[request.ear] }),
+    fadeOutSound: output.fadeOutSound,
     clampLog: output.clampLog,
     timestampPair: output.timestampPair,
   } satisfies AudioOutput);

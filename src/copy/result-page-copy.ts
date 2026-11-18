@@ -47,6 +47,10 @@ export const resultPageCopy = Object.freeze({
  */
 export const chaseScoreCopy = Object.freeze({
   heading: "Your chase",
+  /** Under the number of sounds caught in the whole visit. */
+  caughtLabel: "caught in all",
+  /** Under the most sounds caught one after another in one room. */
+  rowLabel: "longest row of catches",
 });
 
 function requireWholeCount(count: number, what: string): void {

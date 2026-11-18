@@ -80,13 +80,23 @@ export interface PracticePresentedEntry extends EntryBase {
   readonly trial: PresentedTrial;
 }
 
+/**
+ * A reminder sound presented after a long quiet (the game layer, 2026-11-17). Kept apart from
+ * `presented` too: it is no trial of the search, and the log holds it in `reminders`.
+ */
+export interface ReminderPresentedEntry extends EntryBase {
+  readonly kind: "reminderPresented";
+  readonly trial: PresentedTrial;
+}
+
 export type TimelineEntry =
   | ActionEntry
   | StopReportEntry
   | EventEntry
   | SnapshotEntry
   | PresentedEntry
-  | PracticePresentedEntry;
+  | PracticePresentedEntry
+  | ReminderPresentedEntry;
 
 export interface VisitTimeline {
   /** The driver to give `playVisit`. Its flow and stop reports are recorded in `entries`. */
@@ -147,7 +157,12 @@ export function observeVisit(harness: VisitHarness): VisitTimeline {
     entries.push(
       Object.freeze({
         ...base(),
-        kind: trial.practice === true ? "practicePresented" : "presented",
+        kind:
+          trial.reminder === true
+            ? "reminderPresented"
+            : trial.practice === true
+              ? "practicePresented"
+              : "presented",
         trial,
       }),
     );

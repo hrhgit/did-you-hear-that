@@ -12,7 +12,9 @@ export type EarChoice = Ear | "both";
 
 /**
  * Why a sound is played. Only calibration repeats have the Purpose `calibration`. A `practice`
- * sound is held to every limit of a `trial` sound, the rise limit included (audible-start).
+ * sound is held to every limit of a `trial` sound (audible-start). A `reminder` is a ghost sound
+ * played after a long quiet that counts for nothing, and a `chime` the soft bell after a catch;
+ * both are held to the same limits (the game layer, 2026-11-17).
  */
 export type Purpose =
   | "trial"
@@ -20,19 +22,22 @@ export type Purpose =
   | "replay"
   | "listening"
   | "headphoneCheck"
-  | "calibration";
+  | "calibration"
+  | "reminder"
+  | "chime";
 
-/** The limit that set the played level of a clamped sound. */
-export type ClampLimit = "anchorCap" | "rise" | "ceiling";
+/**
+ * The limit that set the played level of a clamped sound. Only the ceiling is left: the anchor cap
+ * and the rise limit were dropped from the output stage on 2026-11-17.
+ */
+export type ClampLimit = "ceiling";
 
 /** Why `preparePlayback` refused a request, in the order its steps check them. */
 export type PreparationRefusal =
   | "unsupportedSampleRate"
   | "emptyBuffer"
-  | "tooLong"
   | "notFinite"
   | "silentBuffer"
-  | "fadeTooShort"
   | "invalidLevel"
   | "invalidCalibrationGain"
   | "bothEarsForGhostSound"
@@ -47,8 +52,6 @@ export interface PlaybackRequest {
   readonly earChoice: EarChoice;
   readonly requestedLevelDb: number;
   readonly calibrationGain: number;
-  /** null when the Rise_Limit does not apply (a replay, or nothing played yet in the Room_Span). */
-  readonly previousAppliedGain: Readonly<Record<Ear, number | null>> | null;
 }
 
 /** What `preparePlayback` returns: a refusal, or the two channels to play as they are. */

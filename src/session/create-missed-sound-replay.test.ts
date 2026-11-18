@@ -696,6 +696,7 @@ function scriptedOutput(script: readonly PlayOutcome[], state: OutputState) {
     rangeReport: () => null,
     playHeadphoneCheck: unused,
     beginRoom: unused,
+    fadeOutSound: () => undefined,
     play(request) {
       const outcome = script[plays.length];
       plays.push({ request, atMs: timer?.now() ?? Number.NaN });
@@ -780,7 +781,7 @@ describe("createMissedSoundReplay on a scripted output", () => {
     expect(replay.notRunning).toEqual([]);
   });
 
-  it.each<PlayRefusal>(["busy", "tooLong", "fadeTooShort", "unsupported"])(
+  it.each<PlayRefusal>(["busy", "emptyBuffer", "silentBuffer", "unsupported"])(
     "asks for the same sound one gap after a refusal %s",
     (reason) => {
       const replay = scriptedReplay([refusedWith(reason), scheduled()]);

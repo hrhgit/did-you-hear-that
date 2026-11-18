@@ -19,6 +19,8 @@ const wing = (ear: "left" | "right"): PictureWing => ({
   line: `${ear} line`,
   reasonLine: null,
   earlier: null,
+  valueLabel: `${ear} value`,
+  valueNote: `${ear} note`,
 });
 
 const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({

@@ -1,6 +1,5 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { audioOutputConfig } from "../../src/config/audio-output-config";
 import type { SoundId } from "../../src/config/sound-id";
 import { ghostSoundIds } from "../../src/config/sound-id";
 import type {
@@ -25,7 +24,6 @@ const fallbackSampleRateHz = 44100;
 type Fault =
   | { readonly kind: "unsupportedSampleRate"; readonly sampleRateHz: number }
   | { readonly kind: "emptyBuffer" }
-  | { readonly kind: "tooLong"; readonly extraSampleCount: number }
   | {
       readonly kind: "notFinite";
       readonly position: number;
@@ -33,9 +31,7 @@ type Fault =
     }
   | { readonly kind: "invalidLevel"; readonly levelDb: number }
   | { readonly kind: "invalidCalibrationGain"; readonly gain: number }
-  | { readonly kind: "invalidPreviousGain"; readonly gain: number }
   | { readonly kind: "bothEarsForGhostSound"; readonly soundId: SoundId }
-  | { readonly kind: "fadeTooShort"; readonly position: number }
   | { readonly kind: "silentBuffer" };
 
 /** The base request as it is. */
@@ -54,10 +50,6 @@ const faultArbitrary: fc.Arbitrary<Fault> = fc.oneof(
   }),
   fc.record({ kind: fc.constant("emptyBuffer" as const) }),
   fc.record({
-    kind: fc.constant("tooLong" as const),
-    extraSampleCount: fc.integer({ min: 1, max: 5000 }),
-  }),
-  fc.record({
     kind: fc.constant("notFinite" as const),
     position: fc.double({ min: 0, max: 1, noNaN: true }),
     value: nonFinite,
@@ -71,16 +63,8 @@ const faultArbitrary: fc.Arbitrary<Fault> = fc.oneof(
     ),
   }),
   fc.record({
-    kind: fc.constant("invalidPreviousGain" as const),
-    gain: fc.constantFrom(0, -1, Number.NaN, Number.POSITIVE_INFINITY),
-  }),
-  fc.record({
     kind: fc.constant("bothEarsForGhostSound" as const),
     soundId: fc.constantFrom(...ghostSoundIds),
-  }),
-  fc.record({
-    kind: fc.constant("fadeTooShort" as const),
-    position: fc.double({ min: 0, max: 1, noNaN: true }),
   }),
   fc.record({ kind: fc.constant("silentBuffer" as const) }),
 );
@@ -144,11 +128,9 @@ function build(
       : base.sampleRateHz;
   const longest = longestSampleCount(bufferRateHz);
   const length =
-    fault.kind === "tooLong"
-      ? longest + fault.extraSampleCount
-      : fault.kind === "emptyBuffer"
-        ? 0
-        : Math.max(2, Math.floor(base.durationFraction * longest));
+    fault.kind === "emptyBuffer"
+      ? 0
+      : Math.max(2, Math.floor(base.durationFraction * longest));
   let samples = fadedTone(base, bufferRateHz, length);
   if (fault.kind === "notFinite") {
     samples[Math.min(length - 1, Math.floor(fault.position * length))] =
@@ -157,27 +139,12 @@ function build(
   if (fault.kind === "silentBuffer") {
     samples = new Float32Array(length);
   }
-  if (fault.kind === "fadeTooShort") {
-    // Zeros, then a jump to the peak at least outputFadeMs from either end.
-    const fadeSampleCount = Math.ceil(
-      (audioOutputConfig.outputFadeMs * bufferRateHz) / 1000,
-    );
-    const first = fadeSampleCount;
-    const last = length - 1 - fadeSampleCount;
-    const jump = first + Math.floor(fault.position * (last - first));
-    samples = new Float32Array(length);
-    samples.fill(base.amplitude, jump);
-  }
   const soundId =
     fault.kind === "bothEarsForGhostSound" ? fault.soundId : base.soundId;
   const earChoice: EarChoice =
     fault.kind === "bothEarsForGhostSound" ? "both" : base.ear;
   const expected: PreparationRefusal | null =
-    fault.kind === "none"
-      ? null
-      : fault.kind === "invalidPreviousGain"
-        ? "invalidCalibrationGain"
-        : fault.kind;
+    fault.kind === "none" ? null : fault.kind;
   return {
     request: {
       samples,
@@ -190,16 +157,12 @@ function build(
         fault.kind === "invalidCalibrationGain"
           ? fault.gain
           : base.calibrationGain,
-      previousAppliedGain:
-        fault.kind === "invalidPreviousGain"
-          ? { left: fault.gain, right: fault.gain }
-          : null,
     },
     expected,
   };
 }
 
-describe("audio output CP4. Unsafe requests are refused (Universal; R6.3, R7.6, R10.2 to R10.5)", () => {
+describe("audio output CP4. Broken requests are refused (Universal; R6.3, R7.6, R10.4, R10.5)", () => {
   it("refuses a request with one fault, with the reason of that fault", () => {
     fc.assert(
       fc.property(baseArbitrary, faultArbitrary, (base, fault) => {

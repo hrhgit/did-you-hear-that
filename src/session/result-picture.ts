@@ -18,6 +18,7 @@ import {
   unreliableReasonLine,
   visitNoticeLine,
   wingLine,
+  wingValue,
 } from "../copy/result-lines";
 import { pitchLabel, roomNames } from "../copy/room-copy";
 import {
@@ -126,6 +127,7 @@ function wing(
   scale: FloorScale,
   earlierResult: VisitEarResult | null,
 ): PictureWing {
+  const value = wingValue(words(result));
   return {
     ear,
     state: result.state,
@@ -137,6 +139,8 @@ function wing(
         : null,
     // The outline of an earlier visit (design.md, "Comparison with an earlier visit").
     earlier: earlierResult === null ? null : earlierWing(earlierResult, scale),
+    valueLabel: value.value,
+    valueNote: value.note,
   };
 }
 

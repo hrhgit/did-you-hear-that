@@ -2,6 +2,7 @@ import type { RandomSource } from "../../config/seeded-random";
 import type { SoundId } from "../../config/sound-id";
 import { renderAtticWhine } from "./attic-whine";
 import { renderCalibrationHiss } from "./calibration-hiss";
+import { renderCatchChime } from "./catch-chime";
 import { renderCellarKnock } from "./cellar-knock";
 import { renderCorridorHum } from "./corridor-hum";
 import { renderNurseryMusicBox } from "./nursery-music-box";
@@ -25,4 +26,5 @@ export const soundRenderers: Readonly<Record<SoundId, RenderFunction>> =
     stairs: renderStairsScrape,
     attic: renderAtticWhine,
     calibration: renderCalibrationHiss,
+    chime: renderCatchChime,
   });

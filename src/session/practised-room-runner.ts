@@ -21,6 +21,7 @@ import type {
 } from "./room-runner";
 import type { PlayedPractice, VisitLogRecorder } from "./visit-log-recorder";
 import type {
+  PracticeMiss,
   RoomPracticePhase,
   ScoredPracticeTrial,
   VisitRoom,
@@ -74,24 +75,27 @@ export function practiceLevelsDb(
   );
 }
 
-export interface PractisedRoomRunnerOptions {
-  readonly output: AudioOutput;
-  readonly timer: Timer;
+/** One room of a practice: the room, the number of its run and the top of its search. */
+export interface PractisedRoom {
   readonly room: VisitRoom;
   readonly attempt: number;
+  /** The loudest level this room's search may ask for. No practice sound of it asks for more. */
+  readonly searchCapDb: number;
+}
+
+/** What every practising runner takes, whether it practises one room or several. */
+interface PractiseCommonOptions {
+  readonly output: AudioOutput;
+  readonly timer: Timer;
   readonly soundRandom: RandomSource;
   readonly recorder: VisitLogRecorder;
   readonly latestOffset: LatestOffset;
-  /** The loudest level this room's search may ask for. No practice sound asks for more. */
-  readonly searchCapDb: number;
   /** The runner of the search, started once the practice ends. */
   readonly counting: RoomRunner;
   /** Called with a decided practice sound's log entry, in the same call that decides it. */
   readonly practiceScored: (entry: ScoredPracticeTrial) => void;
   /** Called once, when the practice ends and the counting begins. */
   readonly countingStarted: () => void;
-  /** Called when a round ends with a side that never caught its sound. */
-  readonly notHeard: (ears: readonly Ear[]) => void;
   /** As the room runner's: a practice sound was refused because the output is not running. */
   readonly pauseFromOutput: () => void;
   /** As the room runner's: one practice sound was refused too many times in a row. */
@@ -101,11 +105,30 @@ export interface PractisedRoomRunnerOptions {
   readonly settings?: PracticeSettings;
 }
 
+export interface PractisedRoomRunnerOptions
+  extends PractiseCommonOptions, PractisedRoom {
+  /** Called when a round ends with a side that never caught its sound. */
+  readonly notHeard: (ears: readonly Ear[]) => void;
+}
+
+/** What the runner that practises several rooms takes (one-room design.md, "The roll call"). */
+export interface PractisedRoomsRunnerOptions extends PractiseCommonOptions {
+  /** The rooms to practise, in the order they are practised. At least one. */
+  readonly rooms: readonly PractisedRoom[];
+  /** Called when a round ends with a room's side that never caught its sound. */
+  readonly notHeard: (missed: readonly PracticeMiss[]) => void;
+}
+
 /** What the room's screen needs to know of the practice. Never which side a sound is on. */
 export interface PracticeState {
   readonly phase: RoomPracticePhase;
   readonly soundPlaying: boolean;
+  /** The sides a round left uncaught, each once, in the order they were first missed. */
   readonly notHeardEars: readonly Ear[];
+  /** The room whose sound the practice plays or is about to play, or null outside `practice`. */
+  readonly practising: VisitRoom | null;
+  /** The rooms' sides a round left uncaught, in the order they were practised. */
+  readonly notHeard: readonly PracticeMiss[];
 }
 
 /** A room runner that practises first. `goOn` ends a not-heard round and starts the counting. */
@@ -114,13 +137,20 @@ export interface PractisedRoomRunner extends RoomRunner {
   practice(): PracticeState;
 }
 
-interface Pending {
+/** One room's side, to be practised. */
+interface Turn {
+  readonly member: PractisedRoom;
   readonly ear: Ear;
+}
+
+interface Pending {
+  readonly turn: Turn;
   readonly levelDb: number;
   readonly practiceNumber: number;
 }
 
 interface Presented {
+  readonly turn: Turn;
   readonly sound: PlayedPractice;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
@@ -137,10 +167,45 @@ interface Presented {
 export function createPractisedRoomRunner(
   options: PractisedRoomRunnerOptions,
 ): PractisedRoomRunner {
-  const { output, timer, room, attempt, recorder, latestOffset, counting } =
-    options;
+  const { room, attempt, searchCapDb, notHeard, ...common } = options;
+  return createPractisedRoomsRunner({
+    ...common,
+    rooms: [{ room, attempt, searchCapDb }],
+    notHeard: (missed) => {
+      notHeard(Object.freeze(missed.map(({ ear }) => ear)));
+    },
+  });
+}
+
+/**
+ * Creates the runner of several room runs that begin with one practice between them (one-room
+ * design.md, "The roll call"). The rooms are practised one after another in the order given, each
+ * as `createPractisedRoomRunner` practises one: the left ear and then the right, at that room's
+ * `practiceLevelsDb`. A round that leaves a room's side uncaught calls `notHeard` once, after the
+ * last room: `resume` plays a new round for those rooms' sides, and `goOn` starts the counting
+ * without them. A practice sound is logged with its own room and attempt; the round is counted
+ * across the rooms, and the number of a practice sound within its room and round.
+ *
+ * Throws a `RangeError` for an empty list of rooms.
+ */
+export function createPractisedRoomsRunner(
+  options: PractisedRoomsRunnerOptions,
+): PractisedRoomRunner {
+  const { output, timer, rooms, recorder, latestOffset, counting } = options;
   const settings = options.settings ?? shippedSettings;
-  const levels = practiceLevelsDb(options.searchCapDb, settings);
+  const first = rooms[0];
+  if (first === undefined) {
+    throw new RangeError("A practice needs at least one room.");
+  }
+  const levelsOf = new Map<PractisedRoom, readonly number[]>(
+    rooms.map((member) => [
+      member,
+      practiceLevelsDb(member.searchCapDb, settings),
+    ]),
+  );
+  const everyTurn: readonly Turn[] = rooms.flatMap((member) =>
+    practiceEars.map((ear) => ({ member, ear })),
+  );
 
   type Phase =
     | "idle"
@@ -153,12 +218,13 @@ export function createPractisedRoomRunner(
   let phase: Phase = "idle";
   let handle: TimerHandle | null = null;
   let round = 1;
-  let practiceNumber = 0;
-  /** The ears still to practise this round, the first one under way. */
-  let queue: Ear[] = [];
-  /** How many sounds the ear under way has heard this round. */
+  /** The practice sounds each room has been given this round, by room index. */
+  let numberOf = new Map<number, number>();
+  /** The sides still to practise this round, the first one under way. */
+  let queue: Turn[] = [];
+  /** How many sounds the side under way has heard this round. */
   let soundIndex = 0;
-  let missedEars: Ear[] = [];
+  let missed: Turn[] = [];
   let pending: Pending | null = null;
   let presented: Presented | null = null;
   let refusalsInARow = 0;
@@ -169,6 +235,11 @@ export function createPractisedRoomRunner(
       handle = null;
     }
   };
+
+  const missesOf = (turns: readonly Turn[]): readonly PracticeMiss[] =>
+    Object.freeze(
+      turns.map(({ member, ear }) => Object.freeze({ room: member.room, ear })),
+    );
 
   const waitGap = (sound: Pending): void => {
     phase = "waitingGap";
@@ -187,36 +258,41 @@ export function createPractisedRoomRunner(
 
   /** Waits for the next practice sound, or ends the round. */
   const next = (): void => {
-    const ear = queue[0];
-    if (ear === undefined) {
-      if (missedEars.length > 0) {
+    const turn = queue[0];
+    if (turn === undefined) {
+      if (missed.length > 0) {
         phase = "notHeard";
         pending = null;
-        options.notHeard(Object.freeze([...missedEars]));
+        options.notHeard(missesOf(missed));
         return;
       }
       beginCounting();
       return;
     }
-    practiceNumber += 1;
+    const { roomIndex } = turn.member.room;
+    const practiceNumber = (numberOf.get(roomIndex) ?? 0) + 1;
+    numberOf.set(roomIndex, practiceNumber);
+    const levels = levelsOf.get(turn.member) ?? [];
     const levelDb = levels[soundIndex] ?? levels[levels.length - 1] ?? 0;
-    pending = { ear, levelDb, practiceNumber };
+    pending = { turn, levelDb, practiceNumber };
     waitGap(pending);
   };
 
-  const beginRound = (ears: readonly Ear[]): void => {
-    queue = [...ears];
+  const beginRound = (turns: readonly Turn[]): void => {
+    queue = [...turns];
     soundIndex = 0;
-    missedEars = [];
-    practiceNumber = 0;
+    missed = [];
+    numberOf = new Map();
     next();
   };
 
   const present = (sound: Pending): void => {
+    const { member, ear } = sound.turn;
+    const { room, attempt } = member;
     const presentedAtMs = timer.now();
     const outcome = output.play({
       soundId: room.roomId,
-      ear: sound.ear,
+      ear,
       levelDb: sound.levelDb,
       purpose: "practice",
       random: options.soundRandom,
@@ -253,12 +329,13 @@ export function createPractisedRoomRunner(
       windowStartMs - (presentedAtMs + settings.scheduleLeadMs);
     const windowEndMs = windowStartMs + settings.responseWindowMs;
     presented = {
+      turn: sound.turn,
       sound: {
         roomIndex: room.roomIndex,
         attempt,
         round,
         practiceNumber: sound.practiceNumber,
-        ear: sound.ear,
+        ear,
         requestedLevelDb: sound.levelDb,
         playedLevelDb: outcome.playedLevelDb,
         clampLimit: outcome.clampLimit,
@@ -280,7 +357,7 @@ export function createPractisedRoomRunner(
     options.onTrialPresented?.(
       Object.freeze({
         kind: "sound",
-        ear: sound.ear,
+        ear,
         levelDb: sound.levelDb,
         windowStartMs,
         windowEndMs,
@@ -302,9 +379,9 @@ export function createPractisedRoomRunner(
     }
     clearTimer();
     presented = null;
-    const { ear } = current.sound;
+    const { turn } = current;
     const outcome: SoundOutcome =
-      response === ear
+      response === turn.ear
         ? "caught"
         : response === "none"
           ? "missed"
@@ -320,8 +397,8 @@ export function createPractisedRoomRunner(
       soundIndex = 0;
     } else {
       soundIndex += 1;
-      if (soundIndex >= levels.length) {
-        missedEars.push(ear);
+      if (soundIndex >= settings.practiceSoundsPerEarMaxCount) {
+        missed.push(turn);
         queue.shift();
         soundIndex = 0;
       }
@@ -340,12 +417,15 @@ export function createPractisedRoomRunner(
     }
   };
 
+  /** The room an answer that decides nothing is logged against. */
+  const practisedNow = (): PractisedRoom => pending?.turn.member ?? first;
+
   const runner: PractisedRoomRunner = {
     start() {
       if (phase !== "idle") {
         return;
       }
-      beginRound(practiceEars);
+      beginRound(everyTurn);
     },
 
     answer(side, pressedAtMs) {
@@ -369,6 +449,7 @@ export function createPractisedRoomRunner(
         decide(side, atMs);
         return;
       }
+      const { room, attempt } = practisedNow();
       recorder.practiceAnswerIgnored({
         atMs,
         side,
@@ -401,7 +482,7 @@ export function createPractisedRoomRunner(
           return;
         case "notHeard":
           round += 1;
-          beginRound(missedEars);
+          beginRound(missed);
           return;
         default:
           return;
@@ -437,19 +518,35 @@ export function createPractisedRoomRunner(
       }
     },
 
+    waitingTrack() {
+      if (phase === "counting") {
+        return counting.waitingTrack();
+      }
+      if (phase === "idle" || phase === "finished" || pending === null) {
+        return null;
+      }
+      const { room, attempt } = pending.turn.member;
+      return { room, attempt };
+    },
+
     practice(): PracticeState {
+      const practicePhase: RoomPracticePhase =
+        phase === "notHeard"
+          ? "notHeard"
+          : phase === "counting" ||
+              (phase === "finished" && counting.state() === "finished")
+            ? "counting"
+            : "practice";
+      const misses = phase === "notHeard" ? missed : [];
       return Object.freeze({
-        phase:
-          phase === "notHeard"
-            ? "notHeard"
-            : phase === "counting" ||
-                (phase === "finished" && counting.state() === "finished")
-              ? "counting"
-              : "practice",
+        phase: practicePhase,
         soundPlaying: phase === "presented",
-        notHeardEars: Object.freeze(
-          phase === "notHeard" ? [...missedEars] : [],
-        ),
+        notHeardEars: Object.freeze([...new Set(misses.map(({ ear }) => ear))]),
+        practising:
+          practicePhase === "practice"
+            ? (pending?.turn.member.room ?? first.room)
+            : null,
+        notHeard: missesOf(misses),
       });
     },
   };

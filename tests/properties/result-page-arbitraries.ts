@@ -332,7 +332,7 @@ function levelNotAsAskedTrial(
     ear: "left",
     requestedLevelDb: plan.searchCapDb,
     playedLevelDb: plan.searchCapDb - levelGridStepDb,
-    clampLimit: "anchorCap",
+    clampLimit: "ceiling",
     status: "scored",
     response: "left",
     outcome: "caught",

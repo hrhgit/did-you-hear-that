@@ -34,8 +34,7 @@ const {
   calibrationMusicLoadMaxMs,
   calibrationMusicRisePeriodMs,
 } = audioOutputConfig;
-const { capRelativeToAnchorDb, upwardStepDb, startingLevelDb } =
-  hearingMethodConfig;
+const { startingLevelDb } = hearingMethodConfig;
 
 /** The lowest supported rate, where the real renderers are quickest. */
 const sampleRateHz = soundRulesConfig.sampleRateMinHz;
@@ -538,30 +537,28 @@ describe("createAudioOutput", () => {
       const outcome = output.play({
         soundId: "corridor",
         ear: "right",
-        levelDb: capRelativeToAnchorDb + 5,
+        levelDb: 60,
         purpose: "trial",
         random,
       });
       expect(outcome).toMatchObject({
         kind: "scheduled",
-        requestedLevelDb: capRelativeToAnchorDb + 5,
-        clampLimit: "anchorCap",
+        requestedLevelDb: 60,
+        clampLimit: "ceiling",
       });
       if (outcome.kind !== "scheduled") {
         return;
       }
-      // At the cap, within the rounding of the gain it is played at.
-      expect(outcome.playedLevelDb).toBeLessThanOrEqual(capRelativeToAnchorDb);
-      expect(outcome.playedLevelDb).toBeCloseTo(capRelativeToAnchorDb, 12);
+      expect(outcome.playedLevelDb).toBeLessThan(60);
       expect(output.clampLog()).toEqual([
         {
           startMs: outcome.startMs,
           soundId: "corridor",
           earChoice: "right",
           purpose: "trial",
-          requestedLevelDb: capRelativeToAnchorDb + 5,
+          requestedLevelDb: 60,
           playedLevelDb: outcome.playedLevelDb,
-          clampLimit: "anchorCap",
+          clampLimit: "ceiling",
         },
       ]);
       waitUntil(backend, outcome.endMs);
@@ -576,105 +573,16 @@ describe("createAudioOutput", () => {
     });
   });
 
-  describe("the rise limit within a Room_Span (R11, D15)", () => {
-    it("limits a rise on one ear across purposes, and beginRoom forgets the previous sounds", async () => {
-      const { backend, output } = await runningAndCalibrated(-25);
-      // The last calibration repeat, at Level 0 in both ears, is the previous sound on each ear:
-      // one upward step above it is the cap of 5 dB, and is played as asked.
-      const afterCalibration = output.play({
-        soundId: "corridor",
-        ear: "left",
-        levelDb: upwardStepDb,
-        purpose: "listening",
-        random,
-      });
-      expect(afterCalibration).toMatchObject({
-        playedLevelDb: upwardStepDb,
-        clampLimit: null,
-      });
-      if (afterCalibration.kind === "scheduled") {
-        waitUntil(backend, afterCalibration.endMs);
-      }
-      // A listening sound, then a trial more than one step above it on the same ear.
-      const listening = output.play({
-        soundId: "corridor",
-        ear: "left",
-        levelDb: -20,
-        purpose: "listening",
-        random,
-      });
-      if (listening.kind === "scheduled") {
-        waitUntil(backend, listening.endMs);
-      }
-      const acrossPurposes = output.play({
-        soundId: "corridor",
-        ear: "left",
-        levelDb: 0,
-        purpose: "trial",
-        random,
-      });
-      expect(acrossPurposes).toMatchObject({ clampLimit: "rise" });
-      expect(
-        acrossPurposes.kind === "scheduled" &&
-          Math.abs(acrossPurposes.playedLevelDb - (-20 + upwardStepDb)),
-      ).toBeLessThan(1e-9);
-      if (acrossPurposes.kind === "scheduled") {
-        waitUntil(backend, acrossPurposes.endMs);
-      }
-
-      output.beginRoom();
-      const quiet = output.play({
-        soundId: "corridor",
-        ear: "left",
-        levelDb: startingLevelDb,
-        purpose: "trial",
-        random,
-      });
-      expect(quiet).toMatchObject({ clampLimit: null });
-      if (quiet.kind === "scheduled") {
-        waitUntil(backend, quiet.endMs);
-      }
-      const otherEar = output.play({
-        soundId: "corridor",
-        ear: "right",
-        levelDb: 0,
-        purpose: "trial",
-        random,
-      });
-      expect(otherEar).toMatchObject({ playedLevelDb: 0, clampLimit: null });
-      if (otherEar.kind === "scheduled") {
-        waitUntil(backend, otherEar.endMs);
-      }
-      const leap = output.play({
-        soundId: "corridor",
-        ear: "left",
-        levelDb: 0,
-        purpose: "trial",
-        random,
-      });
-      expect(leap).toMatchObject({ clampLimit: "rise" });
-      expect(
-        leap.kind === "scheduled" &&
-          Math.abs(leap.playedLevelDb - (startingLevelDb + upwardStepDb)),
-      ).toBeLessThan(1e-9);
-    });
-
-    it("exempts a replay from the rise limit but not from the cap, and counts it as the previous sound", async () => {
+  describe("no rise limit or anchor cap, and a sound cut short (2026-11-17)", () => {
+    it("plays a leap upward on one ear as asked, held only by the ceiling", async () => {
       const { backend, output } = await runningAndCalibrated(-25);
       output.beginRoom();
-      const steps = [
-        { levelDb: startingLevelDb, purpose: "trial" },
-        { levelDb: 5, purpose: "replay" },
-        { levelDb: capRelativeToAnchorDb + 5, purpose: "replay" },
-        { levelDb: startingLevelDb, purpose: "trial" },
-        { levelDb: 0, purpose: "trial" },
-      ] as const;
-      const outcomes = steps.map(({ levelDb, purpose }) => {
+      const played = (levelDb: number) => {
         const outcome = output.play({
           soundId: "corridor",
           ear: "left",
           levelDb,
-          purpose,
+          purpose: "trial",
           random,
         });
         if (outcome.kind !== "scheduled") {
@@ -682,21 +590,47 @@ describe("createAudioOutput", () => {
         }
         waitUntil(backend, outcome.endMs);
         return outcome;
+      };
+      expect(played(-50)).toMatchObject({
+        playedLevelDb: -50,
+        clampLimit: null,
       });
-      expect(outcomes.map((outcome) => outcome.clampLimit)).toEqual([
-        null,
-        null,
-        "anchorCap",
-        null,
-        "rise",
-      ]);
-      expect(outcomes[2].playedLevelDb).toBeLessThanOrEqual(
-        capRelativeToAnchorDb,
-      );
-      expect(outcomes[2].playedLevelDb).toBeCloseTo(capRelativeToAnchorDb, 12);
+      expect(played(0)).toMatchObject({ playedLevelDb: 0, clampLimit: null });
+      const capped = played(60);
+      expect(capped.clampLimit).toBe("ceiling");
+      expect(capped.playedLevelDb).toBeLessThan(60);
+    });
+
+    it("fades the sound under way to silence and lets the next one start after the stop fade", async () => {
+      const { backend, output } = await runningAndCalibrated(-25);
+      const request = {
+        soundId: "nursery",
+        ear: "left",
+        levelDb: startingLevelDb,
+        purpose: "trial",
+        random,
+      } as const;
+      const first = output.play(request);
+      expect(first.kind).toBe("scheduled");
+      expect(output.play(request)).toEqual({ kind: "refused", reason: "busy" });
+      const fadesBefore = backend.calls.filter(
+        (call) => call.kind === "fadeToSilence",
+      ).length;
+      output.fadeOutSound();
       expect(
-        Math.abs(outcomes[4].playedLevelDb - (startingLevelDb + upwardStepDb)),
-      ).toBeLessThan(1e-9);
+        backend.calls.filter((call) => call.kind === "fadeToSilence").length,
+      ).toBe(fadesBefore + 1);
+      // The output is still running and has told no stop listener.
+      expect(output.state().kind).toBe("running");
+      waitUntil(backend, backend.currentTimeMs() + stopFadeMs);
+      expect(output.play(request).kind).toBe("scheduled");
+    });
+
+    it("does nothing when no sound is under way", async () => {
+      const { backend, output } = await runningAndCalibrated(-25);
+      const fadesBefore = backend.calls.length;
+      output.fadeOutSound();
+      expect(backend.calls.length).toBe(fadesBefore);
     });
   });
 

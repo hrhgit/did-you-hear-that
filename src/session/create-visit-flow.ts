@@ -7,7 +7,14 @@ import { createSeededRandom } from "../config/seeded-random";
 import type { GhostSoundId } from "../config/sound-id";
 import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
+import { visitFlowConfig } from "../config/visit-flow-config";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
+import {
+  creatureReminderCaughtLine,
+  rollCallCaughtLine,
+  rollCallCopy,
+  rollCallNotHeardLines,
+} from "../copy/creature-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
 import { notHeardLines, practiceCopy } from "../copy/practice-copy";
 import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
@@ -38,14 +45,16 @@ import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
-import { answerTimeMs } from "./answer-time";
 import { judgeHeadphoneCheck } from "./judge-headphone-check";
 import type { Lantern } from "./lantern";
 import { createLantern } from "./lantern";
-import type { PractisedRoomRunner } from "./practised-room-runner";
-import { createPractisedRoomRunner } from "./practised-room-runner";
-import type { LatestOffset, PresentedTrial } from "./room-runner";
-import { createRoomRunner } from "./room-runner";
+import type {
+  PractisedRoom,
+  PractisedRoomRunner,
+} from "./practised-room-runner";
+import { createPractisedRoomsRunner } from "./practised-room-runner";
+import type { LatestOffset, PresentedTrial, RoomTrack } from "./room-runner";
+import { createMixedRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
 import { roomSearchFloorDb } from "./room-search-floor";
 import {
@@ -54,6 +63,7 @@ import {
   type ChaseTally,
 } from "./chase-score";
 import { summarizeVisit } from "./summarize-visit";
+import { turnSeedOf } from "./turn-seed";
 import type {
   EarpieceState,
   EntrySnapshot,
@@ -61,6 +71,7 @@ import type {
   LoggedCalibration,
   MissedSoundReplay,
   PauseReason,
+  RoomCreature,
   RoomPractice,
   ScoredVisitTrial,
   SnapshotBase,
@@ -97,6 +108,11 @@ export type VisitFlowTestOptions = {
    * listener typed for `PresentedTrial` still fits it.
    */
   readonly onTrialPresented?: (trial: FlowPresentedTrial) => void;
+  /**
+   * In place of `visitFlowConfig.roomsTogetherMaxCount`: how many rooms' searches take turns in one
+   * room run at most. 1 runs the rooms one after another, as before the one-room spec.
+   */
+  readonly roomsTogetherMaxCount?: number;
 } & (
   | { readonly backend: AudioBackend }
   | {
@@ -155,11 +171,30 @@ function reactionTo(entry: ScoredVisitTrial): TrialReaction {
   if (entry.kind === "sound" && entry.outcome === "wrongSide") {
     return "otherSide";
   }
+  if (entry.kind === "noSound" && entry.outcome === "noResponse") {
+    return "nothingCame";
+  }
   return "none";
 }
 
-/** The chase of the room under way, as the flow keeps it (`RoomChase`). */
+/** The chase of the room run under way, as the flow keeps it (`RoomChase`). */
 interface Chase extends ChaseTally {
+  readonly topLevelDb: number;
+  readonly floorLevelDb: number;
+}
+
+/** One room of the run under way, with the number of its run. */
+interface Member {
+  readonly room: VisitRoom;
+  readonly attempt: number;
+}
+
+/** What the flow keeps of one room from its last run on (`RoomCreature`). */
+interface Creature {
+  /** True once its search has finished. */
+  gone: boolean;
+  /** The chase of its last run alone. */
+  readonly tally: ChaseTally;
   readonly topLevelDb: number;
   readonly floorLevelDb: number;
 }
@@ -204,7 +239,8 @@ interface Visit {
   /** The timer callbacks of the visit's room runs that have not run. */
   readonly timerHandles: Set<TimerHandle>;
   readonly timer: Timer;
-  finishedRoomCount: number;
+  /** The rooms whose search has finished, by room index. */
+  readonly finishedRooms: Set<number>;
   rulesShown: boolean;
   /** True once a calibration of this visit follows a device change. */
   calibrationAgain: boolean;
@@ -215,17 +251,16 @@ interface Visit {
   awaitingAnswer: boolean;
   playRefusal: PlayRefusal | null;
   judgement: HeadphoneCheckJudgement | null;
-  /** The run of the room under way: its practice, then its search. */
+  /** The room run under way: its practice, then the searches of its rooms. */
   runner: PractisedRoomRunner | null;
-  /** The lantern of the room under way, from the start of its counting, or null. */
+  /** The lantern of the room run under way, from the start of its counting, or null. */
   lantern: Lantern | null;
-  /** True while the room's run waits for the dark lantern to get one cell back. */
-  lanternHold: boolean;
-  /** The chase of the room under way, from the start of its counting, or null. */
+  /** The chase of the room run under way, over all its rooms, from the start of its counting, or null. */
   chase: Chase | null;
-  /** The room of the last run started: the room of the `room` stage. */
-  activeRoomIndex: number;
-  attempt: number;
+  /** The rooms of the last room run started, in visit order. The first is the room of the `room` stage. */
+  members: readonly Member[];
+  /** What the flow keeps of each room that has begun a run, by room index. */
+  readonly creatures: Map<number, Creature>;
   log: VisitLog | null;
   /** The missed-sound replay, made when the rooms are over (missed-sound-replay design.md). */
   replay: MissedSoundReplayController | null;
@@ -261,6 +296,17 @@ export function createVisitFlow(
 ): VisitFlow {
   const flowRandom = createSeededRandom(options.seed);
   const { timer } = options;
+  const roomsTogetherMaxCount =
+    ("roomsTogetherMaxCount" in options
+      ? options.roomsTogetherMaxCount
+      : undefined) ?? visitFlowConfig.roomsTogetherMaxCount;
+  if (!Number.isInteger(roomsTogetherMaxCount) || roomsTogetherMaxCount < 1) {
+    throw new RangeError(
+      `The rooms that run together must be a whole number from 1 up, but got ${String(roomsTogetherMaxCount)}.`,
+    );
+  }
+  /** Whether several rooms' searches take turns in one room (one-room design.md, D1). */
+  const together = roomsTogetherMaxCount > 1;
   const onTrialPresented =
     "onTrialPresented" in options ? options.onTrialPresented : undefined;
   const output: AudioOutput & Partial<CalibrationMusicOutput> =
@@ -345,7 +391,7 @@ export function createVisitFlow(
     stage: snapshotStage,
     visitType: visit?.visitType ?? null,
     rooms: visit?.rooms ?? emptyRooms,
-    finishedRoomCount: visit?.finishedRoomCount ?? 0,
+    finishedRoomCount: visit?.finishedRooms.size ?? 0,
     canProceed: canProceed(),
     pause,
     activationRefused,
@@ -444,7 +490,9 @@ export function createVisitFlow(
       case "room":
         return Object.freeze({
           ...base("room"),
-          room: roomAt(current, current.activeRoomIndex),
+          room: current.members[0]?.room ?? roomAt(current, 0),
+          together,
+          creatures: creaturesOf(current),
           practice: roomPracticeOf(current),
           lantern:
             current.lantern === null
@@ -466,8 +514,8 @@ export function createVisitFlow(
       case "betweenRooms":
         return Object.freeze({
           ...base("betweenRooms"),
-          finishedRoom: roomAt(current, current.finishedRoomCount - 1),
-          nextRoom: roomAt(current, current.finishedRoomCount),
+          finishedRoom: roomAt(current, current.finishedRooms.size - 1),
+          nextRoom: roomAt(current, current.finishedRooms.size),
         });
       case "missedSoundReplay":
         return Object.freeze({
@@ -503,27 +551,66 @@ export function createVisitFlow(
     }
   };
 
-  /** What the room's screen says about its practice (audible-start, light plan). */
+  /**
+   * What the room's screen says about its practice (audible-start, light plan). Where several
+   * rooms run together the practice is the roll call, with its own lines (one-room design.md).
+   */
   function roomPracticeOf(current: Visit): RoomPractice {
     const state = current.runner?.practice() ?? null;
     const phase = state?.phase ?? "practice";
-    const practising = phase !== "counting";
+    const inPractice = phase !== "counting";
     const soundPlaying = state?.soundPlaying === true && pause === null;
     const notHeardEars = state?.notHeardEars ?? [];
+    const notHeard = state?.notHeard ?? [];
+    const copy = together ? rollCallCopy : practiceCopy;
+    const noLines: readonly string[] = Object.freeze([]);
+    const notHeardNotice =
+      phase !== "notHeard" || notHeard.length === 0
+        ? noLines
+        : together
+          ? rollCallNotHeardLines(
+              notHeard.map(({ room, ear }) => ({
+                roomId: room.roomId,
+                side: ear,
+              })),
+            )
+          : notHeardLines(notHeardEars);
     return Object.freeze({
       phase,
       soundPlaying,
-      heading: practising ? practiceCopy.heading : null,
-      lines: practising ? practiceCopy.lines : practiceCopy.countingLines,
+      heading: inPractice ? copy.heading : null,
+      lines: inPractice ? copy.lines : copy.countingLines,
       soundPlayingLine: soundPlaying ? practiceCopy.soundPlayingLine : null,
       notHeardEars: Object.freeze([...notHeardEars]),
-      notHeardLines:
-        phase === "notHeard" && notHeardEars.length > 0
-          ? notHeardLines(notHeardEars)
-          : Object.freeze([]),
+      notHeardLines: notHeardNotice,
       tryAgainLabel: practiceCopy.tryAgainLabel,
       goOnLabel: practiceCopy.goOnLabel,
+      practising: state?.practising ?? null,
+      notHeard: Object.freeze([...notHeard]),
     });
+  }
+
+  /** Every room that has begun a run, in visit order, as the room's screen keeps it. */
+  function creaturesOf(current: Visit): readonly RoomCreature[] {
+    return Object.freeze(
+      current.rooms.flatMap((room) => {
+        const creature = current.creatures.get(room.roomIndex);
+        return creature === undefined
+          ? []
+          : [
+              Object.freeze({
+                room,
+                state: creature.gone ? ("gone" as const) : ("about" as const),
+                caughtCount: creature.tally.caughtCount,
+                deepestCaughtDb: Object.freeze({
+                  ...creature.tally.deepestCaughtDb,
+                }),
+                topLevelDb: creature.topLevelDb,
+                floorLevelDb: creature.floorLevelDb,
+              }),
+            ];
+      }),
+    );
   }
 
   function repeatOf(current: Visit): SwappedRepeatController {
@@ -648,7 +735,6 @@ export function createVisitFlow(
   const dropLantern = (current: Visit): void => {
     current.lantern?.stop();
     current.lantern = null;
-    current.lanternHold = false;
     current.chase = null;
   };
 
@@ -760,6 +846,16 @@ export function createVisitFlow(
 
   // ─── Pauses ────────────────────────────────────────────────────────────────────────────
 
+  /** The rooms of the run under way whose search has not finished, in visit order. */
+  const unfinishedMembers = (current: Visit): readonly Member[] =>
+    current.members.filter(
+      ({ room }) => !current.finishedRooms.has(room.roomIndex),
+    );
+
+  /** The room a pause or an answer that names no trial is logged against. */
+  const memberNow = (current: Visit): Member | null =>
+    unfinishedMembers(current)[0] ?? current.members[0] ?? null;
+
   const abandonAttempt = (current: Visit): void => {
     const runner = current.runner;
     if (runner === null) {
@@ -768,13 +864,16 @@ export function createVisitFlow(
     runner.abandon();
     current.runner = null;
     dropLantern(current);
-    current.recorder.attemptEnded({
-      roomIndex: current.activeRoomIndex,
-      attempt: current.attempt,
-      endedAtMs: timer.now(),
-      ending: "abandoned",
-      result: null,
-    });
+    // A room whose search had finished keeps its result. The others begin again.
+    for (const { room, attempt } of unfinishedMembers(current)) {
+      current.recorder.attemptEnded({
+        roomIndex: room.roomIndex,
+        attempt,
+        endedAtMs: timer.now(),
+        ending: "abandoned",
+        result: null,
+      });
+    }
   };
 
   /** Begins a pause, or gives a pause that holds the reason `deviceChanged` (R12, R13.1). */
@@ -794,9 +893,9 @@ export function createVisitFlow(
       stage,
       roomIndex:
         stage === "room"
-          ? current.activeRoomIndex
+          ? (memberNow(current)?.room.roomIndex ?? 0)
           : stage === "betweenRooms"
-            ? current.finishedRoomCount - 1
+            ? current.finishedRooms.size - 1
             : null,
       startedAtMs: timer.now(),
     });
@@ -805,9 +904,6 @@ export function createVisitFlow(
         abandonAttempt(current);
       } else {
         current.runner?.pause();
-        // A pause fills the lantern, so the room goes on at once when the pause ends.
-        current.lantern?.fill();
-        current.lanternHold = false;
       }
     }
     calibration.close();
@@ -990,43 +1086,56 @@ export function createVisitFlow(
 
   // ─── Rooms ─────────────────────────────────────────────────────────────────────────────
 
-  const finishRoom =
-    (current: Visit, roomIndex: number) =>
-    (result: RoomResult): void => {
+  /** One room's search has finished: its run is closed, and the room is finished. */
+  const roomFinished =
+    (current: Visit) =>
+    (track: RoomTrack, result: RoomResult): void => {
+      const { room, attempt } = track;
       current.recorder.attemptEnded({
-        roomIndex,
-        attempt: current.attempt,
+        roomIndex: room.roomIndex,
+        attempt,
         endedAtMs: timer.now(),
         ending: "finished",
         result,
       });
-      current.runner = null;
-      dropLantern(current);
-      emit({ kind: "roomFinished", room: roomAt(current, roomIndex) });
-      current.finishedRoomCount += 1;
-      if (current.finishedRoomCount < current.rooms.length) {
-        enterStage("betweenRooms");
-        return;
+      const creature = current.creatures.get(room.roomIndex);
+      if (creature !== undefined) {
+        creature.gone = true;
       }
-      // The replay is a span of its own for the rise limit (R16.1).
-      output.beginRoom();
-      const log = current.recorder.log();
-      current.log = log;
-      // The draw after the render seed and the engine seeds, so it equals replayRenderSeed(log)
-      // (missed-sound-replay R14.2, D2).
-      const renderSeed = drawSeed(current.source);
-      current.replay = createMissedSoundReplay({
-        output,
-        timer: current.timer,
-        log,
-        random: createSeededRandom(renderSeed),
-        emit,
-        notRunning: (reason) => replayStopped(reason),
-      });
-      enterStage("missedSoundReplay");
+      current.finishedRooms.add(room.roomIndex);
+      emit({ kind: "roomFinished", room });
     };
 
-  /** Starts a run of the room that is due (R6). */
+  /** Every search of the room run has finished: the rest, or the end of the rooms. */
+  const roomRunFinished = (current: Visit) => (): void => {
+    current.runner = null;
+    dropLantern(current);
+    if (current.finishedRooms.size < current.rooms.length) {
+      enterStage("betweenRooms");
+      return;
+    }
+    // The replay is a span of its own for the rise limit (R16.1).
+    output.beginRoom();
+    const log = current.recorder.log();
+    current.log = log;
+    // The draw after the render seed and the engine seeds, so it equals replayRenderSeed(log)
+    // (missed-sound-replay R14.2, D2).
+    const renderSeed = drawSeed(current.source);
+    current.replay = createMissedSoundReplay({
+      output,
+      timer: current.timer,
+      log,
+      random: createSeededRandom(renderSeed),
+      emit,
+      notRunning: (reason) => replayStopped(reason),
+    });
+    enterStage("missedSoundReplay");
+  };
+
+  /**
+   * Starts a run of the rooms that are due (R6): the first unfinished room, or, where rooms run
+   * together, the first `roomsTogetherMaxCount` of them (one-room design.md, "The flow").
+   */
   const startRoom = (): void => {
     const current = currentVisit();
     if (output.rangeReport() === null) {
@@ -1043,46 +1152,73 @@ export function createVisitFlow(
         calibrateAgain(current);
         return;
       }
-      const roomIndex = current.finishedRoomCount;
-      const room = roomAt(current, roomIndex);
-      output.beginRoom();
-      const roomRange = report.rooms[room.roomId];
-      const searchCapDb = roomSearchCapDb(
-        roomRange.topLevelDb,
-        hearingMethodConfig,
-      );
-      // The search asks for nothing below the room's playable floor (audible-start R12.5).
-      const searchFloorDb = roomSearchFloorDb(
-        roomRange.floorLevelDb,
-        hearingMethodConfig,
-      );
-      const engineSeed = drawSeed(current.source);
-      const search = createThresholdSearch({
-        settings: {
-          ...hearingMethodConfig,
-          capRelativeToAnchorDb: searchCapDb,
-          floorDb: searchFloorDb,
-          // Held at or above the floor, as every start of the search must be. At a setting from
-          // the audible-start Keep_Minimum (−27 dB, D25) up the floor lies below the fixed start
-          // and this changes nothing; below it, it keeps the search valid. Each ear's own start
-          // from practice replaces it (audible-start task 11).
-          startingLevelDb: Math.max(
-            hearingMethodConfig.startingLevelDb,
-            searchFloorDb,
-          ),
-        },
-        random: createSeededRandom(engineSeed),
-      });
-      const attempt = current.recorder.attemptStarted({
-        roomIndex,
-        engineSeed,
-        calibrationIndex: keptCalibration.calibrationIndex,
-        searchCapDb,
-        searchFloorDb,
-        startedAtMs: timer.now(),
-      });
-      current.activeRoomIndex = roomIndex;
-      current.attempt = attempt;
+      const due = current.rooms
+        .filter((room) => !current.finishedRooms.has(room.roomIndex))
+        .slice(0, roomsTogetherMaxCount);
+      if (due.length === 0) {
+        throw new Error("No room of the visit is due.");
+      }
+      if (together) {
+        // Several sounds take turns: each is held to its own last level on an ear, not to another
+        // sound's (one-room design.md, D4).
+        output.beginRoom({ riseLimitPer: "sound" });
+      } else {
+        output.beginRoom();
+      }
+      const tracks: RoomTrack[] = [];
+      const practised: PractisedRoom[] = [];
+      const members: Member[] = [];
+      const engineSeeds: number[] = [];
+      for (const room of due) {
+        const roomRange = report.rooms[room.roomId];
+        const searchCapDb = roomSearchCapDb(
+          roomRange.topLevelDb,
+          hearingMethodConfig,
+        );
+        // The search asks for nothing below the room's playable floor (audible-start R12.5).
+        const searchFloorDb = roomSearchFloorDb(
+          roomRange.floorLevelDb,
+          hearingMethodConfig,
+        );
+        // One draw for each room run, in room order, and no other draw from this source here: the
+        // seeds found again by counting the room runs of the log depend on it (D19).
+        const engineSeed = drawSeed(current.source);
+        const search = createThresholdSearch({
+          settings: {
+            ...hearingMethodConfig,
+            capRelativeToAnchorDb: searchCapDb,
+            floorDb: searchFloorDb,
+            // Held at or above the floor, as every start of the search must be. At a setting from
+            // the audible-start Keep_Minimum (−27 dB, D25) up the floor lies below the fixed start
+            // and this changes nothing; below it, it keeps the search valid. Each ear's own start
+            // from practice replaces it (audible-start task 11).
+            startingLevelDb: Math.max(
+              hearingMethodConfig.startingLevelDb,
+              searchFloorDb,
+            ),
+          },
+          random: createSeededRandom(engineSeed),
+        });
+        const attempt = current.recorder.attemptStarted({
+          roomIndex: room.roomIndex,
+          engineSeed,
+          calibrationIndex: keptCalibration.calibrationIndex,
+          searchCapDb,
+          searchFloorDb,
+          startedAtMs: timer.now(),
+        });
+        tracks.push({ search, room, attempt, searchCapDb, searchFloorDb });
+        practised.push({ room, attempt, searchCapDb });
+        members.push({ room, attempt });
+        engineSeeds.push(engineSeed);
+        current.creatures.set(room.roomIndex, {
+          gone: false,
+          tally: emptyChaseTally(),
+          topLevelDb: searchCapDb,
+          floorLevelDb: searchFloorDb,
+        });
+      }
+      current.members = Object.freeze(members);
       const presented =
         onTrialPresented === undefined
           ? {}
@@ -1109,22 +1245,32 @@ export function createVisitFlow(
         output.stopAll();
         leave("soundRefused");
       };
-      const counting = createRoomRunner({
+      const counting = createMixedRoomRunner({
         output,
         timer: current.timer,
-        search,
-        room,
-        attempt,
+        tracks,
+        // Whose turn it is comes from the engine seeds, never from the visit's source (D5).
+        turnRandom: createSeededRandom(turnSeedOf(engineSeeds)),
         soundRandom: current.soundRandom,
         recorder: current.recorder,
         latestOffset: current.latestOffset,
-        scored: (entry) => {
+        scored: (entry, { room }) => {
           if (current.chase !== null) {
             countIntoChase(current.chase, entry);
           }
-          // A caught sound gives its cell back, so only an answer at nothing costs light.
+          const creature = current.creatures.get(room.roomIndex);
+          if (creature !== undefined) {
+            countIntoChase(creature.tally, entry);
+          }
+          // A catch lights one cell and an answer on the wrong side or at nothing dims one. The
+          // lantern only shows how the chase goes: every answer counts (the game layer, 2026-11-17).
           if (entry.kind === "sound" && entry.outcome === "caught") {
             current.lantern?.giveBack();
+          } else if (
+            entry.outcome === "wrongSide" ||
+            entry.outcome === "falseAlarm"
+          ) {
+            current.lantern?.spend();
           }
           emit({
             kind: "trialScored",
@@ -1133,56 +1279,88 @@ export function createVisitFlow(
             reaction: reactionTo(entry),
           });
         },
-        finished: finishRoom(current, roomIndex),
+        trackFinished: roomFinished(current),
+        finished: roomRunFinished(current),
         pauseFromOutput,
         soundRefused,
+        // The game layer of 2026-11-17: a reminder after a long quiet, a chime after a catch, and
+        // a dimmed cell for an answer that decided nothing.
+        game: {
+          reminderAfterQuietMs: visitFlowConfig.reminderAfterQuietMs,
+          reminderAboveCaughtDb: visitFlowConfig.reminderAboveCaughtDb,
+          reminderUncaughtLevelDb: hearingMethodConfig.startingLevelDb,
+          chimeAboveCaughtDb: visitFlowConfig.chimeAboveCaughtDb,
+          chimeMaxLevelDb: visitFlowConfig.chimeMaxLevelDb,
+          reminderScored: (entry, { room }) => {
+            const caught = entry.outcome === "caught";
+            if (caught) {
+              current.lantern?.giveBack();
+            } else if (entry.outcome === "wrongSide") {
+              current.lantern?.spend();
+            }
+            emit({
+              kind: "reminderSoundScored",
+              room,
+              trial: entry,
+              reaction: caught ? "ripple" : "none",
+              line: caught
+                ? creatureReminderCaughtLine(room.roomId, entry.ear)
+                : null,
+            });
+          },
+          answerIgnored: () => {
+            current.lantern?.spend();
+          },
+        },
         ...presented,
       });
-      // Practice first: each ear hears the room's sound until it catches it, and nothing of it
-      // counts. Then the search above runs as before (audible-start, light plan of 2026-11-16).
-      const runner = createPractisedRoomRunner({
+      // Practice first: each ear hears each room's sound until it catches it, and nothing of it
+      // counts. Then the searches above run (audible-start, light plan of 2026-11-16).
+      const runner = createPractisedRoomsRunner({
         output,
         timer: current.timer,
-        room,
-        attempt,
+        rooms: practised,
         soundRandom: current.soundRandom,
         recorder: current.recorder,
         latestOffset: current.latestOffset,
-        searchCapDb,
         counting,
         practiceScored: (entry) => {
+          const room = roomAt(current, entry.roomIndex);
           const caught = entry.outcome === "caught";
+          const caughtLine = together
+            ? rollCallCaughtLine(room.roomId)
+            : practiceCopy.caughtLine;
           emit({
             kind: "practiceSoundScored",
             room,
             trial: entry,
             reaction: caught ? "ripple" : "none",
-            line: caught ? practiceCopy.caughtLine : null,
+            line: caught ? caughtLine : null,
           });
         },
         countingStarted: () => {
           // The lantern is lit when the room begins to count (the game layer, 2026-11-16).
+          // A dark lantern stops nothing: the room goes on (the game layer, 2026-11-17).
           current.lantern = createLantern({
             timer: current.timer,
-            cameBack: (wasDark) => {
-              if (
-                wasDark &&
-                current.lanternHold &&
-                pause === null &&
-                stage === "room"
-              ) {
-                current.lanternHold = false;
-                current.runner?.resume();
-              }
-            },
+            cameBack: () => undefined,
           });
-          current.lanternHold = false;
           current.chase = {
             ...emptyChaseTally(),
-            topLevelDb: searchCapDb,
-            floorLevelDb: searchFloorDb,
+            // The scale of the room run holds every level any of its rooms may play.
+            topLevelDb: Math.max(
+              ...practised.map(({ searchCapDb }) => searchCapDb),
+            ),
+            floorLevelDb: Math.min(
+              ...members.map(
+                ({ room }) =>
+                  current.creatures.get(room.roomIndex)?.floorLevelDb ?? 0,
+              ),
+            ),
           };
-          emit({ kind: "countingStarted", room });
+          for (const { room } of members) {
+            emit({ kind: "countingStarted", room });
+          }
         },
         notHeard: () => {
           beginPause("practiceNotHeard");
@@ -1193,7 +1371,9 @@ export function createVisitFlow(
       });
       current.runner = runner;
       enterStage("room");
-      emit({ kind: "roomStarted", room, attempt });
+      for (const { room, attempt } of members) {
+        emit({ kind: "roomStarted", room, attempt });
+      }
       runner.start();
     });
   };
@@ -1247,7 +1427,7 @@ export function createVisitFlow(
           latestOffset: { latestOffsetMs: 0 },
           timerHandles,
           timer: visitTimer(timerHandles, () => current),
-          finishedRoomCount: 0,
+          finishedRooms: new Set(),
           rulesShown: false,
           calibrationAgain: false,
           calibrationFresh: true,
@@ -1258,10 +1438,9 @@ export function createVisitFlow(
           judgement: null,
           runner: null,
           lantern: null,
-          lanternHold: false,
           chase: null,
-          activeRoomIndex: 0,
-          attempt: 0,
+          members: Object.freeze([]),
+          creatures: new Map(),
           log: null,
           replay: null,
           summary: null,
@@ -1460,34 +1639,9 @@ export function createVisitFlow(
         }
         const current = inVisit("room");
         if (current !== null) {
-          const lantern = current.lantern;
-          if (lantern === null) {
-            // The practice: an answer costs nothing.
-            current.runner?.answer(side, pressedAtMs);
-            return;
-          }
-          // Every answer spends one cell, and a dark lantern takes no answer.
-          if (!lantern.spend()) {
-            // Logged as every answer is that decides nothing (R8.1).
-            current.recorder.answerIgnored({
-              atMs: answerTimeMs(pressedAtMs, timer.now()),
-              side,
-              roomIndex: current.activeRoomIndex,
-              attempt: current.attempt,
-            });
-            return;
-          }
+          // Every answer counts. The lantern only follows how they went (the game layer,
+          // 2026-11-17): the runner dims it for an answer that decided nothing.
           current.runner?.answer(side, pressedAtMs);
-          // A catch has given its cell back by now. With the lantern dark the room waits: it
-          // presents nothing that could not be answered.
-          if (
-            current.lantern === lantern &&
-            lantern.cells() === 0 &&
-            current.runner !== null
-          ) {
-            current.runner.pause();
-            current.lanternHold = true;
-          }
           return;
         }
         // The room of the swapped repeat: the side is the visitor's own ear.

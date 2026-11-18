@@ -3,12 +3,15 @@ import type { ManualTimer } from "../../src/config/manual-timer";
 import type { RandomSource } from "../../src/config/seeded-random";
 import { soundRulesConfig } from "../../src/config/sound-rules-config";
 import type { Timer, TimerHandle } from "../../src/config/timer";
+import { visitFlowConfig } from "../../src/config/visit-flow-config";
 import type { AudioBackend } from "../../src/audio/output/audio-backend";
 import type {
   AudioOutput,
+  BeginRoomOptions,
   KeepOutcome,
   PlayOutcome,
   PlayRequest,
+  RiseLimitScope,
 } from "../../src/audio/output/create-audio-output";
 import { createAudioOutput } from "../../src/audio/output/create-audio-output";
 import type {
@@ -97,6 +100,11 @@ export interface RecordedSchedule {
   readonly right: Float32Array;
   /** True for a practice sound: scheduled in a room while its practice is under way. */
   readonly practice: boolean;
+  /**
+   * The purpose of the `play` call that scheduled it, or null for a sound the shell plays by a call
+   * of its own (the calibration sound, the headphone check). A reminder and a chime are no trial.
+   */
+  readonly purpose: PlayRequest["purpose"] | null;
 }
 
 /** One call the flow made to the output shell (only with `spyOnOutput`). */
@@ -105,8 +113,18 @@ export type RecordedOutputCall =
       readonly atMs: number;
       readonly stage: VisitStage | "creation";
       readonly cause: HarnessCause;
-      readonly name:
-        "activate" | "beginRoom" | "playHeadphoneCheck" | "stopAll";
+      readonly name: "activate" | "playHeadphoneCheck" | "stopAll";
+    }
+  | {
+      readonly atMs: number;
+      readonly stage: VisitStage | "creation";
+      readonly cause: HarnessCause;
+      readonly name: "beginRoom";
+      /**
+       * What the span holds a sound's rise to: the last sound on its ear, as a span begun with no
+       * option does, or the last sound of its own sound id on its ear (one-room design.md, D4).
+       */
+      readonly riseLimitPer: RiseLimitScope;
     }
   | {
       readonly atMs: number;
@@ -134,6 +152,12 @@ export interface VisitHarnessOptions {
   readonly performanceOffsetMs: number;
   /** Build the shell in the harness and wrap it in a spy, and give the flow `output` instead of `backend`. */
   readonly spyOnOutput?: boolean;
+  /**
+   * How many rooms' searches take turns in one room run. 1 unless a property says otherwise: the
+   * rooms run one after another, as the properties of the earlier specs describe them. The
+   * properties of the one-room spec pass the shipped count.
+   */
+  readonly roomsTogetherMaxCount?: number;
   /** Further options of the fake backend. */
   readonly backend?: Omit<
     FakeAudioBackendOptions,
@@ -147,6 +171,38 @@ export interface VisitHarnessOptions {
    */
   readonly music?: "fixture" | "reject";
 }
+
+/** One way the rooms of a visit run in a property. */
+export interface RoomRun {
+  /** For the name of a test. */
+  readonly name: string;
+  /** What the flow is given as its `roomsTogetherMaxCount`. */
+  readonly roomsTogetherMaxCount: number;
+  /** True when more than one room's search may take turns in one room run. */
+  readonly together: boolean;
+}
+
+/**
+ * The ways the rooms of a visit run in the properties (one-room design.md, D1): one after another,
+ * as the earlier specs describe them, and with as many searches taking turns in the one room as the
+ * shipped site runs together. A site set back to one room at a time has only the first.
+ */
+export const roomRuns: readonly RoomRun[] = Object.freeze([
+  Object.freeze({
+    name: "the rooms one after another",
+    roomsTogetherMaxCount: 1,
+    together: false,
+  }),
+  ...(visitFlowConfig.roomsTogetherMaxCount > 1
+    ? [
+        Object.freeze({
+          name: `the one room, up to ${String(visitFlowConfig.roomsTogetherMaxCount)} searches taking turns`,
+          roomsTogetherMaxCount: visitFlowConfig.roomsTogetherMaxCount,
+          together: true,
+        }),
+      ]
+    : []),
+]);
 
 /**
  * The music the harness loads by default: music-like samples made in code, with the RMS and the
@@ -227,6 +283,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     flowRef === null ? "creation" : flowRef.snapshot().stage;
 
   const schedules: RecordedSchedule[] = [];
+  let playingPurpose: PlayRequest["purpose"] | null = null;
   const recordingBackend: AudioBackend = {
     ...backend,
     schedule(channels, startMs) {
@@ -241,6 +298,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
           practice:
             snapshot?.stage === "room" &&
             snapshot.practice?.phase === "practice",
+          purpose: playingPurpose,
         }),
       );
       backend.schedule(channels, startMs);
@@ -249,18 +307,37 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
 
   const outputCalls: RecordedOutputCall[] = [];
   const callBase = () => ({ atMs: manual.now(), stage: stageNow(), cause });
+  // The shell is always built here, so that each schedule knows the purpose of its `play` call.
+  const shell = createAudioOutput({ backend: recordingBackend, timer });
+  const purposeNoting: typeof shell = Object.freeze({
+    ...shell,
+    play(request: PlayRequest) {
+      playingPurpose = request.purpose;
+      try {
+        return shell.play(request);
+      } finally {
+        playingPurpose = null;
+      }
+    },
+  });
   let output: AudioOutput | null = null;
   if (options.spyOnOutput === true) {
-    const real = createAudioOutput({ backend: recordingBackend, timer });
+    const real = purposeNoting;
     output = Object.freeze({
       ...real,
       activate() {
         outputCalls.push(Object.freeze({ ...callBase(), name: "activate" }));
         return real.activate();
       },
-      beginRoom() {
-        outputCalls.push(Object.freeze({ ...callBase(), name: "beginRoom" }));
-        real.beginRoom();
+      beginRoom(beginOptions?: BeginRoomOptions) {
+        outputCalls.push(
+          Object.freeze({
+            ...callBase(),
+            name: "beginRoom",
+            riseLimitPer: beginOptions?.riseLimitPer ?? "ear",
+          }),
+        );
+        real.beginRoom(beginOptions);
       },
       playHeadphoneCheck(random: RandomSource) {
         outputCalls.push(
@@ -309,15 +386,23 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
       listener(trial);
     }
   };
+  const roomsTogetherMaxCount = options.roomsTogetherMaxCount ?? 1;
   const real = createVisitFlow(
     output === null
       ? {
-          backend: recordingBackend,
+          output: purposeNoting,
           timer,
           seed: options.seed,
           onTrialPresented,
+          roomsTogetherMaxCount,
         }
-      : { output, timer, seed: options.seed, onTrialPresented },
+      : {
+          output,
+          timer,
+          seed: options.seed,
+          onTrialPresented,
+          roomsTogetherMaxCount,
+        },
   );
   flowRef = real;
 

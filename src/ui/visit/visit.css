@@ -1,8 +1,8 @@
 /*
- * The visit: one page, the drawing of the house behind everything, and one sheet of text over it
- * at a time. Nothing here cuts: every change of brightness is a fade of at least a fifth of a
- * second (audio-safety rule 9), and reduced motion shortens the long fades instead of removing
- * them.
+ * The visit: one page, the room behind everything (`../room/room.css` draws it), and one sheet of
+ * text over it at a time. Nothing here cuts: every change of brightness is a fade of at least a
+ * fifth of a second (audio-safety rule 9), and reduced motion shortens the long fades instead of
+ * removing them.
  */
 .visit {
   --visit-fade: 1.6s;
@@ -17,29 +17,6 @@
   overflow: hidden;
   text-align: left;
   outline: none;
-}
-
-/* The drawing and the canvas that moves over it. */
-.visit-house {
-  position: absolute;
-  inset: var(--visit-bar) 0 var(--visit-caption);
-  transition: opacity var(--visit-fade) ease;
-}
-
-.visit[data-house="faint"] .visit-house {
-  opacity: 0.2;
-}
-
-.visit-house > .house-section,
-.visit-house > .house-motion {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.visit-house > .house-motion {
-  pointer-events: none;
 }
 
 /* Buttons are drawn like the house: thin lines that run a little past their corners. */
@@ -109,6 +86,32 @@
   border-style: dashed;
 }
 
+/*
+ * The quieter of two choices: no lines and a dimmer word, so the lit button reads as the way on.
+ * Its lines come back under the pointer or the keyboard, and the hit area stays the same size.
+ */
+.visit-button-quiet {
+  color: var(--color-graphite);
+  transition: color 0.3s ease;
+}
+
+.visit-button-quiet::before,
+.visit-button-quiet::after {
+  border-color: transparent;
+}
+
+.visit-button-quiet:hover,
+.visit-button-quiet:focus-visible {
+  color: var(--color-moonlight);
+}
+
+.visit-button-quiet:hover::before,
+.visit-button-quiet:hover::after,
+.visit-button-quiet:focus-visible::before,
+.visit-button-quiet:focus-visible::after {
+  border-color: var(--color-graphite);
+}
+
 .visit-button-note {
   display: block;
   color: var(--color-graphite);
@@ -123,7 +126,7 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   height: var(--visit-bar);
   padding: 0 1.25rem;
@@ -190,26 +193,6 @@
   right: 0;
 }
 
-.visit-answer-hint {
-  position: absolute;
-  bottom: 1.1rem;
-  padding: 0.15rem 0.4rem;
-  font-size: 1rem;
-  font-style: italic;
-  line-height: 1.25;
-  transition: color 0.3s ease;
-}
-
-.visit-answer-left .visit-answer-hint {
-  left: 1.25rem;
-  text-align: left;
-}
-
-.visit-answer-right .visit-answer-hint {
-  right: 1.25rem;
-  text-align: right;
-}
-
 .visit-answer-keys {
   display: none;
   font-size: 0.875rem;
@@ -228,33 +211,7 @@
   color: var(--color-moonlight);
 }
 
-/* What the house says about a sound, under the drawing. */
-.visit-caption {
-  position: absolute;
-  inset: auto 4.5rem 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: var(--visit-caption);
-  margin: 0;
-  padding: 0 0.5rem;
-  font-size: clamp(1rem, 0.92rem + 0.4vw, 1.1875rem);
-  font-style: italic;
-  line-height: 1.3;
-  text-align: center;
-  text-wrap: balance;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.9s ease;
-}
-
-.visit-caption[data-shown="true"] {
-  opacity: 1;
-  transition-duration: 0.35s;
-}
-
-/* The rest between two rooms sits where the caption does. */
+/* The rest between two rooms lies over the foot of the room, where the caption and the cards are. */
 .visit-rest {
   position: absolute;
   inset: auto 0 0;
@@ -264,7 +221,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.75rem 1.75rem;
-  min-height: var(--visit-caption);
+  min-height: var(--room-floor);
   padding: 0.75rem 1.5rem 1rem;
   background: linear-gradient(to top, var(--color-night) 55%, transparent);
 }
@@ -275,249 +232,29 @@
   font-style: italic;
 }
 
-/*
- * A room's practice, and the still line through its counting: under the bar, over the sky of the
- * drawing, so the house and both answers stay in view. The line said while a practice sound plays
- * keeps its height when empty, so the words above it never move.
- */
-.visit-practice {
-  position: absolute;
-  inset: var(--visit-bar) 0 auto;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.25rem 1.5rem 1.5rem;
-  text-align: center;
-  background: linear-gradient(to bottom, var(--color-night) 50%, transparent);
-  pointer-events: none;
-}
-
-.visit-practice p {
-  max-width: 34rem;
-  margin: 0;
-  line-height: 1.4;
-  text-wrap: balance;
-}
-
-.visit-practice-heading {
-  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
-  font-style: italic;
-}
-
-.visit-practice-lines p {
-  color: var(--color-graphite);
-  font-size: 0.9375rem;
-}
-
-.visit-practice-heading + .visit-practice-lines {
-  margin-top: 0.35rem;
-}
-
-.visit-practice-sound {
-  min-height: 1.4em;
-  margin-top: 0.5rem;
-  font-style: italic;
-}
-
-/*
- * The chase of a room that counts: the sounds caught, the lantern, and the sounds caught in a
- * row, in one line at the top of the practice panel. Each light of the lantern is a small flame
- * drawn in pencil. A spent light keeps its outline and loses its colour, slowly.
- */
-.visit-chase {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  margin-bottom: 0.4rem;
-  font-variant-numeric: lining-nums tabular-nums;
-}
-
-.visit-chase p {
-  min-width: 6.5rem;
-  color: var(--color-graphite);
-  font-size: 0.9375rem;
-  font-style: italic;
-}
-
-.visit-chase-caught {
-  text-align: right;
-}
-
-.visit-chase-streak {
-  text-align: left;
-}
-
-/* The streak keeps its place when it is not said, so the lantern never moves. */
-.visit-chase-streak[hidden] {
-  display: block;
-  visibility: hidden;
-}
-
-.visit-lantern {
-  display: flex;
-  gap: 0.45rem;
-}
-
-.visit-lantern-cell {
-  width: 0.8rem;
-  height: 1.15rem;
-  border: 1.5px solid var(--color-graphite);
-  border-radius: 50% 50% 45% 45% / 62% 62% 38% 38%;
-  background: transparent;
-  box-shadow: 0 0 0 0 transparent;
-  transition:
-    background-color 0.6s ease,
-    border-color 0.6s ease,
-    box-shadow 0.6s ease;
-}
-
-.visit-lantern-cell[data-lit="true"] {
-  border-color: var(--color-lamp);
-  background: var(--color-lamp-low);
-  box-shadow: 0 0 0.6rem 0.05rem var(--color-lamp-low);
-}
-
-.visit-practice-words {
-  display: grid;
-}
-
-/* The line of a dark lantern stands where the counting's lines stand, in their place. */
-.visit-practice-words > * {
-  grid-area: 1 / 1;
-}
-
-.visit-lantern-dark {
-  color: var(--color-moonlight);
-  font-style: italic;
-}
-
-.visit[data-lantern="dark"] .visit-practice-lines {
-  visibility: hidden;
-}
-
-/* A dark lantern dims the house, as slowly as every other change of the house's brightness. */
-.visit[data-lantern="dark"][data-house="full"] .visit-house {
-  opacity: 0.45;
-}
-
-/*
- * The depth scales: one at each edge of the page, from the loudest sound of the room at the top
- * to the quietest it can make at the bottom. The mark stands at the quietest sound caught on that
- * side, and moves down, slowly, as quieter ones are caught.
- */
-.visit-depth {
-  position: absolute;
-  top: calc(var(--visit-bar) + 6.5rem);
-  bottom: calc(var(--visit-caption) + 3.5rem);
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  width: 2.5rem;
-  pointer-events: none;
-}
-
-.visit-depth-left {
-  left: 0.6rem;
-}
-
-.visit-depth-right {
-  right: 0.6rem;
-}
-
-.visit-depth-scale {
-  position: relative;
-  flex: 1;
-  width: 0.6rem;
-  border-left: 1.5px solid var(--color-graphite-faint);
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--color-graphite-faint) 0 1px,
-    transparent 1px 12.5%
-  );
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-}
-
-.visit-depth-mark {
-  position: absolute;
-  top: calc(var(--visit-depth, 0) * 100%);
-  left: -0.45rem;
-  width: 1.2rem;
-  height: 0;
-  border-top: 2px solid var(--color-lamp);
-  opacity: 0;
-  transition:
-    top 1.2s ease,
-    opacity 0.6s ease;
-}
-
-.visit-depth[data-caught="true"] .visit-depth-mark {
-  opacity: 1;
-}
-
-.visit-depth-word {
-  color: var(--color-graphite);
-  font-size: 0.75rem;
-  font-style: italic;
-}
-
-/*
- * A narrow upright screen: the house takes nearly the whole width, so the scales stand against
- * the edges, clear of its eaves and the floor names, each word kept inside the screen.
- */
-@media (max-width: 40rem) and (orientation: portrait) {
-  .visit-depth {
-    width: 1.25rem;
-  }
-
-  .visit-depth-left {
-    left: 0.15rem;
-    align-items: flex-start;
-  }
-
-  .visit-depth-right {
-    right: 0.15rem;
-    align-items: flex-end;
-  }
-
-  .visit-depth-mark {
-    left: -0.1rem;
-    width: 0.9rem;
-  }
-
-  .visit-depth-word {
-    font-size: 0.65rem;
-  }
-
-  /* The counting's lines take less height, so they stay clear of the roof. */
-  .visit-practice {
-    padding-right: 1.75rem;
-    padding-left: 1.75rem;
-  }
-
-  .visit-practice-lines p {
-    font-size: 0.8125rem;
-    line-height: 1.3;
-  }
-}
-
 /* A notice with more to say than one line: the further lines follow it, a little quieter. */
 .visit-notice-lines p {
   color: var(--color-graphite);
 }
 
 /*
- * The replay of missed sounds. While the sounds play, the house stays in full view and gives up
- * the strip under it: what is said of the playing sound, the count of each side under the side it
- * belongs to, and the way out. Every block has a fixed height, so nothing jumps from one sound to
- * the next.
+ * The replay of missed sounds. While the sounds play, the room stays in full view and gives up
+ * its foot to a strip: what is said of the playing sound, the count of each side under the side
+ * it belongs to, and the way out. Every block has a fixed height, so nothing jumps from one sound
+ * to the next.
  */
 .visit[data-replay="playing"] {
   --visit-caption: 17.5rem;
+}
+
+/*
+ * On a narrow upright screen the note beside the way out runs to four or five lines. The strip is
+ * taller there, so that the floor of the room, and whoever stands on it, stays above the words.
+ */
+@media (max-width: 26rem) and (orientation: portrait) {
+  .visit[data-replay="playing"] {
+    --visit-caption: 19.25rem;
+  }
 }
 
 .visit-replay {
@@ -528,7 +265,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: minmax(5.5rem, auto) minmax(7.25rem, auto) auto;
   column-gap: 1.5rem;
-  /* On a very narrow screen the words may need more height. They take it from the cellar. */
+  /* The strip is as tall as the floor it stands on. `../room/room.css` reads the same measure. */
   min-height: var(--visit-caption);
   padding: 0.5rem 1.25rem 0.9rem;
   background: linear-gradient(to top, var(--color-night) 88%, transparent);
@@ -605,81 +342,7 @@
   pointer-events: auto;
 }
 
-/*
- * A screen wide enough to have room beside the house: the words stand left and right of it, each
- * count on its own side, and the playing sound above the count of its side.
- */
-@media (min-aspect-ratio: 5 / 4) and (min-width: 40rem),
-  (max-height: 520px) and (orientation: landscape) {
-  .visit[data-replay="playing"] {
-    --visit-caption: 5.25rem;
-  }
-
-  .visit-replay {
-    /*
-     * The width the drawing takes: its height times 592 / 880, the proportion of the house's
-     * view box.
-     */
-    --replay-house: calc(
-      (100dvh - var(--visit-bar) - var(--visit-caption)) * 0.6727
-    );
-
-    inset: var(--visit-bar) 0 0;
-    grid-template-columns:
-      minmax(0, 1fr) min(var(--replay-house), 60%)
-      minmax(0, 1fr);
-    grid-template-rows: 44% minmax(0, 1fr) var(--visit-caption);
-    column-gap: 1.25rem;
-    min-height: 0;
-    padding: 0 1.5rem;
-    background: none;
-  }
-
-  .visit-replay-sound {
-    grid-column: 1;
-    align-self: end;
-    max-width: 21rem;
-    padding-bottom: 1.25rem;
-    font-size: 1rem;
-  }
-
-  .visit-replay[data-side="right"] .visit-replay-sound {
-    grid-column: 3;
-    justify-self: end;
-  }
-
-  .visit-replay-count {
-    max-width: 21rem;
-    padding-top: 0.75rem;
-    font-size: 1rem;
-  }
-
-  .visit-replay-count-right {
-    grid-column: 3;
-    justify-self: end;
-  }
-
-  /* The note stands under the left count and the way out under the right one. */
-  .visit-replay-foot {
-    display: contents;
-  }
-
-  .visit-replay-note {
-    grid-column: 1;
-    grid-row: 3;
-    align-self: center;
-    max-width: 21rem;
-  }
-
-  .visit-replay-foot .visit-button {
-    grid-column: 3;
-    grid-row: 3;
-    align-self: center;
-    justify-self: end;
-  }
-}
-
-/* A sheet of text over the faint drawing. */
+/* A sheet of text over the faint room. */
 .visit-sheet {
   position: absolute;
   inset: 0;
@@ -1092,82 +755,63 @@ p.visit-swap-turn-back {
   }
 }
 
-/* A short, wide screen: a phone on its side. The drawing takes the whole height. */
+/* A short, wide screen: a phone on its side. `../room/room.css` makes the room fit it. */
 @media (max-height: 520px) and (orientation: landscape) {
   .visit {
     --visit-bar: 2.75rem;
-    --visit-caption: 0rem;
-  }
-
-  .visit-house {
-    inset: 0.5rem 0;
-  }
-
-  .visit-caption {
-    inset: auto auto 3.25rem 1rem;
-    width: calc(50% - 22vh - 1.5rem);
-    height: auto;
-    justify-content: flex-start;
-    text-align: left;
   }
 
   .visit-rest {
-    inset: auto auto 0.5rem 0;
-    flex-direction: column;
-    align-items: flex-start;
-    width: calc(50% - 22vh);
-    background: none;
-  }
-
-  .visit-depth {
-    top: calc(var(--visit-bar) + 0.5rem);
-    bottom: 3.25rem;
-  }
-
-  .visit-chase {
-    justify-content: flex-start;
-  }
-
-  .visit-practice {
-    inset: var(--visit-bar) auto auto 0;
-    align-items: flex-start;
-    width: calc(50% - 22vh);
-    padding: 0 1rem;
-    text-align: left;
-    background: none;
+    padding: 0.4rem 1rem 0.5rem;
   }
 
   .visit-sheet-body {
     padding: 0.5rem 0;
   }
 
-  /* The drawing takes the whole height here, and the replay's last row is as tall as its button. */
+  /* The replay's strip has three columns here: the playing sound, and the count of each side. */
   .visit[data-replay="playing"] {
-    --visit-caption: 0rem;
+    --visit-caption: 7.75rem;
   }
 
   .visit-replay {
-    --replay-house: calc((100dvh - 1rem) * 0.6727);
-
-    grid-template-rows: 40% minmax(0, 1fr) 3.75rem;
-    padding: 0 1rem;
-  }
-
-  .visit-replay-sound,
-  .visit-replay-count {
-    font-size: 0.875rem;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    column-gap: 1rem;
+    padding: 0.4rem 1rem 0.5rem;
   }
 
   .visit-replay-sound {
-    padding-bottom: 0.5rem;
+    grid-column: 1;
+    grid-row: 1 / -1;
+    font-size: 0.8125rem;
+  }
+
+  .visit-replay[data-side="right"] .visit-replay-sound {
+    text-align: left;
   }
 
   .visit-replay-sound-lead {
-    font-size: 1.0625rem;
+    font-size: 1rem;
   }
 
   .visit-replay-count {
-    padding-top: 0.4rem;
+    grid-row: 1;
+    padding-top: 0.3rem;
+    font-size: 0.8125rem;
+  }
+
+  .visit-replay-count-left {
+    grid-column: 2;
+  }
+
+  .visit-replay-count-right {
+    grid-column: 3;
+  }
+
+  .visit-replay-foot {
+    grid-column: 2 / -1;
+    grid-row: 2;
   }
 }
 
@@ -1176,19 +820,8 @@ p.visit-swap-turn-back {
     --visit-fade: 0.4s;
   }
 
-  .visit-caption,
-  .visit-caption[data-shown="true"] {
-    transition-duration: 0.25s;
-  }
-
   .visit-meter-fill,
   .visit-meter-mark {
     transition: none;
-  }
-
-  .visit-depth-mark {
-    transition:
-      top 0.25s ease,
-      opacity 0.25s ease;
   }
 }

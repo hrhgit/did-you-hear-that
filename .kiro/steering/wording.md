@@ -42,3 +42,5 @@ In plain words, next to the picture and not hidden behind a link:
 ## Tone
 
 The house speaks in short, calm sentences. It never mocks the visitor for missing a sound. The line for a response on a no-sound trial is "I made no sound that time."
+
+A creature that got away may be pleased with itself in its own voice ("Knock, knock, and off it goes."), with no exclamation mark and nothing about the visitor: the glee is the creature's, never a judgement of the one who missed it (the game layer, 2026-11-17).

@@ -22,10 +22,18 @@ export interface ScreenMoment {
    * `screen`: the screen derived from a snapshot changed, other than its lantern. `lantern`: only
    * the lantern of the screen changed (the game layer of 2026-11-16). `ripple`, `slipped`, `say`:
    * a reaction to a decided trial, in a room of the visit or in the swapped repeat's room.
-   * `replayRipple`: the ripple of a sound that is played again after the rooms.
+   * `gone`: a search has ended and the house says where its creature went (one-room spec). It
+   * comes in the moment the search's last trial is scored. `replayRipple`: the ripple of a sound
+   * that is played again after the rooms.
    */
   readonly what:
-    "screen" | "lantern" | "ripple" | "slipped" | "say" | "replayRipple";
+    | "screen"
+    | "lantern"
+    | "ripple"
+    | "slipped"
+    | "say"
+    | "gone"
+    | "replayRipple";
   /** For `lantern`: the lights before and after the change. */
   readonly lantern?: { readonly from: number; readonly to: number };
 }
@@ -115,6 +123,10 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
         waiting = null;
       } else if (event.kind === "practiceSoundScored") {
         waiting = null;
+      } else if (event.kind === "reminderSoundScored") {
+        // A reminder's decision is a decision of the visitor's, as a trial's is. The trial it
+        // stood in for is presented after it, so nothing waits yet.
+        anchorMs = now();
       } else if (
         event.kind === "trialScored" ||
         event.kind === "swappedTrialScored"

@@ -89,7 +89,7 @@ function trialAt(
         ear: part.ear,
         requestedLevelDb: part.requestedLevelDb,
         playedLevelDb: part.playedLevelDb ?? part.requestedLevelDb,
-        clampLimit: part.playedLevelDb === undefined ? null : "rise",
+        clampLimit: part.playedLevelDb === undefined ? null : "ceiling",
       }
     : { ...common, kind: "noSound" };
 }

@@ -61,7 +61,7 @@ export const drawnMostMaxCount = 80;
 /** The time from one logged trial to the next. */
 const trialStepMs = 3000;
 
-const clampLimits: readonly ClampLimit[] = ["anchorCap", "rise", "ceiling"];
+const clampLimits: readonly ClampLimit[] = ["ceiling"];
 
 const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
@@ -612,10 +612,8 @@ export const endingReplayScriptArbitrary: fc.Arbitrary<EndingReplayScript> = fc
 const playRefusalNames: Record<PlayRefusal, true> = {
   unsupportedSampleRate: true,
   emptyBuffer: true,
-  tooLong: true,
   notFinite: true,
   silentBuffer: true,
-  fadeTooShort: true,
   invalidLevel: true,
   invalidCalibrationGain: true,
   bothEarsForGhostSound: true,

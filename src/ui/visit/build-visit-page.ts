@@ -1,4 +1,5 @@
 import { calibrationCopy } from "../../copy/calibration-copy";
+import { oneRoomCopy } from "../../copy/creature-copy";
 import { frontDoorCopy } from "../../copy/front-door-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
@@ -9,9 +10,11 @@ import { resultPageCopy } from "../../copy/result-page-copy";
 import { siteTitle } from "../../copy/site-title";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
+import { buildRoomScene, type RoomScene } from "../room/build-room-scene";
+import { buildCreatureShelf, type CreatureShelf } from "../room/creature-shelf";
 import { drawSwappedHeadphones } from "./draw-swapped-headphones";
 
-/** A sheet of text laid over the faint drawing. Only one is shown at a time. */
+/** A sheet of text laid over the faint room. Only one is shown at a time. */
 export interface Sheet {
   readonly element: HTMLElement;
   /** The sheet's heading, which takes the focus when the sheet appears. */
@@ -27,8 +30,10 @@ export type CheckAnswer = "left" | "right" | "bothSides" | "nothingHeard";
  */
 export interface VisitPage {
   readonly root: HTMLElement;
-  /** Where the drawing of the house and its moving layer go. */
-  readonly houseFrame: HTMLElement;
+  /** The picture of the one room, with the lantern that hangs in it. */
+  readonly scene: RoomScene;
+  /** The cards of the creatures, along the foot of the room. */
+  readonly shelf: CreatureShelf;
   readonly stopButton: HTMLButtonElement;
   readonly pauseButton: HTMLButtonElement;
   readonly room: HTMLElement;
@@ -36,6 +41,8 @@ export interface VisitPage {
   readonly roomProgress: HTMLElement;
   readonly answerButtons: Readonly<Record<"left" | "right", HTMLButtonElement>>;
   readonly caption: HTMLElement;
+  /** A second line under the caption, for a creature that has gone home. */
+  readonly captionNote: HTMLElement;
   /** The rest between two rooms: a line and a button, where the caption is. */
   readonly rest: HTMLElement;
   readonly restLine: HTMLElement;
@@ -121,41 +128,30 @@ export interface VisitPage {
     readonly statusLine: HTMLElement;
     readonly backButton: HTMLButtonElement;
   };
-  /** A room's practice and counting: words beside the house, which stays in full view. */
+  /** The roll call and the counting: words under the lantern, in the room, which stays in full view. */
   readonly practice: {
     readonly element: HTMLElement;
     readonly heading: HTMLElement;
     /** Holds one paragraph for each line. */
     readonly lines: HTMLElement;
+    /** Who is making its sound at the roll call. Never said once it counts. */
+    readonly introLine: HTMLElement;
     /** Said while a practice sound plays. */
     readonly soundLine: HTMLElement;
   };
   /**
-   * The lantern, the count and the depth scales of a room that counts. The row with the lantern
-   * stands at the top of the practice panel. The two scales stand at the edges of the page.
+   * The lantern and the count of a room that counts. The lantern hangs in the room's picture,
+   * with the count at its left and the sounds caught in a row at its right.
    */
   readonly chase: {
-    /** The row: the count, the lantern, the sounds caught in a row. */
-    readonly row: HTMLElement;
     /** The lantern as one picture. Its name says how many lights are left. */
     readonly lantern: HTMLElement;
     /** Said while the lantern is dark, over the lines of the counting. */
     readonly darkLine: HTMLElement;
     readonly caughtLine: HTMLElement;
     readonly streakLine: HTMLElement;
-    readonly depth: Readonly<
-      Record<
-        "left" | "right",
-        {
-          /** The scale as one picture. Its name says the quietest catch on its side. */
-          readonly element: HTMLElement;
-          readonly mark: HTMLElement;
-          readonly quieterLabel: HTMLElement;
-        }
-      >
-    >;
   };
-  /** The replay while its sounds play: words beside the house, which stays in full view. */
+  /** The replay while its sounds play: words under the room, which stays in full view. */
   readonly replaying: {
     readonly element: HTMLElement;
     /** What is said of the sound that is playing. Its first sentence stands out. */
@@ -228,10 +224,12 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   pauseButton.hidden = true;
   const bar = make("div", "visit-bar", [stopButton, pauseButton, room]);
 
-  // The drawing.
-  const houseFrame = make("div", "visit-house");
-  houseFrame.setAttribute("role", "img");
-  houseFrame.setAttribute("aria-label", roomCopy.houseLabel);
+  // The room and the cards of who is in it.
+  const scene = buildRoomScene(doc, oneRoomCopy.sceneLabel);
+  const shelf = buildCreatureShelf(doc, {
+    label: oneRoomCopy.shelfLabel,
+    sideMarks: oneRoomCopy.sideMarks,
+  });
 
   // The answers.
   const answer = (side: "left" | "right"): HTMLButtonElement => {
@@ -253,6 +251,14 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const caption = make("p", "visit-caption");
   caption.setAttribute("role", "status");
   caption.setAttribute("aria-live", "polite");
+  // A second line, for the one time something more happened than a sound: a creature went home.
+  const captionNote = make("p", "visit-caption-note");
+  captionNote.setAttribute("role", "status");
+  captionNote.setAttribute("aria-live", "polite");
+  const captionBlock = make("div", "visit-caption-block", [
+    caption,
+    captionNote,
+  ]);
 
   const restLine = make("p", "visit-rest-line visit-voice");
   const restButton = button(roomCopy.goOnButton, "visit-button-lit");
@@ -384,7 +390,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const noticeMoreLines = make("div", "visit-notice-lines");
   const noticeStatus = status();
   const noticeButton = button(leavingCopy.goOnButton, "visit-button-lit");
-  const noticeSecondButton = button("");
+  // The second choice of a notice is the quieter one: the lit button is the way on.
+  const noticeSecondButton = button("", "visit-button-quiet");
   noticeSecondButton.hidden = true;
   const notice = sheet("notice", noticeHeading, [
     noticeLine,
@@ -393,44 +400,24 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     noticeStatus,
   ]);
 
-  // A room's practice and counting. Its words come with each snapshot, so they start empty.
+  // The roll call and the counting. Their words come with each snapshot, so they start empty.
   const practiceHeading = make("p", "visit-practice-heading");
   const practiceLines = make("div", "visit-practice-lines");
+  const introLine = make("p", "room-intro");
+  introLine.setAttribute("role", "status");
+  introLine.setAttribute("aria-live", "polite");
+  introLine.hidden = true;
   const practiceSound = make("p", "visit-practice-sound");
   practiceSound.setAttribute("role", "status");
   practiceSound.setAttribute("aria-live", "polite");
-  // The chase of a room that counts. Its words and its lights come with each snapshot.
-  const lantern = make("div", "visit-lantern");
-  lantern.setAttribute("role", "img");
-  const caughtLine = make("p", "visit-chase-caught");
-  const chaseStreakLine = make("p", "visit-chase-streak");
-  const chaseRow = make("div", "visit-chase", [
-    caughtLine,
-    lantern,
-    chaseStreakLine,
-  ]);
-  chaseRow.hidden = true;
   const lanternDarkLine = make("p", "visit-lantern-dark");
   lanternDarkLine.setAttribute("role", "status");
   lanternDarkLine.setAttribute("aria-live", "polite");
-  const depthScale = (side: "left" | "right") => {
-    const mark = make("span", "visit-depth-mark");
-    const quieterLabel = make("span", "visit-depth-word");
-    const scale = make("span", "visit-depth-scale", [mark]);
-    const element = make("div", `visit-depth visit-depth-${side}`, [
-      scale,
-      quieterLabel,
-    ]);
-    element.setAttribute("role", "img");
-    element.hidden = true;
-    return { element, mark, quieterLabel };
-  };
-  const depth = { left: depthScale("left"), right: depthScale("right") };
 
   const practice = make("div", "visit-practice", [
-    chaseRow,
     practiceHeading,
     make("div", "visit-practice-words", [practiceLines, lanternDarkLine]),
+    introLine,
     practiceSound,
   ]);
   practice.hidden = true;
@@ -535,21 +522,20 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   replaying.hidden = true;
 
   main.classList.add("visit");
-  // The drawing starts faint, behind the front door. Set before anything is drawn, so that the
-  // page never opens on a bright house that then fades.
+  // The room starts faint, behind the front door. Set before anything is drawn, so that the
+  // page never opens on a bright room that then fades.
   main.dataset.house = "faint";
   main.tabIndex = -1;
   main.replaceChildren(
-    houseFrame,
+    scene.element,
     // The bar comes first, so that the first press of Tab in a room lands on the stop control.
     bar,
     answerButtons.left,
     answerButtons.right,
-    caption,
-    rest,
     practice,
-    depth.left.element,
-    depth.right.element,
+    captionBlock,
+    rest,
+    shelf.element,
     replaying,
     frontDoor,
     calibration,
@@ -562,7 +548,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
 
   return {
     root: main,
-    houseFrame,
+    scene,
+    shelf,
     stopButton,
     pauseButton,
     room,
@@ -570,6 +557,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     roomProgress,
     answerButtons,
     caption,
+    captionNote,
     rest,
     restLine,
     restButton,
@@ -619,15 +607,14 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       element: practice,
       heading: practiceHeading,
       lines: practiceLines,
+      introLine,
       soundLine: practiceSound,
     },
     chase: {
-      row: chaseRow,
-      lantern,
+      lantern: scene.lantern.element,
       darkLine: lanternDarkLine,
-      caughtLine,
-      streakLine: chaseStreakLine,
-      depth,
+      caughtLine: scene.lantern.caughtLine,
+      streakLine: scene.lantern.streakLine,
     },
     replay: {
       element: replay,

@@ -533,7 +533,7 @@ describe("createSwappedRepeat: the swap check", () => {
     expect(rig.notRunning).toEqual([]);
   });
 
-  it.each(["busy", "peakBoundNotMet", "tooLong", "unsupported"] as const)(
+  it.each(["busy", "peakBoundNotMet", "emptyBuffer", "unsupported"] as const)(
     "gives a check refused %s as playRefusal, counts nothing, and plays it on a later press",
     async (reason) => {
       const rig = await rigOf();

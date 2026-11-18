@@ -7,6 +7,7 @@ import type { Timer, TimerHandle } from "../../src/config/timer";
 import { swappedRepeatCopy } from "../../src/copy/swapped-repeat-copy";
 import type {
   AudioOutput,
+  BeginRoomOptions,
   PlayOutcome,
   PlayRequest,
 } from "../../src/audio/output/create-audio-output";
@@ -617,7 +618,7 @@ export async function createRepeatHarness(
         entry,
       );
     },
-    beginRoom(): void {
+    beginRoom(beginOptions?: BeginRoomOptions): void {
       beginRooms.push(
         Object.freeze({
           seq: nextSeq(),
@@ -625,7 +626,7 @@ export async function createRepeatHarness(
           visitIndex: visitIndexNow(),
         }),
       );
-      realOutput.beginRoom();
+      realOutput.beginRoom(beginOptions);
     },
     stopAll(): void {
       stopAlls.push(

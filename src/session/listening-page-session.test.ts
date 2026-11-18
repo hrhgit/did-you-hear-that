@@ -3,7 +3,7 @@ import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { createManualTimer } from "../config/manual-timer";
 import { createSeededRandom } from "../config/seeded-random";
-import type { SoundId } from "../config/sound-id";
+import type { ListedSoundId } from "../config/sound-id";
 import { soundIds } from "../config/sound-id";
 import { soundRulesConfig } from "../config/sound-rules-config";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
@@ -75,7 +75,7 @@ async function calibrated(
   return context;
 }
 
-function rowOf(session: ListeningPageSession, soundId: SoundId) {
+function rowOf(session: ListeningPageSession, soundId: ListedSoundId) {
   const row = session.snapshot().rows.find((each) => each.soundId === soundId);
   if (row === undefined) {
     throw new Error(`No row for ${soundId}.`);
@@ -198,7 +198,7 @@ describe("createListeningPageSession", () => {
     expect(rows.map((row) => row.soundId)).toEqual(soundIds);
     // The bracketed values of the room-top table in design.md, at the top of the control, with
     // the cap of 5 dB above the anchor (audible-start design.md, "The cap").
-    const expectedHighest: Record<SoundId, number> = {
+    const expectedHighest: Record<ListedSoundId, number> = {
       cellar: 0,
       corridor: 5,
       nursery: 5,
@@ -288,7 +288,8 @@ describe("createListeningPageSession", () => {
     expect(played?.right.every((sample) => Object.is(sample, 0))).toBe(true);
     waitOutLastSound();
 
-    // Three steps up asks for a rise of 15 dB on the left ear, which the shell holds to one step.
+    // Three steps up, a rise of 15 dB on the left ear, is played as asked: the rise limit was
+    // dropped by the owner on 2026-11-17, and the cap of 5 dB above the anchor is not passed.
     for (let press = 0; press < 3; press += 1) {
       session.levelUp("corridor");
     }
@@ -297,19 +298,12 @@ describe("createListeningPageSession", () => {
     expect(outcome).toMatchObject({
       kind: "scheduled",
       requestedLevelDb: startingLevelDb + 3 * upwardStepDb,
-      clampLimit: "rise",
+      clampLimit: null,
     });
     expect(
       outcome?.kind === "scheduled" ? outcome.playedLevelDb : Number.NaN,
-    ).toBeCloseTo(startingLevelDb + upwardStepDb, 6);
-    expect(session.snapshot().clampLog).toMatchObject([
-      {
-        soundId: "corridor",
-        earChoice: "left",
-        purpose: "listening",
-        clampLimit: "rise",
-      },
-    ]);
+    ).toBeCloseTo(startingLevelDb + 3 * upwardStepDb, 6);
+    expect(session.snapshot().clampLog).toEqual([]);
   });
 
   it("shows a refusal when a sound is asked for while another plays", async () => {

@@ -5,9 +5,15 @@ The property that the picture gives nothing away: before a visitor answers, noth
 The page draws from two things only. `screenOfSnapshot` turns a snapshot of the visit flow into a screen, and `reactionOfEvent` turns an event of the flow into the ripple or the line the house says. Both are plain functions in `src/ui/visit`, so the tests here run them without a browser.
 
 - `screen-record.ts` keeps a record of a visit: every time the screen derived from a snapshot changed, every reaction, and every trial with the time it was presented and the time it was decided. The times of the trials come from the flow's test hook, which the page never gets.
-- `record-visit.ts` plays whole quick visits with a simulated visitor on the visit flow's harness and records them. The visitors are drawn from a seed: thresholds anywhere a room can reach, answers that sometimes come too late, and visitors who answer silence often. Disturbed visits are also paused, hidden, interrupted and moved to another device.
+- `record-visit.ts` plays whole quick visits with a simulated visitor on the visit flow's harness and records them. The visitors are drawn from a seed: thresholds anywhere a room can reach, answers that sometimes come too late, and visitors who answer silence often. Disturbed visits are also paused, hidden, interrupted and moved to another device. Each visit is played with the number of rooms that run together that its caller gives.
 - `guess-from-screen.ts` is a predictor. It gets only small counts of what the screen did before an answer, learns from one set of visits and is judged on another. `balanceLabels` gives it the same number of trials with and without a sound, so that a screen that merely confirmed a sound now and then would still show.
 - `screen-leak.property.test.ts` holds the properties.
+
+## The two ways the rooms run
+
+Every check below runs twice (one-room design.md, D1). Once with the rooms one after another, as the earlier specs describe them. And once with the one room, where as many searches take turns in one room run as `visitFlowConfig.roomsTogetherMaxCount` says, which is what the site ships. The list of the two is `roomRuns` in `tests/properties/visit-flow-harness.ts`. A site set back to one room at a time has only the first.
+
+In the one room the checks also require that more than half of the visits had their creatures take turns: a trial of one room decided after a trial of a later room. Without that they would say nothing about the one room. One room at a time, no visit may. The fixed seeds of the predictor are the same in both, so each verdict changes only when the code does.
 
 ## What is checked
 
@@ -21,9 +27,10 @@ The lantern of the game layer (2026-11-16) is the one part of the screen that ma
 
 ## What is not checked here
 
-- The lamp and the door shadow are built in the test from the ambient schedule with a random source of their own, as the page's entry does. That the entry really gives the motion layer a source separate from the visit's is read from `src/ui/visit/start-visit.ts`, not tested.
+- The lamp nudges and the door shadows are built in the test from the ambient schedule of the earlier house page (`src/ui/ambient`), with a random source of their own. The visit page no longer draws them: the room of the game (`src/ui/room`) moves only in loops that its style sheet runs on the clock (the lantern's sway, the flames, the creatures' idle motion), and in reactions at decisions. The two features stay in the predictor as motion that varies from visit to visit and holds nothing about a trial. That the room's loops never read the flow is read from `src/ui/room/room.css` and `src/ui/visit/start-visit.ts`, not tested.
 - The predictor looks at counts, not at pixels. A leak through something `screenOfSnapshot` and `reactionOfEvent` do not produce, such as a style that depended on the time, would not be seen.
 - The predictor is not trained or judged on the swapped repeat's room. A repeated room has far fewer trials than a visit, and in a visit left alone the fifth check already finds no change at all before a decision, so there is nothing for a predictor to read. In a disturbed repeat the changes before a trial's presentation (a pause, a hidden page) are drawn by the same code as in the rooms, which the third check covers.
 - The swap check's hiss is not a trial. The page enables the check's answers only after a hiss has played, which tells the visitor that a hiss played; that is its purpose, and the check asks nothing about hearing.
-- The practice before each room's counting is not a trial here. While a practice sound plays the page says so, on purpose: nothing of the practice counts, and the line names no side. Each room's first trial is anchored at the start of its counting (`countingStarted`), so everything the practice drew comes before the stretch that is checked.
+- The practice before each room's counting is not a trial here. While a practice sound plays the page says so, on purpose: nothing of the practice counts, and the line names no side. Each room's first trial is anchored at the start of its counting (`countingStarted`), so everything the practice drew comes before the stretch that is checked. In the one room the practice is the roll call, which also shows which creature is making the sound, never the side; the counting of every creature starts in one step, after the roll call.
+- Whose turn it is in the one room is not a feature of the predictor, because the page is never told. That the snapshot holds nothing of it between two decisions is checked on the flow itself (visit-flow CP3, in the one room).
 - What the page showed after earlier answers (a ripple, or the line about no sound) is not among the predictor's features. It was measured once over 300 visits and predicted neither whether the next trial has a sound nor its side.

@@ -7,7 +7,7 @@ import { roomLimits } from "../../src/engine/room-limits";
 import type { VisitSnapshot } from "../../src/session/visit-flow-types";
 import { playVisit } from "../listeners/simulated-visitor";
 import { visitRunArbitrary } from "./visit-flow-arbitraries";
-import { createVisitHarness } from "./visit-flow-harness";
+import { createVisitHarness, roomRuns } from "./visit-flow-harness";
 import {
   observeVisit,
   visitStartMs,
@@ -16,7 +16,8 @@ import {
 } from "./visit-flow-timeline";
 
 // CP1. Every visit ends (Universal; visit-flow design.md, CP1 and D27; R22.4; brief property 1).
-// The visits render with the worst-case renderers (D26, audio-output D43).
+// The visits render with the worst-case renderers (D26, audio-output D43). The property holds
+// however the rooms run (one-room design.md, D1): one after another, and taking turns in one room.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -67,15 +68,16 @@ function visitorWaitsMs(
 }
 
 describe("visit flow CP1. Every visit ends (Universal; R22.4)", () => {
-  it(
-    "reaches the result, or the exit at the visitor's ending, within the time budget of the design",
-    async () => {
+  it.each(roomRuns)(
+    "reaches the result, or the exit at the visitor's ending, within the time budget of the design ($name)",
+    async ({ roomsTogetherMaxCount, together }) => {
       await fc.assert(
         fc.asyncProperty(visitRunArbitrary(), async (visitRun) => {
           const { script } = visitRun;
           const harness = createVisitHarness({
             seed: visitRun.seed,
             performanceOffsetMs: visitRun.performanceOffsetMs,
+            roomsTogetherMaxCount,
           });
           const first = harness.flow.snapshot();
           const timeline = observeVisit(harness);
@@ -150,9 +152,14 @@ describe("visit flow CP1. Every visit ends (Universal; R22.4)", () => {
               entry.kind === "stopReport" &&
               entry.reportKind === "deviceChanged",
           ).length;
-          const attemptCount =
-            hearingMethodConfig.roomFrequenciesHz[script.visitType].length +
-            deviceChangeCount;
+          const roomCount =
+            hearingMethodConfig.roomFrequenciesHz[script.visitType].length;
+          // One room at a time, a change of device costs the one run it ends. In the one room it
+          // ends the run of every search still going, and each of those starts again (one-room
+          // design.md, "The flow").
+          const attemptCount = together
+            ? roomCount * (1 + deviceChangeCount)
+            : roomCount + deviceChangeCount;
           const budgetMs =
             visitorWaitsMs(entries, startMs, endMs, first) +
             calibrationCount *

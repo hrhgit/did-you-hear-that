@@ -65,8 +65,10 @@ export interface ChaseScore {
 
 /**
  * The score of a visit from its log. Every scored trial of every room run counts, in the order
- * played. A row never runs from one room run into the next. Practice sounds and the swapped
- * repeat are not in `trials`, so they count for nothing here, as in the rooms.
+ * played. A row never runs from one room run into the next: it goes on only between room runs
+ * that were under way at the same time, as the rooms of one room are when their searches take
+ * turns (one-room design.md, "The chase"). Practice sounds and the swapped repeat are not in
+ * `trials`, so they count for nothing here, as in the rooms.
  */
 export function chaseScoreOf(log: VisitLog): ChaseScore {
   const byRoom = new Map<number, number>();
@@ -74,14 +76,37 @@ export function chaseScoreOf(log: VisitLog): ChaseScore {
   let longestRow = 0;
   let tally = emptyChaseTally();
   let run: string | null = null;
+  const runKey = (roomIndex: number, attempt: number): string =>
+    `${String(roomIndex)}:${String(attempt)}`;
+  // A log made by hand may hold no room runs: then every change of room run ends the row.
+  const spans = new Map(
+    (log.roomAttempts ?? []).map(
+      ({ roomIndex, attempt, startedAtMs, endedAtMs }) => [
+        runKey(roomIndex, attempt),
+        { startedAtMs, endedAtMs },
+      ],
+    ),
+  );
+  /** Whether the second room run began before the first ended. */
+  const together = (first: string, second: string): boolean => {
+    const before = spans.get(first);
+    const after = spans.get(second);
+    return (
+      before !== undefined &&
+      after !== undefined &&
+      after.startedAtMs < before.endedAtMs
+    );
+  };
   for (const trial of log.trials) {
     if (trial.status !== "scored") {
       continue;
     }
-    const thisRun = `${String(trial.roomIndex)}:${String(trial.attempt)}`;
+    const thisRun = runKey(trial.roomIndex, trial.attempt);
     if (thisRun !== run) {
+      if (run === null || !together(run, thisRun)) {
+        tally = emptyChaseTally();
+      }
       run = thisRun;
-      tally = emptyChaseTally();
     }
     const before = tally.caughtCount;
     countIntoChase(tally, trial);

@@ -99,6 +99,17 @@ export interface CalibrationHissConfig {
   readonly highCutEndHz: number;
 }
 
+/** The chime after a caught sound: a few sine partials that ring and die away. */
+export interface CatchChimeConfig {
+  readonly durationMs: number;
+  readonly outerFadeMs: number;
+  readonly partialFrequenciesHz: readonly number[];
+  /** The level of each partial, in the order of the frequencies, as a gain. */
+  readonly partialGains: readonly number[];
+  readonly attackMs: number;
+  readonly decayTimeConstantMs: number;
+}
+
 export interface GhostSoundConfig {
   readonly cellar: CellarKnockConfig;
   readonly corridor: CorridorHumConfig;
@@ -106,6 +117,7 @@ export interface GhostSoundConfig {
   readonly stairs: StairsScrapeConfig;
   readonly attic: AtticWhineConfig;
   readonly calibration: CalibrationHissConfig;
+  readonly chime: CatchChimeConfig;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -210,5 +222,16 @@ export const ghostSoundConfig: GhostSoundConfig = deepFreeze({
     lowCutEndHz: 354,
     highCutStartHz: 11314,
     highCutEndHz: 16000,
+  },
+  // The game layer, 2026-11-17: short, so that it has ended before the shortest gap does.
+  chime: {
+    durationMs: 450,
+    // The shortest fade of audio-safety rule 3, with a margin
+    outerFadeMs: 25,
+    // A bell a fifth and an octave above E6: none of the five room pitches
+    partialFrequenciesHz: [1319, 1976, 2637],
+    partialGains: [1, 0.5, 0.25],
+    attackMs: 10,
+    decayTimeConstantMs: 110,
   },
 });

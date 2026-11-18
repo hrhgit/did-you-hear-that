@@ -1,13 +1,20 @@
 import { audioOutputConfig } from "../../config/audio-output-config";
-import { ghostSoundIds, type GhostSoundId } from "../../config/sound-id";
+import type { GhostSoundId } from "../../config/sound-id";
 import { calibrationCopy } from "../../copy/calibration-copy";
+import {
+  creatureCardLabel,
+  creatureCaughtCountLine,
+  creatureCopy,
+  creatureIntroLine,
+  oneRoomCopy,
+  stillAboutLine,
+} from "../../copy/creature-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import {
   betweenRoomsLine,
   caughtCountLine,
   chaseCopy,
-  deepestCatchLabel,
   lanternLabel,
   roomCopy,
   roomNames,
@@ -19,17 +26,17 @@ import type {
   HeadphoneCheckAnswer,
   MissedSoundReplaySnapshot,
   RoomChase,
+  RoomCreature,
   RoomLantern,
+  RoomSnapshot,
   SwappedRepeatComparison,
   SwappedRepeatSnapshot,
   VisitRoom,
   VisitSnapshot,
 } from "../../session/visit-flow-types";
+import type { ShelfCreature } from "../room/creature-shelf";
 
-/** How a room of the drawing is shown. The drawing of the house takes the same four words. */
-export type ScreenRoomState = "dark" | "lit" | "visited" | "closed";
-
-/** The sheets of text. At most one is over the drawing at a time. */
+/** The sheets of text. At most one is over the room at a time. */
 export type SheetName =
   | "frontDoor"
   | "calibration"
@@ -100,10 +107,10 @@ export interface NoticeScreen {
 }
 
 /**
- * The words of a room's practice and counting, beside the house, which stays in full view
- * (audible-start, light plan). The line that a sound is playing is shown only for a practice
- * sound, which counts for nothing, and never names its side. Through the counting the line that it
- * counts stands still, so it changes with no trial.
+ * The words of the roll call and of the counting, under the lantern, in the room, which stays in
+ * full view (audible-start, light plan; one-room design.md, "The roll call"). The line that a
+ * sound is playing is shown only for a practice sound, which counts for nothing, and never names
+ * its side. Through the counting the line that it counts stands still, so it changes with no trial.
  */
 export interface PracticeScreen {
   /** Over the practice, or null once the room counts. */
@@ -113,22 +120,35 @@ export interface PracticeScreen {
   readonly soundPlayingLine: string | null;
 }
 
-/** One depth scale: how quiet the quietest sound caught on its side was. */
-export interface DepthScreen {
-  /**
-   * Where the mark stands between the loudest sound of the room (0) and the quietest it can make
-   * (1), or null before the first catch on this side.
-   */
-  readonly fraction: number | null;
-  /** The scale in words, for a visitor who cannot see it. */
-  readonly label: string;
+/**
+ * A creature's card along the foot of the room (one-room design.md, "The creatures"): who it is,
+ * whether it is still about, how many of its sounds were caught, and a bar at each side for the
+ * quietest catch on that side. Everything on it changes only when a room run begins, when a trial
+ * is scored and when its search ends, so it says nothing of a trial that is still open. During the
+ * roll call it also shows who is making the practice sound, never on which side.
+ */
+export type CreatureScreen = ShelfCreature;
+
+/**
+ * Who stands in the room in plain view. At the roll call it is the one whose practice sound plays
+ * or is about to play, in the middle of the room, which tells no side. While missed sounds are
+ * played again it is the creature of the playing sound, in the doorway of its side: by then every
+ * answer has been given. Nobody stands in plain view while the room counts.
+ */
+export interface FeaturedScreen {
+  readonly id: GhostSoundId;
+  readonly place: "centre" | "left" | "right";
+  /** How it is introduced, under the lantern, or null. */
+  readonly line: string | null;
+  /** Whether its practice sound is playing now. */
+  readonly sounding: boolean;
 }
 
 /**
- * The lantern, the count and the depth scales of a room that counts (the game layer of
- * 2026-11-16). The lantern changes with the visitor's own answers, with a catch in the moment it
- * is scored, and with the clock. Everything else here changes only when a trial is scored. So
- * none of it says anything about a trial that is still open or still to come.
+ * The lantern and the count of a room that counts (the game layer of 2026-11-16). The lantern
+ * changes with the visitor's own answers, with a catch in the moment it is scored, and with the
+ * clock. Everything else here changes only when a trial is scored. So none of it says anything
+ * about a trial that is still open or still to come.
  */
 export interface ChaseScreen {
   readonly lantern: {
@@ -142,15 +162,12 @@ export interface ChaseScreen {
   readonly caughtLine: string;
   /** Said from two caught sounds in a row, or null. */
   readonly streakLine: string | null;
-  readonly depth: Readonly<Record<"left" | "right", DepthScreen>>;
-  /** The word under each depth scale. */
-  readonly depthQuieterLabel: string;
 }
 
 /**
  * The replay of the sounds a visitor did not catch. Before the sounds and after them it is a
- * sheet of text. While they play there is no sheet: the house is in full view, and the words
- * stand beside it.
+ * sheet of text. While they play there is no sheet: the room is in full view, and the words
+ * stand under it.
  */
 export interface ReplayScreen {
   /** Whether the sounds are playing now. */
@@ -233,7 +250,7 @@ export interface SwapScreen {
  * snapshot itself.
  */
 export interface Screen {
-  /** The sheet over the drawing, or null inside a room and between two rooms. */
+  /** The sheet over the room, or null inside a room and between two rooms. */
   readonly sheet: SheetName | null;
   /**
    * Whether the stop control is shown: from the first sound until the picture, and all through a
@@ -248,15 +265,18 @@ export interface Screen {
   readonly pauseLabel: string;
   /** Whether the two halves of the screen take answers: inside a room. */
   readonly answersShown: boolean;
-  /** The room named in the bar, or null. */
+  /**
+   * The words at the right of the bar, or null: the room and its place among the rooms, or, where
+   * the rooms run together, how many creatures are still about. `progress` may be empty.
+   */
   readonly room: {
-    readonly id: GhostSoundId;
     readonly name: string;
     readonly progress: string;
   } | null;
-  /** The room whose lamp is on and whose dust moves, or null. */
-  readonly litRoom: GhostSoundId | null;
-  readonly roomStates: Readonly<Record<GhostSoundId, ScreenRoomState>>;
+  /** The creatures' cards, in visit order. Empty outside a room. */
+  readonly creatures: readonly CreatureScreen[];
+  /** Who stands in the room in plain view, or null. */
+  readonly featured: FeaturedScreen | null;
   /** The line of the rest between two rooms, or null. */
   readonly restLine: string | null;
   readonly calibration: CalibrationScreen | null;
@@ -266,40 +286,78 @@ export interface Screen {
   readonly swap: SwapScreen | null;
   /** The words of the practice and the counting in a room, or null. */
   readonly practice: PracticeScreen | null;
-  /** The lantern, the count and the depth scales of a room that counts, or null. */
+  /** The lantern and the count of a room that counts, or null. */
   readonly chase: ChaseScreen | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
 
-function roomStatesOf(
-  snapshot: VisitSnapshot,
-  litRoom: VisitRoom | null,
-): Readonly<Record<GhostSoundId, ScreenRoomState>> {
-  const states = {} as Record<GhostSoundId, ScreenRoomState>;
-  const chosen = snapshot.rooms.length > 0;
-  for (const roomId of ghostSoundIds) {
-    // Before a visit is chosen every room is dark. After that, a room the visit skips is closed.
-    states[roomId] = chosen ? "closed" : "dark";
-  }
-  for (const room of snapshot.rooms) {
-    states[room.roomId] =
-      room.roomIndex < snapshot.finishedRoomCount ? "visited" : "dark";
-  }
-  if (litRoom !== null) {
-    states[litRoom.roomId] = "lit";
-  }
-  return Object.freeze(states);
-}
-
+/** A room and its place among the rooms of the visit, for the bar. */
 function roomLabelOf(
   snapshot: VisitSnapshot,
   room: VisitRoom,
 ): NonNullable<Screen["room"]> {
   return {
-    id: room.roomId,
     name: roomNames[room.roomId],
     progress: roomProgressLine(room.roomIndex + 1, snapshot.rooms.length),
+  };
+}
+
+/**
+ * The words of the bar inside a room. Where the rooms run together there is one room and no
+ * order of rooms: the bar is empty through the roll call and then says how many creatures are
+ * still about, which changes only when a search ends.
+ */
+function roomWordsOf(snapshot: RoomSnapshot): Screen["room"] {
+  if (snapshot.together !== true) {
+    return roomLabelOf(snapshot, snapshot.room);
+  }
+  if (snapshot.practice?.phase !== "counting") {
+    return null;
+  }
+  const aboutCount = (snapshot.creatures ?? []).filter(
+    ({ state }) => state === "about",
+  ).length;
+  return { name: stillAboutLine(aboutCount), progress: "" };
+}
+
+/**
+ * A creature's card. `rollCall` is whether the practice is still going, when nothing counts yet,
+ * and `practising` is the creature whose practice sound plays or is about to play.
+ */
+function creatureScreenOf(
+  creature: RoomCreature,
+  rollCall: boolean,
+  practising: GhostSoundId | null,
+): CreatureScreen {
+  const id = creature.room.roomId;
+  const gone = creature.state === "gone";
+  const span = creature.topLevelDb - creature.floorLevelDb;
+  const depthOf = (side: "left" | "right"): number | null => {
+    const levelDb = creature.deepestCaughtDb[side];
+    return levelDb === null || !(span > 0)
+      ? null
+      : Math.min(1, Math.max(0, (creature.topLevelDb - levelDb) / span));
+  };
+  return {
+    id,
+    name: creatureCopy[id].name,
+    state: gone ? "gone" : practising === id ? "calling" : "about",
+    statusLine: gone
+      ? oneRoomCopy.goneLabel
+      : rollCall
+        ? null
+        : creatureCaughtCountLine(creature.caughtCount),
+    depth: { left: depthOf("left"), right: depthOf("right") },
+    label:
+      rollCall && !gone
+        ? creatureIntroLine(id)
+        : creatureCardLabel(
+            id,
+            creature.state,
+            creature.caughtCount,
+            creature.deepestCaughtDb,
+          ),
   };
 }
 
@@ -311,17 +369,6 @@ function chaseScreenOf(
   if (lantern === null || chase === null) {
     return null;
   }
-  const span = chase.topLevelDb - chase.floorLevelDb;
-  const depthOf = (side: "left" | "right"): DepthScreen => {
-    const levelDb = chase.deepestCaughtDb[side];
-    return {
-      fraction:
-        levelDb === null || !(span > 0)
-          ? null
-          : Math.min(1, Math.max(0, (chase.topLevelDb - levelDb) / span)),
-      label: deepestCatchLabel(side, levelDb),
-    };
-  };
   return {
     lantern: {
       cells: lantern.cells,
@@ -331,8 +378,6 @@ function chaseScreenOf(
     },
     caughtLine: caughtCountLine(chase.caughtCount),
     streakLine: chase.streak >= 2 ? streakLine(chase.streak) : null,
-    depth: { left: depthOf("left"), right: depthOf("right") },
-    depthQuieterLabel: chaseCopy.depthQuieterLabel,
   };
 }
 
@@ -471,7 +516,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     snapshot.stage === "exit" ||
     snapshot.stage === "unsupported" ||
     snapshot.stage === "result";
-  // The room of a swapped repeat is a room like every other: lit, answered and paused the same.
+  // The room of a swapped repeat is a room like every other: answered and paused the same.
   const repeatRoom =
     snapshot.stage === "swappedRepeat" && snapshot.repeat.phase === "room"
       ? snapshot.repeat
@@ -479,10 +524,6 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
   const inRoom =
     (snapshot.stage === "room" || repeatRoom !== null) &&
     snapshot.pause === null;
-  const litRoom =
-    inRoom && (snapshot.stage === "room" || snapshot.stage === "swappedRepeat")
-      ? snapshot.room
-      : null;
   const base = {
     stopShown: !outside,
     stopLabel:
@@ -495,8 +536,8 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     pauseLabel: repeatRoom?.pauseLabel ?? roomCopy.pauseButton,
     answersShown: inRoom,
     room: null,
-    litRoom: litRoom === null ? null : litRoom.roomId,
-    roomStates: roomStatesOf(snapshot, litRoom),
+    creatures: [],
+    featured: null,
     restLine: null,
     calibration: null,
     headphoneCheck: null,
@@ -549,8 +590,8 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
       snapshot.practice !== undefined &&
       snapshot.practice.notHeardLines.length > 0
     ) {
-      // A practice sound was not caught: the house says on which side, and offers to practise
-      // again or to go on to the counting.
+      // A practice sound was not caught: the house says on which side, and offers to go on to the
+      // counting (the next step, so the lit button) or, more quietly, to practise again.
       const { practice } = snapshot;
       const [first = "", ...rest] = practice.notHeardLines;
       return {
@@ -560,11 +601,11 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
           heading: practice.heading ?? leavingCopy.pauseHeading,
           line: first,
           moreLines: rest,
-          button: { label: practice.tryAgainLabel, action: "resume" },
-          secondButton: {
+          button: {
             label: practice.goOnLabel,
             action: "goOnWithoutPractice",
           },
+          secondButton: { label: practice.tryAgainLabel, action: "resume" },
         },
       };
     }
@@ -639,29 +680,46 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
       };
     case "rules":
       return { ...base, sheet: "rules" };
-    case "room":
+    case "room": {
+      const { practice } = snapshot;
+      // Until it counts, the practice shows who is making its sound. Never once it counts: that
+      // would tell which search a counted sound belongs to before it is answered.
+      const rollCall = practice !== undefined && practice.phase !== "counting";
+      const practising =
+        practice !== undefined && rollCall
+          ? (practice.practising ?? null)
+          : null;
       return {
         ...base,
         sheet: null,
-        room: roomLabelOf(snapshot, snapshot.room),
-        chase: chaseScreenOf(snapshot.lantern ?? null, snapshot.chase ?? null),
-        practice:
-          snapshot.practice === undefined
+        room: roomWordsOf(snapshot),
+        creatures: (snapshot.creatures ?? []).map((creature) =>
+          creatureScreenOf(creature, rollCall, practising?.roomId ?? null),
+        ),
+        featured:
+          practice === undefined || practising === null
             ? null
             : {
-                heading:
-                  snapshot.practice.phase === "counting"
-                    ? null
-                    : snapshot.practice.heading,
-                lines: snapshot.practice.lines,
+                id: practising.roomId,
+                place: "centre",
+                line: creatureIntroLine(practising.roomId),
+                sounding: practice.soundPlaying,
+              },
+        chase: chaseScreenOf(snapshot.lantern ?? null, snapshot.chase ?? null),
+        practice:
+          practice === undefined
+            ? null
+            : {
+                heading: rollCall ? practice.heading : null,
+                lines: practice.lines,
                 // Never while counting: the line would tell when a counted sound plays.
                 soundPlayingLine:
-                  snapshot.practice.soundPlaying &&
-                  snapshot.practice.phase !== "counting"
-                    ? snapshot.practice.soundPlayingLine
+                  practice.soundPlaying && rollCall
+                    ? practice.soundPlayingLine
                     : null,
               },
       };
+    }
     case "betweenRooms":
       return {
         ...base,
@@ -676,7 +734,8 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
       if (!replay.playing) {
         return { ...base, sheet: "replay", replay };
       }
-      // While the sounds play the house is in full view, and the room of the sound is lit.
+      // While the sounds play the room is in full view, and the creature of the playing sound
+      // stands in the doorway of its side. Every answer has been given by now.
       return {
         ...base,
         sheet: null,
@@ -685,12 +744,18 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
           current === null
             ? null
             : {
-                id: current.room.roomId,
-                name: current.roomName,
+                name: creatureCopy[current.room.roomId].name,
                 progress: current.positionLabel,
               },
-        litRoom: current === null ? null : current.room.roomId,
-        roomStates: roomStatesOf(snapshot, current?.room ?? null),
+        featured:
+          current === null
+            ? null
+            : {
+                id: current.room.roomId,
+                place: current.ear,
+                line: null,
+                sounding: false,
+              },
       };
     }
     case "result":
@@ -703,7 +768,6 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
           ...base,
           sheet: null,
           room: {
-            id: snapshot.room.roomId,
             name: snapshot.repeat.roomName,
             progress: snapshot.repeat.pitchLabel,
           },

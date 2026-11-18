@@ -25,6 +25,25 @@ export interface VisitFlowConfig {
    * then one upward step louder each time, never above the room's search cap.
    */
   readonly practiceSoundsPerEarMaxCount: number;
+  /**
+   * How many rooms' searches take turns in one room run at most (one-room design.md, D1). At 1 the
+   * rooms run one after another, each with its own practice and a rest before the next, as they did
+   * before the one-room spec. From the room count of the longest visit up, every sound of a visit
+   * is searched in one room: one practice for all of them, then their trials in no order.
+   */
+  readonly roomsTogetherMaxCount: number;
+  /**
+   * After this long with no catch, the room plays a reminder sound before the next trial: louder
+   * than its creature was last caught at, and counting for nothing (the game layer, 2026-11-17).
+   * Measured from the start of the counting, the last catch or the last reminder.
+   */
+  readonly reminderAfterQuietMs: number;
+  /** How far above the last catch of its creature on its ear a reminder plays. */
+  readonly reminderAboveCaughtDb: number;
+  /** How far above the caught sound the chime after a catch plays (the game layer, 2026-11-17). */
+  readonly chimeAboveCaughtDb: number;
+  /** The loudest the chime ever plays, relative to the anchor. */
+  readonly chimeMaxLevelDb: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -49,4 +68,13 @@ export const visitFlowConfig: VisitFlowConfig = deepFreeze({
   practiceGapMs: 2000,
   // The anchor, then one step louder (+5 dB, the rise limit), then the not-heard notice.
   practiceSoundsPerEarMaxCount: 2,
+  // One room for the whole visit: the five sounds of the full visit (one-room design.md, D1).
+  roomsTogetherMaxCount: 5,
+  // The game layer of 2026-11-17, decided by the owner after playing: long silences with nothing
+  // to answer made the visitor lose patience.
+  reminderAfterQuietMs: 12000,
+  reminderAboveCaughtDb: 10,
+  // The owner chose "follow the caught sound": 10 dB above it, never above 20 dB below the anchor.
+  chimeAboveCaughtDb: 10,
+  chimeMaxLevelDb: -20,
 });

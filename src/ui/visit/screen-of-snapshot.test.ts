@@ -1,6 +1,11 @@
 import { audioOutputConfig } from "../../config/audio-output-config";
 import { describe, expect, it } from "vitest";
 import { calibrationCopy } from "../../copy/calibration-copy";
+import {
+  oneRoomCopy,
+  rollCallCopy,
+  rollCallNotHeardLines,
+} from "../../copy/creature-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
@@ -23,6 +28,9 @@ import type {
   ReplaySideCounts,
   ReplaySound,
   ResultSnapshot,
+  RoomCreature,
+  RoomPractice,
+  RoomSnapshot,
   SnapshotBase,
   SwappedRepeat,
   SwappedRepeatComparison,
@@ -173,27 +181,22 @@ const [corridor, nursery, stairs] = quickRooms as [
 ];
 
 describe("screenOfSnapshot", () => {
-  it("shows the front door with every room dark and no stop control", () => {
+  it("shows the front door with nobody in the room and no stop control", () => {
     const screen = screenOfSnapshot(entry);
     expect(screen.sheet).toBe("frontDoor");
     expect(screen.stopShown).toBe(false);
     expect(screen.answersShown).toBe(false);
-    expect(screen.litRoom).toBeNull();
-    expect(new Set(Object.values(screen.roomStates))).toEqual(
-      new Set(["dark"]),
-    );
+    expect(screen.room).toBeNull();
+    expect(screen.creatures).toEqual([]);
+    expect(screen.featured).toBeNull();
+    expect(screen.chase).toBeNull();
   });
 
-  it("closes the rooms a quick visit skips", () => {
+  it("shows the stop control from the calibration on, with nobody in the room yet", () => {
     const screen = screenOfSnapshot(calibration);
-    expect(screen.roomStates).toEqual({
-      cellar: "closed",
-      corridor: "dark",
-      nursery: "dark",
-      stairs: "dark",
-      attic: "closed",
-    });
     expect(screen.stopShown).toBe(true);
+    expect(screen.creatures).toEqual([]);
+    expect(screen.featured).toBeNull();
   });
 
   it("offers only the start of calibration before the sound plays", () => {
@@ -320,27 +323,17 @@ describe("screenOfSnapshot", () => {
     );
   });
 
-  it("lights the room the visitor is in and marks the finished ones", () => {
+  it("names the room and its place among the rooms where they run one after another", () => {
     const screen = screenOfSnapshot({ ...base("room", 1), room: nursery });
     expect(screen.sheet).toBeNull();
     expect(screen.answersShown).toBe(true);
     expect(screen.pauseShown).toBe(true);
-    expect(screen.litRoom).toBe("nursery");
-    expect(screen.room).toEqual({
-      id: "nursery",
-      name: "Nursery",
-      progress: "Room 2 of 3",
-    });
-    expect(screen.roomStates).toEqual({
-      cellar: "closed",
-      corridor: "visited",
-      nursery: "lit",
-      stairs: "dark",
-      attic: "closed",
-    });
+    expect(screen.room).toEqual({ name: "Nursery", progress: "Room 2 of 3" });
+    expect(screen.creatures).toEqual([]);
+    expect(screen.featured).toBeNull();
   });
 
-  it("rests between two rooms with no lamp on and no answers taken", () => {
+  it("rests between two rooms with nobody in view and no answers taken", () => {
     const screen = screenOfSnapshot({
       ...base("betweenRooms", 1),
       canProceed: true,
@@ -349,11 +342,12 @@ describe("screenOfSnapshot", () => {
     });
     expect(screen.sheet).toBeNull();
     expect(screen.answersShown).toBe(false);
-    expect(screen.litRoom).toBeNull();
+    expect(screen.featured).toBeNull();
+    expect(screen.creatures).toEqual([]);
+    expect(screen.room).toEqual({ name: "Corridor", progress: "Room 1 of 3" });
     expect(screen.restLine).toBe(
       "This room is quiet now. The nursery is next, when you are ready.",
     );
-    expect(screen.roomStates.corridor).toBe("visited");
   });
 
   it.each<PauseReason>(["visitor", "hidden", "interrupted", "deviceChanged"])(
@@ -366,7 +360,7 @@ describe("screenOfSnapshot", () => {
       });
       expect(screen.sheet).toBe("notice");
       expect(screen.answersShown).toBe(false);
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
       expect(screen.stopShown).toBe(true);
       expect(screen.notice).toEqual({
         heading: leavingCopy.pauseHeading,
@@ -469,11 +463,11 @@ describe("screenOfSnapshot", () => {
         heading: practiceCopy.heading,
         line: first,
         moreLines: rest,
-        button: { label: practiceCopy.tryAgainLabel, action: "resume" },
-        secondButton: {
+        button: {
           label: practiceCopy.goOnLabel,
           action: "goOnWithoutPractice",
         },
+        secondButton: { label: practiceCopy.tryAgainLabel, action: "resume" },
       });
     });
 
@@ -495,7 +489,7 @@ describe("screenOfSnapshot", () => {
           chase,
         });
 
-      it("shows the lantern, the count, the row and the depth of each side", () => {
+      it("shows the lantern, the count and the row", () => {
         expect(counting(2).chase).toEqual({
           lantern: {
             cells: 2,
@@ -505,18 +499,6 @@ describe("screenOfSnapshot", () => {
           },
           caughtLine: "4 caught",
           streakLine: "3 in a row",
-          depth: {
-            left: {
-              fraction: 0.5,
-              label:
-                "Quietest catch on your left: 40 dB quieter than your calibration",
-            },
-            right: {
-              fraction: null,
-              label: "Nothing caught on your right yet",
-            },
-          },
-          depthQuieterLabel: chaseCopy.depthQuieterLabel,
         });
       });
 
@@ -535,21 +517,16 @@ describe("screenOfSnapshot", () => {
         expect(withoutLantern(0)).toEqual(withoutLantern(3));
       });
 
-      it("says no row below two caught sounds, and keeps the mark on the scale", () => {
+      it("says no row below two caught sounds", () => {
         const screen = screenOfSnapshot({
           ...base("room", 2),
           room: stairs,
           practice: practice("counting", false),
           lantern: { cells: 3, cellCount: 3 },
-          chase: {
-            ...chase,
-            streak: 1,
-            deepestCaughtDb: { left: -95, right: 5 },
-          },
+          chase: { ...chase, streak: 1 },
         });
         expect(screen.chase?.streakLine).toBeNull();
-        expect(screen.chase?.depth.left.fraction).toBe(1);
-        expect(screen.chase?.depth.right.fraction).toBe(0);
+        expect(screen.chase?.caughtLine).toBe("4 caught");
       });
 
       it("has no chase in the practice or while paused", () => {
@@ -587,6 +564,336 @@ describe("screenOfSnapshot", () => {
     });
   });
 
+  describe("in the one room, where the creatures take turns (one-room)", () => {
+    const creature = (
+      room: VisitRoom,
+      changes: Partial<RoomCreature> = {},
+    ): RoomCreature => ({
+      room,
+      state: "about",
+      caughtCount: 0,
+      deepestCaughtDb: { left: null, right: null },
+      topLevelDb: -10,
+      floorLevelDb: -70,
+      ...changes,
+    });
+    const allAbout = [creature(corridor), creature(nursery), creature(stairs)];
+    const practiceOf = (
+      phase: RoomPractice["phase"],
+      changes: Partial<RoomPractice> = {},
+    ): RoomPractice => ({
+      phase,
+      soundPlaying: false,
+      heading: phase === "counting" ? null : rollCallCopy.heading,
+      lines:
+        phase === "counting" ? rollCallCopy.countingLines : rollCallCopy.lines,
+      soundPlayingLine: practiceCopy.soundPlayingLine,
+      notHeardEars: [],
+      notHeardLines: [],
+      tryAgainLabel: practiceCopy.tryAgainLabel,
+      goOnLabel: practiceCopy.goOnLabel,
+      practising: null,
+      notHeard: [],
+      ...changes,
+    });
+    const rollCallOf = (
+      practising: VisitRoom,
+      soundPlaying: boolean,
+    ): RoomSnapshot => ({
+      ...base("room", 0),
+      room: practising,
+      together: true,
+      practice: practiceOf("practice", { practising, soundPlaying }),
+      lantern: null,
+      chase: null,
+      creatures: allAbout,
+    });
+    const chase = {
+      caughtCount: 13,
+      streak: 0,
+      bestStreak: 4,
+      deepestCaughtDb: { left: -40, right: -55 },
+      topLevelDb: -10,
+      floorLevelDb: -70,
+    };
+    const countingOf = (
+      creatures: readonly RoomCreature[],
+      changes: Partial<RoomSnapshot> = {},
+    ): RoomSnapshot => ({
+      ...base("room", 0),
+      room: nursery,
+      together: true,
+      practice: practiceOf("counting"),
+      lantern: { cells: 3, cellCount: 3 },
+      chase,
+      creatures,
+      ...changes,
+    });
+
+    it("shows who is making the practice sound in the middle of the room, and never a side", () => {
+      const screen = screenOfSnapshot(rollCallOf(nursery, true));
+      expect(screen.sheet).toBeNull();
+      expect(screen.answersShown).toBe(true);
+      expect(screen.pauseShown).toBe(true);
+      // The one room has no place in an order of rooms, and nothing counts yet.
+      expect(screen.room).toBeNull();
+      expect(screen.chase).toBeNull();
+      expect(screen.featured).toEqual({
+        id: "nursery",
+        place: "centre",
+        line: "Tink, the tin toy from the nursery. Four small notes.",
+        sounding: true,
+      });
+      expect(screen.practice).toEqual({
+        heading: "Meet them",
+        lines: rollCallCopy.lines,
+        soundPlayingLine: practiceCopy.soundPlayingLine,
+      });
+      // Nothing that is said or shown names a side. (The cards' two bars are empty.)
+      expect(
+        JSON.stringify([
+          screen.featured,
+          screen.practice,
+          screen.creatures.map(({ name, state, statusLine, label }) => [
+            name,
+            state,
+            statusLine,
+            label,
+          ]),
+        ]),
+      ).not.toMatch(/left|right/i);
+    });
+
+    it("marks the card of the one that is calling, and introduces each creature on its card", () => {
+      const screen = screenOfSnapshot(rollCallOf(nursery, true));
+      expect(screen.creatures).toEqual([
+        {
+          id: "corridor",
+          name: "Murmur",
+          state: "about",
+          statusLine: null,
+          depth: { left: null, right: null },
+          label: "Murmur, the ghost from the corridor. A wavering hum.",
+        },
+        {
+          id: "nursery",
+          name: "Tink",
+          state: "calling",
+          statusLine: null,
+          depth: { left: null, right: null },
+          label: "Tink, the tin toy from the nursery. Four small notes.",
+        },
+        {
+          id: "stairs",
+          name: "Scritch",
+          state: "about",
+          statusLine: null,
+          depth: { left: null, right: null },
+          label: "Scritch, the beetle from the stairs. A dry scrape.",
+        },
+      ]);
+    });
+
+    it("keeps the creature in the middle between its two sounds, without the line that one is playing", () => {
+      const screen = screenOfSnapshot(rollCallOf(nursery, false));
+      expect(screen.featured).toEqual({
+        id: "nursery",
+        place: "centre",
+        line: "Tink, the tin toy from the nursery. Four small notes.",
+        sounding: false,
+      });
+      expect(screen.practice?.soundPlayingLine).toBeNull();
+      expect(screen.creatures[1]?.state).toBe("calling");
+    });
+
+    it("shows nobody in the middle once it counts, and says in the bar how many are still about", () => {
+      const screen = screenOfSnapshot(
+        countingOf([
+          creature(corridor, {
+            state: "gone",
+            caughtCount: 9,
+            deepestCaughtDb: { left: -40, right: -55 },
+          }),
+          creature(nursery, {
+            caughtCount: 4,
+            deepestCaughtDb: { left: -40, right: null },
+          }),
+          creature(stairs),
+        ]),
+      );
+      expect(screen.sheet).toBeNull();
+      expect(screen.answersShown).toBe(true);
+      expect(screen.featured).toBeNull();
+      expect(screen.room).toEqual({ name: "2 still about", progress: "" });
+      expect(screen.practice).toEqual({
+        heading: null,
+        lines: rollCallCopy.countingLines,
+        soundPlayingLine: null,
+      });
+      expect(screen.chase).toEqual({
+        lantern: {
+          cells: 3,
+          cellCount: 3,
+          label: "Lantern: 3 of 3 lights",
+          darkLine: null,
+        },
+        caughtLine: "13 caught",
+        streakLine: null,
+      });
+    });
+
+    it("gives each creature a card with its own catches and a bar for each side", () => {
+      const screen = screenOfSnapshot(
+        countingOf([
+          creature(corridor, {
+            state: "gone",
+            caughtCount: 9,
+            deepestCaughtDb: { left: -40, right: -55 },
+          }),
+          creature(nursery, {
+            caughtCount: 4,
+            deepestCaughtDb: { left: -40, right: null },
+          }),
+          creature(stairs),
+        ]),
+      );
+      expect(screen.creatures).toEqual([
+        {
+          id: "corridor",
+          name: "Murmur",
+          state: "gone",
+          statusLine: oneRoomCopy.goneLabel,
+          depth: { left: 0.5, right: 0.75 },
+          label:
+            "Murmur, the ghost, gone back to the corridor. 9 caught. Quietest catch on your left: 40 dB quieter than your calibration. Quietest catch on your right: 55 dB quieter than your calibration.",
+        },
+        {
+          id: "nursery",
+          name: "Tink",
+          state: "about",
+          statusLine: "4 caught",
+          depth: { left: 0.5, right: null },
+          label:
+            "Tink, the tin toy from the nursery. 4 caught. Quietest catch on your left: 40 dB quieter than your calibration. Nothing caught on your right yet.",
+        },
+        {
+          id: "stairs",
+          name: "Scritch",
+          state: "about",
+          statusLine: "0 caught",
+          depth: { left: null, right: null },
+          label:
+            "Scritch, the beetle from the stairs. 0 caught. Nothing caught on your left yet. Nothing caught on your right yet.",
+        },
+      ]);
+    });
+
+    it("keeps each bar between the loudest and the quietest sound of its own creature", () => {
+      const [beyond, flat] = screenOfSnapshot(
+        countingOf([
+          creature(corridor, { deepestCaughtDb: { left: -95, right: 5 } }),
+          // No room between its loudest and its quietest sound: there is no scale to mark.
+          creature(nursery, {
+            topLevelDb: -30,
+            floorLevelDb: -30,
+            deepestCaughtDb: { left: -30, right: null },
+          }),
+        ]),
+      ).creatures;
+      expect(beyond?.depth).toEqual({ left: 1, right: 0 });
+      expect(flat?.depth).toEqual({ left: null, right: null });
+    });
+
+    it("never says who is next once it counts, whatever the practice names", () => {
+      const screen = screenOfSnapshot(
+        countingOf(allAbout, {
+          practice: practiceOf("counting", {
+            practising: stairs,
+            soundPlaying: true,
+          }),
+        }),
+      );
+      expect(screen.featured).toBeNull();
+      expect(screen.practice?.soundPlayingLine).toBeNull();
+      expect(screen.creatures.map(({ state }) => state)).toEqual([
+        "about",
+        "about",
+        "about",
+      ]);
+    });
+
+    it("says that all have gone home when the last search has ended", () => {
+      const screen = screenOfSnapshot(
+        countingOf(allAbout.map((one) => ({ ...one, state: "gone" }))),
+      );
+      expect(screen.room).toEqual({ name: "All gone home", progress: "" });
+      expect(screen.creatures.map(({ statusLine }) => statusLine)).toEqual([
+        "Gone home",
+        "Gone home",
+        "Gone home",
+      ]);
+    });
+
+    it("changes nothing but the lantern when only the lantern changes", () => {
+      const withoutLantern = (cells: number) => {
+        const screen = screenOfSnapshot(
+          countingOf(allAbout, { lantern: { cells, cellCount: 3 } }),
+        );
+        return { ...screen, chase: { ...screen.chase, lantern: null } };
+      };
+      expect(withoutLantern(0)).toEqual(withoutLantern(3));
+      expect(
+        screenOfSnapshot(
+          countingOf(allAbout, { lantern: { cells: 0, cellCount: 3 } }),
+        ).chase?.lantern.darkLine,
+      ).toBe(chaseCopy.lanternDarkLine);
+    });
+
+    it("says who was not caught at the roll call, and offers to try again or to go on", () => {
+      const lines = rollCallNotHeardLines([
+        { roomId: "nursery", side: "left" },
+      ]);
+      const screen = screenOfSnapshot({
+        ...rollCallOf(nursery, false),
+        pause: { reason: "practiceNotHeard" },
+        practice: practiceOf("notHeard", {
+          notHeardEars: ["left"],
+          notHeardLines: lines,
+          notHeard: [{ room: nursery, ear: "left" }],
+        }),
+      });
+      const [first, ...rest] = lines;
+      expect(first).toBe(
+        "Not caught, even a little louder: Tink on your left.",
+      );
+      expect(screen.sheet).toBe("notice");
+      expect(screen.answersShown).toBe(false);
+      expect(screen.featured).toBeNull();
+      expect(screen.notice).toEqual({
+        heading: "Meet them",
+        line: first,
+        moreLines: rest,
+        button: {
+          label: practiceCopy.goOnLabel,
+          action: "goOnWithoutPractice",
+        },
+        secondButton: { label: practiceCopy.tryAgainLabel, action: "resume" },
+      });
+    });
+
+    it("covers a paused room with the notice and names nobody on it", () => {
+      const screen = screenOfSnapshot(
+        countingOf(allAbout, { pause: { reason: "visitor" } }),
+      );
+      expect(screen.sheet).toBe("notice");
+      expect(screen.answersShown).toBe(false);
+      expect(screen.pauseShown).toBe(false);
+      expect(screen.chase).toBeNull();
+      expect(screen.featured).toBeNull();
+      expect(screen.room).toBeNull();
+    });
+  });
+
   describe("in the replay of missed sounds", () => {
     it("asks before the first sound, with the stop control and both ways on", () => {
       const screen = screenOfSnapshot(replaySnapshot(announcing));
@@ -595,7 +902,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.stopLabel).toBe(replayCopy.stopButton);
       expect(screen.answersShown).toBe(false);
       expect(screen.pauseShown).toBe(false);
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
       expect(screen.replay).toEqual({
         playing: false,
         heading: replayCopy.heading,
@@ -633,26 +940,26 @@ describe("screenOfSnapshot", () => {
       expect(screen.soundNotStartedLine).toBe(visitCopy.soundNotStartedLine);
     });
 
-    it("shows the house with the room of the playing sound lit, its place and both counts", () => {
+    it("shows the room with the creature of the playing sound in the doorway of its side, its place and both counts", () => {
       const screen = screenOfSnapshot(replaySnapshot(playing));
       expect(screen.sheet).toBeNull();
       expect(screen.stopShown).toBe(true);
       expect(screen.stopLabel).toBe(replayCopy.stopButton);
       expect(screen.answersShown).toBe(false);
       expect(screen.pauseShown).toBe(false);
+      // The bar names the creature, not the floor it lives on.
       expect(screen.room).toEqual({
-        id: "stairs",
-        name: replaySound.roomName,
+        name: "Scritch",
         progress: replaySound.positionLabel,
       });
-      expect(screen.litRoom).toBe("stairs");
-      expect(screen.roomStates).toEqual({
-        cellar: "closed",
-        corridor: "visited",
-        nursery: "visited",
-        stairs: "lit",
-        attic: "closed",
+      expect(screen.featured).toEqual({
+        id: "stairs",
+        place: "right",
+        line: null,
+        sounding: false,
       });
+      expect(screen.creatures).toEqual([]);
+      expect(screen.chase).toBeNull();
       expect(screen.replay).toEqual({
         playing: true,
         heading: replayCopy.heading,
@@ -665,13 +972,13 @@ describe("screenOfSnapshot", () => {
       });
     });
 
-    it("lights no room between the press and the first sound", () => {
+    it("shows nobody between the press and the first sound", () => {
       const screen = screenOfSnapshot(
         replaySnapshot({ ...playing, current: null, counts: null }),
       );
       expect(screen.sheet).toBeNull();
       expect(screen.room).toBeNull();
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
       expect(screen.replay?.sound).toBeNull();
       expect(screen.replay?.counts).toBeNull();
       expect(screen.stopShown).toBe(true);
@@ -692,7 +999,7 @@ describe("screenOfSnapshot", () => {
         expect(screen.stopShown).toBe(true);
         expect(screen.stopLabel).toBe(replayCopy.stopButton);
         expect(screen.replay).toBeNull();
-        expect(screen.litRoom).toBeNull();
+        expect(screen.featured).toBeNull();
         expect(screen.notice).toEqual({
           heading: leavingCopy.pauseHeading,
           line: replayCopy.pauseLines[reason],
@@ -718,7 +1025,7 @@ describe("screenOfSnapshot", () => {
       const screen = screenOfSnapshot(replaySnapshot(finished));
       expect(screen.sheet).toBe("replay");
       expect(screen.stopShown).toBe(true);
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
       expect(screen.replay).toEqual({
         playing: false,
         heading: replayCopy.heading,
@@ -771,7 +1078,8 @@ describe("screenOfSnapshot", () => {
     expect(screen.notice).toBeNull();
     expect(screen.stopShown).toBe(false);
     expect(screen.answersShown).toBe(false);
-    expect(screen.litRoom).toBeNull();
+    expect(screen.featured).toBeNull();
+    expect(screen.creatures).toEqual([]);
     expect(JSON.stringify(screen)).not.toContain("summary");
   });
 
@@ -846,7 +1154,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.stopLabel).toBe(swappedRepeatCopy.stopButton);
       expect(screen.pauseShown).toBe(false);
       expect(screen.answersShown).toBe(false);
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
       expect(screen.room).toBeNull();
       expect(screen.swap).toEqual({
         phase: "instruction",
@@ -955,7 +1263,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.answersShown).toBe(false);
     });
 
-    it("shows the room like every other room, lit, answered and with its own pause", () => {
+    it("shows the room like every other room, answered and with its own pause", () => {
       const screen = screenOfSnapshot(repeatSnapshot(roomView));
       expect(screen.sheet).toBeNull();
       expect(screen.swap).toBeNull();
@@ -963,13 +1271,12 @@ describe("screenOfSnapshot", () => {
       expect(screen.pauseShown).toBe(true);
       expect(screen.pauseLabel).toBe("Pause this room");
       expect(screen.answersShown).toBe(true);
-      expect(screen.litRoom).toBe("stairs");
-      expect(screen.roomStates.stairs).toBe("lit");
-      expect(screen.room).toEqual({
-        id: "stairs",
-        name: "Stairs",
-        progress: "4 kHz",
-      });
+      // The bar names the floor and its pitch. Nobody stands in view, and no card is shown: one
+      // floor is visited again, and its creature shows only when one of its sounds is caught.
+      expect(screen.room).toEqual({ name: "Stairs", progress: "4 kHz" });
+      expect(screen.creatures).toEqual([]);
+      expect(screen.featured).toBeNull();
+      expect(screen.chase).toBeNull();
       expect(screen.restLine).toBeNull();
     });
 
@@ -1000,7 +1307,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.stopShown).toBe(true);
       expect(screen.pauseShown).toBe(false);
       expect(screen.answersShown).toBe(false);
-      expect(screen.litRoom).toBeNull();
+      expect(screen.featured).toBeNull();
     });
 
     it("sets both runs beside each other when the room is finished", () => {
@@ -1185,12 +1492,11 @@ describe("screenOfSnapshot", () => {
       expect(screenOf({ phase: "instruction" }).swap?.againLine).toBeNull();
     });
 
-    it("lights, answers and pauses the room as every other room, with the same answer labels", () => {
+    it("answers and pauses the room as every other room, with the same answer labels", () => {
       const room = screenOf({ phase: "room", earpieces: "swapped" });
       expect(room.sheet).toBeNull();
       expect(room.answersShown).toBe(true);
       expect(room.pauseShown).toBe(true);
-      expect(room.litRoom).toBe("stairs");
       expect(room.room?.name).toBe("Stairs");
       const repeat = swappedRepeatView({
         ...input,

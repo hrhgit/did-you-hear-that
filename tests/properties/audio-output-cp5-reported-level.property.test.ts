@@ -1,7 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { audioSafetyConfig } from "../../src/config/audio-safety-config";
-import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { decibelsToGain } from "../../src/audio/synth/decibels-to-gain";
 import { applyOutputFade } from "../../src/audio/output/apply-output-fade";
 import { preparePlayback } from "../../src/audio/output/prepare-playback";
@@ -26,7 +25,7 @@ function relativeDistance(actual: number, expected: number): number {
   );
 }
 
-describe("audio output CP5. The level reported is the level played (Universal; R7.3, R7.4, R8.1, R8.2)", () => {
+describe("audio output CP5. The level reported is the level played (Universal; R7.4, R8.1, R8.2)", () => {
   it("reports the level and gain that produced the samples", () => {
     const { ceilingFraction } = audioSafetyConfig;
     fc.assert(
@@ -76,11 +75,6 @@ describe("audio output CP5. The level reported is the level played (Universal; R
             expect(result.peakFraction).toBeGreaterThanOrEqual(
               ceilingFraction * (1 - 1e-6),
             );
-          }
-          if (
-            spec.requestedLevelDb > hearingMethodConfig.capRelativeToAnchorDb
-          ) {
-            expect(result.clampLimit).not.toBeNull();
           }
         },
       ),

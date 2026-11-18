@@ -1,5 +1,4 @@
 import { resultPageConfig } from "../../config/result-page-config";
-import { createSeededRandom } from "../../config/seeded-random";
 import { createSystemTimer } from "../../config/system-timer";
 import { createSystemWallClock } from "../../config/system-wall-clock";
 import { comparisonCopy } from "../../copy/comparison-lines";
@@ -8,8 +7,6 @@ import { createVisitArchive } from "../../session/create-visit-archive";
 import { createVisitFlow } from "../../session/create-visit-flow";
 import { findEarlierVisit } from "../../session/find-earlier-visit";
 import { resultPicture } from "../../session/result-picture";
-import { drawHouseSection } from "../house/draw-house-section";
-import { startMotionLayer } from "../house/motion-layer";
 import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
 import { joinCalibrationControl } from "./join-calibration-control";
@@ -18,19 +15,16 @@ import { joinSwapButtons } from "./join-swap-buttons";
 import { listenForAnswers } from "./listen-for-answers";
 import type { VisitSnapshot } from "../../session/visit-flow-types";
 import { reactionOfEvent } from "./reaction-of-event";
-import { screenOfSnapshot } from "./screen-of-snapshot";
+import { screenOfSnapshot, type NoticeAction } from "./screen-of-snapshot";
 import { createCaption } from "./show-caption";
 import { createScreenView } from "./show-screen";
 
-/** The seed of the pencil that draws the house, so the house looks the same on every visit. */
-const houseDrawingSeed = 1887;
-
 /**
- * Opens the house on the page: draws it, starts the visit flow and joins the two. This is the
- * one place that chooses seeds. It draws three with `crypto.getRandomValues`: one for the visit,
- * which decides every sound, one for the dust, the lamp and the shadow under the door, and one
- * for the ids of saved visits. They never meet, so nothing that moves on the page can follow a
- * sound.
+ * Opens the house on the page: builds the room, starts the visit flow and joins the two. This is
+ * the one place that chooses seeds. It draws two with `crypto.getRandomValues`: one for the
+ * visit, which decides every sound, and one for the ids of saved visits. Nothing on the page
+ * draws lots: what moves in the room either keeps its own time, as the lantern does, or answers a
+ * scored trial. So nothing that moves on the page can follow a sound.
  * Throws if the document has no `<main>` element.
  */
 export function startVisit(
@@ -43,21 +37,12 @@ export function startVisit(
   }
   doc.title = siteTitle;
 
-  const seeds = new Uint32Array(3);
+  const seeds = new Uint32Array(2);
   view.crypto.getRandomValues(seeds);
   const visitSeed = seeds[0] ?? 0;
-  const ambientSeed = seeds[1] ?? 0;
-  const archiveSeed = seeds[2] ?? 0;
+  const archiveSeed = seeds[1] ?? 0;
 
   const page = buildVisitPage(doc, main);
-  const house = drawHouseSection(doc, createSeededRandom(houseDrawingSeed));
-  const motion = startMotionLayer({
-    doc,
-    view,
-    house,
-    random: createSeededRandom(ambientSeed),
-  });
-  page.houseFrame.append(house.element, motion.canvas);
 
   const flow = createVisitFlow({
     window: view,
@@ -94,9 +79,7 @@ export function startVisit(
     view,
     page,
     result: resultView,
-    house,
-    motion,
-    caption: createCaption(view, page.caption),
+    caption: createCaption(view, page.caption, page.captionNote),
   });
 
   // The stop control is wired before anything that can start a sound.
@@ -194,23 +177,24 @@ export function startVisit(
       },
     },
   );
-  press(page.notice.button, () => {
-    const action = screenView.current()?.notice?.button?.action;
+  // Either button of a notice does what the screen says it does, so the screen alone decides
+  // which choice is lit and which is the quieter one.
+  const doNotice = (action: NoticeAction | undefined): void => {
     if (action === "resume") {
       flow.resume();
     } else if (action === "backToFrontDoor") {
       flow.backToFrontDoor();
     } else if (action === "proceed") {
       flow.proceed();
-    }
-  });
-  press(page.notice.secondButton, () => {
-    if (
-      screenView.current()?.notice?.secondButton?.action ===
-      "goOnWithoutPractice"
-    ) {
+    } else if (action === "goOnWithoutPractice") {
       flow.goOnWithoutPractice();
     }
+  };
+  press(page.notice.button, () => {
+    doNotice(screenView.current()?.notice?.button?.action);
+  });
+  press(page.notice.secondButton, () => {
+    doNotice(screenView.current()?.notice?.secondButton?.action);
   });
 
   listenForAnswers({

@@ -103,8 +103,14 @@ describe("visit flow regressions", () => {
   // third room's first attempt starts at 213 533 ms and presents its first counted trial at
   // 223 893 ms; the first device change is set at 232 000 ms, in its counting; attempt 2 starts at
   // 241 974 ms and would play its first practice sound at 243 974 ms, so the second device change
-  // is set at 242 900 ms. The case asserts that order first, so that it cannot quietly stop
-  // covering two device changes in a row.
+  // is set at 242 900 ms.
+  //
+  // The gaps of 0.8 s to 1.6 s and the chime after a catch (the game layer, 2026-11-17) moved them
+  // again. The third room's first attempt starts at 216 126 ms and presents its first counted
+  // trial at 222 180 ms; the first device change is set at 230 000 ms, in its counting; attempt 2
+  // starts at 241 993 ms and would play its first practice sound at 243 993 ms, so the second
+  // device change stays at 242 900 ms. The case asserts that order first, so that it cannot
+  // quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
       visitType: "quick",
@@ -121,7 +127,7 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 232_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 230_000, kind: "deviceChanged", resumeAfterMs: 0 },
         { atMs: 242_900, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,

@@ -86,7 +86,7 @@ describe("replaySoundOf", () => {
   it("says the cap changed the level when the output stage names a clamp limit", () => {
     const sound = replaySoundOf(
       planned(),
-      { playedLevelDb: -16, clampLimit: "anchorCap" },
+      { playedLevelDb: -16, clampLimit: "ceiling" },
       1,
       2,
     );

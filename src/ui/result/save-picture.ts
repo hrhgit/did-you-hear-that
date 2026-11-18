@@ -15,8 +15,12 @@ export interface PictureToSave {
   readonly headphones: SheetHeadphones | null;
 }
 
-/** The styles a drawing carries with it when it leaves the page's style sheets. */
+/**
+ * The styles a drawing carries with it when it leaves the page's style sheets. `display` keeps
+ * hidden the parts of a creature that are only shown in another mood, such as its shut eyes.
+ */
 const carriedStyles = [
+  "display",
   "fill",
   "fill-opacity",
   "stroke",

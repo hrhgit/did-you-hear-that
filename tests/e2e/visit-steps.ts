@@ -1,14 +1,21 @@
 import { expect, type Page } from "@playwright/test";
 import { audioOutputConfig } from "../../src/config/audio-output-config";
+import type { GhostSoundId } from "../../src/config/sound-id";
 import { calibrationCopy } from "../../src/copy/calibration-copy";
+import {
+  creatureIntroLine,
+  oneRoomCopy,
+  rollCallCaughtLine,
+  rollCallCopy,
+} from "../../src/copy/creature-copy";
 import { frontDoorCopy } from "../../src/copy/front-door-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
-import { roomCopy, roomProgressLine } from "../../src/copy/room-copy";
+import { roomCopy } from "../../src/copy/room-copy";
 import { rulesCopy } from "../../src/copy/rules-copy";
 import { visitCopy } from "../../src/copy/visit-copy";
 
-// The steps from the front door into the first room, shared by the tests that walk a visit on
-// the public page.
+// The steps from the front door into the one room, shared by the tests that walk a visit on the
+// public page.
 
 const { calibrationSettingKeepMinDb } = audioOutputConfig;
 
@@ -79,10 +86,102 @@ export async function checkHeadphones(page: Page): Promise<void> {
   await expect(heading(page, rulesCopy.heading)).toBeVisible();
 }
 
-export async function enterFirstRoom(page: Page): Promise<void> {
+/** The picture of the one room, by the name it has for a visitor who cannot see it. */
+export const roomPicture = (page: Page) =>
+  page.getByRole("img", { name: oneRoomCopy.sceneLabel });
+
+/** The heading over the roll call. It is plain text, so that the room has no heading of its own. */
+export const rollCallHeading = (page: Page) =>
+  page.locator(".visit-practice-heading");
+
+/** The creatures' cards along the foot of the room, in visit order. */
+export const creatureCards = (page: Page) =>
+  page
+    .getByRole("list", { name: oneRoomCopy.shelfLabel })
+    .getByRole("listitem");
+
+/**
+ * Walks from the front door into the one room. It opens with the roll call, where each creature
+ * makes its sound and nothing counts yet.
+ */
+export async function enterRoom(page: Page): Promise<void> {
   await calibrate(page);
   await checkHeadphones(page);
   await button(page, rulesCopy.enterButton).click();
-  await expect(page.getByText(roomProgressLine(1, 3))).toBeVisible();
+  await expect(roomPicture(page)).toBeVisible();
+  await expect(rollCallHeading(page)).toHaveText(rollCallCopy.heading);
   await expect(button(page, roomCopy.pauseButton)).toBeVisible();
+}
+
+/** A side of the room: the answer a visitor gives. */
+export type Side = "left" | "right";
+
+/**
+ * Gives one answer: the side's arrow key, or, by touch, a finger on that half of the screen at
+ * the height of the doorways.
+ */
+export async function answerSide(
+  page: Page,
+  side: Side,
+  byTouch: boolean,
+): Promise<void> {
+  if (!byTouch) {
+    await page.keyboard.press(side === "left" ? "ArrowLeft" : "ArrowRight");
+    return;
+  }
+  const size = page.viewportSize();
+  if (size === null) {
+    throw new Error("The page has no viewport.");
+  }
+  await page.touchscreen.tap(
+    size.width * (side === "left" ? 0.25 : 0.75),
+    size.height * 0.6,
+  );
+}
+
+/** One turn of the roll call: whose practice sound it is, and the side it plays on. */
+export interface RollCallTurn {
+  readonly roomId: GhostSoundId;
+  readonly side: Side;
+}
+
+/**
+ * Every turn of the roll call of these creatures, in its order: each one in visit order, its left
+ * side and then its right (one-room design.md, "The roll call").
+ */
+export function rollCallTurns(
+  roomIds: readonly GhostSoundId[],
+): RollCallTurn[] {
+  return roomIds.flatMap((roomId) => [
+    { roomId, side: "left" as const },
+    { roomId, side: "right" as const },
+  ]);
+}
+
+/**
+ * Answers these turns of the roll call, each on the side it plays on. The page says who is making
+ * a practice sound and that it is playing, and never its side: the side is known here only from
+ * the order of the roll call. The house ignores an answer that comes before a practice sound can
+ * be answered, so the side is pressed until the house has taken the answer and said who it was.
+ */
+export async function answerRollCall(
+  page: Page,
+  turns: readonly RollCallTurn[],
+  byTouch: boolean,
+): Promise<void> {
+  const soundLine = page.locator(".visit-practice-sound");
+  for (const { roomId, side } of turns) {
+    await expect(page.locator(".room-intro")).toHaveText(
+      creatureIntroLine(roomId),
+      { timeout: 20_000 },
+    );
+    await expect(soundLine).toBeVisible({ timeout: 20_000 });
+    await expect(async () => {
+      await answerSide(page, side, byTouch);
+      await expect(soundLine).toBeHidden({ timeout: 300 });
+    }).toPass({ timeout: 10_000, intervals: [50] });
+    await expect(page.locator(".visit-caption")).toHaveText(
+      rollCallCaughtLine(roomId),
+    );
+  }
 }

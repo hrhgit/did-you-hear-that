@@ -97,7 +97,7 @@ function clampedTrial(roomIndex: number): VisitTrial {
     ear: "left",
     requestedLevelDb: 15,
     playedLevelDb: 10,
-    clampLimit: "anchorCap",
+    clampLimit: "ceiling",
     status: "scored",
     response: "left",
     outcome: "caught",
@@ -276,6 +276,8 @@ describe("resultPicture", () => {
         line: "The quietest sound you caught here was 40 dB quieter than your calibration.",
         reasonLine: null,
         earlier: null,
+        valueLabel: "40 dB quieter",
+        valueNote: "than your calibration",
       });
       expect(first?.left.lightDepthFraction).toBeCloseTo(
         0.1 + (0.8 * 55) / 85,
@@ -291,6 +293,8 @@ describe("resultPicture", () => {
         line: "Quieter than this house can whisper.",
         reasonLine: null,
         earlier: null,
+        valueLabel: "Quieter still",
+        valueNote: "than this house can whisper",
       });
     });
 
@@ -302,6 +306,8 @@ describe("resultPicture", () => {
         line: "You did not catch the loudest sound the house may play here.",
         reasonLine: null,
         earlier: null,
+        valueLabel: "Not caught",
+        valueNote: "even the loudest sound the house may play here went by",
       });
     });
 
@@ -313,6 +319,8 @@ describe("resultPicture", () => {
         line: "This room should be visited again.",
         reasonLine: "One catch here did not fit with your other answers.",
         earlier: null,
+        valueLabel: "No level",
+        valueNote: "this room should be visited again",
       });
     });
 

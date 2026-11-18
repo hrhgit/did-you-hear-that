@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createSeededRandom } from "../../config/seeded-random";
-import { soundIds } from "../../config/sound-id";
+import { everySoundId, soundIds } from "../../config/sound-id";
 import { renderAtticWhine } from "./attic-whine";
 import { renderCalibrationHiss } from "./calibration-hiss";
+import { renderCatchChime } from "./catch-chime";
 import { renderCellarKnock } from "./cellar-knock";
 import { renderCorridorHum } from "./corridor-hum";
 import { renderNurseryMusicBox } from "./nursery-music-box";
@@ -10,8 +11,8 @@ import { soundRenderers } from "./sound-renderers";
 import { renderStairsScrape } from "./stairs-scrape";
 
 describe("soundRenderers", () => {
-  it("has exactly the six sound ids", () => {
-    expect(Object.keys(soundRenderers)).toEqual([...soundIds]);
+  it("has exactly the six listed sound ids and the chime", () => {
+    expect(Object.keys(soundRenderers)).toEqual([...everySoundId]);
   });
 
   it("is frozen", () => {
@@ -26,6 +27,7 @@ describe("soundRenderers", () => {
       stairs: renderStairsScrape,
       attic: renderAtticWhine,
       calibration: renderCalibrationHiss,
+      chime: renderCatchChime,
     });
     expect(soundRenderers.cellar).toBe(renderCellarKnock);
     expect(soundRenderers.calibration).toBe(renderCalibrationHiss);

@@ -29,10 +29,16 @@ import {
 const runs = 300;
 const runsPerSound = 12;
 
-/** The condition of CP3 for one result that is not refused. */
+/**
+ * The condition of CP3 for one result that is not refused. Every channel starts and ends at +0.
+ * With `fadeLengths`, its fades are also at least `fadeMinMs` long: true of the house's own
+ * sounds, which are built with fades. Since 2026-11-17 the output stage no longer refuses an
+ * arbitrary buffer whose fades are shorter (the owner dropped the fade-length check).
+ */
 function expectFaded(
   result: Extract<PreparedPlayback, { kind: "ready" }>,
   sampleRateHz: number,
+  fadeLengths: boolean,
 ): void {
   for (const [name, channel] of [
     ["left", result.left],
@@ -43,7 +49,7 @@ function expectFaded(
       Object.is(channel[channel.length - 1], 0),
       `${name} last sample`,
     ).toBe(true);
-    if (channel.some((sample) => sample !== 0)) {
+    if (fadeLengths && channel.some((sample) => sample !== 0)) {
       const { fadeInMs, fadeOutMs } = measureFadeLengths(channel, sampleRateHz);
       expect(fadeInMs, `${name} fade in`).toBeGreaterThanOrEqual(
         audioSafetyConfig.fadeMinMs,
@@ -56,12 +62,12 @@ function expectFaded(
 }
 
 describe("audio output CP3. Every sound fades in and out (Universal; R10.1, R10.2, R20.3; brief property 3)", () => {
-  it("starts and ends every channel of every playback at +0 with fades of at least the shortest fade", () => {
+  it("starts and ends every channel of every playback at +0", () => {
     fc.assert(
       fc.property(anyRequestSpecArbitrary, (spec) => {
         const result = preparePlayback(materializeRequest(spec));
         if (result.kind === "ready") {
-          expectFaded(result, spec.sampleRateHz);
+          expectFaded(result, spec.sampleRateHz, false);
         }
       }),
       { numRuns: runs },
@@ -102,11 +108,10 @@ describe("audio output CP3. Every sound fades in and out (Universal; R10.1, R10.
                   : "left",
               requestedLevelDb: levelDb,
               calibrationGain,
-              previousAppliedGain: null,
             });
             expect(result.kind).toBe("ready");
             if (result.kind === "ready") {
-              expectFaded(result, sampleRateHz);
+              expectFaded(result, sampleRateHz, true);
             }
           },
         ),

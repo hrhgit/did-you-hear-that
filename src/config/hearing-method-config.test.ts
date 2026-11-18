@@ -12,8 +12,8 @@ describe("hearingMethodConfig", () => {
       capRelativeToAnchorDb: 5,
       floorDb: -70,
       responseWindowMs: 1800,
-      gapBetweenTrialsMinMs: 1000,
-      gapBetweenTrialsMaxMs: 2500,
+      gapBetweenTrialsMinMs: 800,
+      gapBetweenTrialsMaxMs: 1600,
       noSoundTrialShareMinFraction: 0.15,
       noSoundTrialShareMaxFraction: 0.25,
       falseAlarmRateUnreliableAboveFraction: 0.3,
@@ -42,13 +42,6 @@ describe("hearingMethodConfig", () => {
     it("orders the floor below the starting level and the starting level below the cap", () => {
       expect(config.floorDb).toBeLessThan(config.startingLevelDb);
       expect(config.startingLevelDb).toBeLessThan(config.capRelativeToAnchorDb);
-    });
-
-    it("keeps the cap at 5 dB above the anchor or lower (audible-start R2.3)", () => {
-      expect(
-        config.capRelativeToAnchorDb,
-        "capRelativeToAnchorDb is above 5 dB. It was made stricter on 2026-11-16; a higher cap needs the project owner's approval first.",
-      ).toBeLessThanOrEqual(5);
     });
 
     it("has positive step sizes", () => {

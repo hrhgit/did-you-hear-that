@@ -811,7 +811,7 @@ export function endLine(ending: ReplayEndingName, replayCount: number, missedCou
 |---|---|
 | `countWords(0)`, `(7)`, `(13)`, `(20)`, `(56)`, `(100)`, `(105)`, `(999)`, `(1000)` | `zero`, `seven`, `thirteen`, `twenty`, `fifty-six`, `one hundred`, `one hundred and five`, `nine hundred and ninety-nine`, `1000` |
 | `countWords(n)`, n negative, not whole or not finite | `RangeError` |
-| `announcementLines(20)` | 1. `Before you leave, I will play again the sounds you did not catch.` 2. `Each one comes from the room and the side where I made it, in the order I made them.` 3. `Each one is 20 dB louder than when it went by, but never louder than the house may play.` 4. `Leave the volume as it is. You can stop the sounds at any moment.` |
+| `announcementLines(20)` | 1. `Before you leave, I will play again the sounds you did not catch.` 2. `Each one comes from the side where I made it, with its creature in the doorway, in the order I made them.` 3. `Each one is 20 dB louder than when it went by, but never louder than the house may play.` 4. `Leave the volume as it is. You can stop the sounds at any moment.` |
 | `announcementLines(r)` | Line 3 with `r` rounded to a whole number; `RangeError` unless `r` is finite and above 0 |
 | `selectionLine(56, 20)` | `You did not catch fifty-six sounds. I will play twenty of them, spread over the whole visit.` (`RangeError` unless 1 ≤ replay count < missed count) |
 | `positionLabel(3, 20)` | `Sound 3 of 20` (`RangeError` unless 1 ≤ position ≤ count, both whole) |

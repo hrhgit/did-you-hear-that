@@ -25,6 +25,8 @@ export const roomCopy = Object.freeze({
   answerKeys: Object.freeze({ left: "← or A", right: "→ or L" }),
   /** Fixed by wording.md: said after an answer on a trial with no sound. */
   noSoundLine: "I made no sound that time.",
+  /** Said after a trial with no sound went by unanswered, once it is scored (the game layer, 2026-11-17). */
+  nothingCameLine: "Nothing came that time.",
   stopButton: "Stop and leave",
   pauseButton: "Pause",
   goOnButton: "Go on",
@@ -107,8 +109,8 @@ export function otherSideLine(side: AnswerSide): string {
 
 /** What the visitor reads about the lantern and the chase inside a room that counts. */
 export const chaseCopy = Object.freeze({
-  /** Said while the lantern is dark, when no answer is taken and the room waits. */
-  lanternDarkLine: "Your lantern is out. Wait for a light to come back.",
+  /** Said while the lantern is dark. The room goes on and every answer counts (the game layer, 2026-11-17). */
+  lanternDarkLine: "Your lantern is out. Catch one to light it again.",
   /** Under each depth scale: the way its mark moves as quieter sounds are caught. */
   depthQuieterLabel: "quieter",
 });

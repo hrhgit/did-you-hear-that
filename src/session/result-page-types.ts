@@ -376,6 +376,12 @@ export interface PictureWing {
   readonly reasonLine: string | null;
   /** The earlier visit's mark in this wing, or null. Always null until the comparison tasks are built. */
   readonly earlier: EarlierWing | null;
+  /**
+   * `line` in two parts for the floor's card (added 2026-11-17): the value set large, such as
+   * "30 dB quieter", and the words that finish it, such as "than your calibration".
+   */
+  readonly valueLabel: string;
+  readonly valueNote: string;
 }
 
 /** The earlier visit's result in one wing. */

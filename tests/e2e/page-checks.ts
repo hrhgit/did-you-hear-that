@@ -1,7 +1,9 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 
 // What the end-to-end tests of the public page share: opening the page with probes that count
-// every sound source, and the colour arithmetic of WCAG 2.2.
+// every sound source, waiting for its fades, the accessibility check, and the colour arithmetic
+// of WCAG 2.2.
 
 /** What the page did while it was open, recorded from outside the page. */
 export interface PageRecord {
@@ -110,6 +112,80 @@ export function contrastRatio(first: string, second: string): number {
     relativeLuminance(second),
   ].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Waits until every fade and every other motion that ends has ended. The one room also has motion
+ * that never ends: its lantern sways, the flame moves, and a creature in plain view shifts where it
+ * stands. A wait for those would never return, so they are left out. Nothing that is read or
+ * measured here rides on them.
+ */
+export async function settle(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => {
+          const endTime = animation.effect?.getComputedTiming().endTime;
+          return typeof endTime === "number" && Number.isFinite(endTime);
+        })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
+}
+
+/** Lets the fades end, then asks axe for every serious or critical problem on the page. */
+export async function expectNoSeriousAccessibilityProblem(
+  page: Page,
+): Promise<void> {
+  await settle(page);
+  const results = await new AxeBuilder({ page }).analyze();
+  const serious = results.violations.filter(
+    (violation) =>
+      violation.impact === "serious" || violation.impact === "critical",
+  );
+  expect(
+    serious.map(
+      (violation) =>
+        `${violation.id}: ${violation.help} (${violation.nodes
+          .map((node) => node.target.join(" "))
+          .join(", ")})`,
+    ),
+  ).toEqual([]);
+}
+
+/** The box of an element on the page, as the layout checks compare them. */
+export interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The names of every two boxes that lie over one another, with half a pixel for a shared edge. */
+export function overlappingBoxes(
+  boxes: Readonly<Record<string, Box>>,
+): string[] {
+  const names = Object.keys(boxes);
+  const overlapping: string[] = [];
+  names.forEach((first, index) => {
+    for (const second of names.slice(index + 1)) {
+      const a = boxes[first];
+      const b = boxes[second];
+      if (a === undefined || b === undefined) {
+        continue;
+      }
+      const apart =
+        a.x + a.width <= b.x + 0.5 ||
+        b.x + b.width <= a.x + 0.5 ||
+        a.y + a.height <= b.y + 0.5 ||
+        b.y + b.height <= a.y + 0.5;
+      if (!apart) {
+        overlapping.push(`${first} and ${second}`);
+      }
+    }
+  });
+  return overlapping;
 }
 
 export async function expectNoHorizontalScroll(page: Page): Promise<void> {

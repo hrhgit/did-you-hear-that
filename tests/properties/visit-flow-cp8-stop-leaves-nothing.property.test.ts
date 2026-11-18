@@ -12,7 +12,11 @@ import {
   scriptSpanMs,
   visitRunArbitrary,
 } from "./visit-flow-arbitraries";
-import { createVisitHarness, type VisitHarness } from "./visit-flow-harness";
+import {
+  createVisitHarness,
+  roomRuns,
+  type VisitHarness,
+} from "./visit-flow-harness";
 import {
   observeVisit,
   type ActionEntry,
@@ -23,7 +27,8 @@ import {
 // ending: the stop control or a left page at any time of the visit. One that comes before the
 // result leaves the house; one that comes later meets the replay or the result, where stop
 // silences and shows the result. The visits render with the worst-case renderers (D26,
-// audio-output D43).
+// audio-output D43). The property holds however the rooms run (one-room design.md, D1): one after
+// another, and taking turns in one room.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -87,9 +92,9 @@ const handedOut = (harness: VisitHarness) => ({
 });
 
 describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
-  it(
-    "leaves the house at a stop or a left page before the result, with nothing kept and nothing after, and shows the result at a later stop",
-    async () => {
+  it.each(roomRuns)(
+    "leaves the house at a stop or a left page before the result, with nothing kept and nothing after, and shows the result at a later stop ($name)",
+    async ({ roomsTogetherMaxCount }) => {
       await fc.assert(
         fc.asyncProperty(
           visitRunArbitrary(),
@@ -99,6 +104,7 @@ describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
             const harness = createVisitHarness({
               seed: visitRun.seed,
               performanceOffsetMs: visitRun.performanceOffsetMs,
+              roomsTogetherMaxCount,
               spyOnOutput: true,
             });
             const timeline = observeVisit(harness);

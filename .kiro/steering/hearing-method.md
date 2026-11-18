@@ -19,11 +19,11 @@ Source: American Speech-Language-Hearing Association, Guidelines for Manual Pure
 
 The guideline describes a trained examiner working in a quiet room with calibrated equipment. This product has neither, so the method is borrowed and the guideline's accuracy does not carry over.
 
-Left ear and right ear searches for one pitch run at the same time and their trials are mixed in random order. The visitor answers by naming the side. A response on the wrong side counts as a miss for the ear that was tested and is recorded separately.
+Left ear and right ear searches for one pitch run at the same time and their trials are mixed in random order. In the one room (`.kiro/specs/one-room/design.md`) the searches of every pitch of the visit, up to `visitFlowConfig.roomsTogetherMaxCount`, also take turns: after every scored trial a seeded draw picks evenly among the pitches whose search is still going, and that search's next trial comes. Each pitch keeps its own search, its own starting level, cap and floor, and is logged as a room of its own. With the count at 1 the pitches run one after another, as before. The visitor answers by naming the side. A response on the wrong side counts as a miss for the ear that was tested and is recorded separately.
 
 ## Practice
 
-Each room begins with practice, the familiarization step of the procedure the search follows. Practice plays the room's own sound to one ear at a time, the left and then the right, and the visitor names the side, as in the search. Practice has no no-sound trials and counts for nothing. Written in on 2026-11-16 in a lighter form than `.kiro/specs/audible-start/design.md` drew; the differences are listed at the top of that spec's `tasks.md`.
+Each room run begins with practice, the familiarization step of the procedure the search follows. In the one room this is the roll call: every pitch of the run in turn plays its own sound to one ear at a time, the left and then the right, and the visitor names the side, as in the search. When sides were left unheard, the visitor is told once for the whole round. Practice has no no-sound trials and counts for nothing. Written in on 2026-11-16 in a lighter form than `.kiro/specs/audible-start/design.md` drew; the differences are listed at the top of that spec's `tasks.md`.
 
 - Each ear's practice begins at the anchor, or at the room's top where that is lower. After a practice sound the visitor does not catch on its side, the next one for that ear is one upward step louder, up to the room's top.
 - An ear's practice ends at its first catch, or unheard after 2 practice sounds. When an ear ended unheard, the visitor is told what to check and may hear that ear's practice again or go on.
@@ -52,7 +52,7 @@ A share of trials play nothing. A response on such a trial is a false alarm.
 
 The rooms are played as a chase (the game layer, decided by the owner on 2026-11-16). It changes what an answer costs, not how a trial is scored.
 
-- The visitor carries a lantern of `lanternConfig.cellCount` lights (3). Every answer in a room that counts spends one light, whether it scores a trial or not. A caught sound gives its light back at once. A spent light comes back by itself `lanternConfig.rechargeMs` (8000 ms) after it was spent or after the light before it came back; an answer does not start that wait again.
+- The visitor carries a lantern of `lanternConfig.cellCount` lights (3). One lantern serves every pitch of the room. Every answer in a room that counts spends one light, whoever's trial it was, whether it scores a trial or not. A caught sound gives its light back at once. A spent light comes back by itself `lanternConfig.rechargeMs` (8000 ms) after it was spent or after the light before it came back; an answer does not start that wait again.
 - With no light left, an answer is not taken: it is logged as an answer that scored nothing, and the room holds its trials, as a pause does, until a light is back. A trial under way when the last light goes is discarded and comes again, as in a pause.
 - A visitor who answers only what they hear never runs short: every catch is free. A visitor who answers blindly gets at most three answers and then one per wait, which is slower than the room presents trials. The wait must stay well above a room's mean trial time (about 4.75 s); do not set it below 6000 ms without the owner.
 - The practice and the swapped repeat have no lantern. A pause fills it.
@@ -83,6 +83,7 @@ The 15 dB figure is a starting value. Its clinical source has not been checked.
 - Ghost sounds are narrow bands of noise or tone clusters, not pure tones. Whether they give the same thresholds as pure tones is not established.
 - Bluetooth headphones carry about 16 bits and may gate, cut or reshape very quiet sounds. So the house does not play or count on a sound below a room's playable floor: the higher of the quietest playable level and the level at which a sound's RMS is 84 dB below full scale with the visitor's calibration, about one bit above one step of a 16-bit path. That value comes from arithmetic; a listening session with the listening page settles it. A result at that floor, or within one step of it, says that this is as quiet as the house can play through these headphones at this volume.
 - Bluetooth headphones also play later than wired ones. The response window is not lengthened by the output latency the browser reports, so a slow answer on such headphones may be scored as a miss.
+- In the one room the pitches take turns, so a quiet sound of one pitch may follow a louder sound of another on the same ear. Whether that changes how readily a quiet sound is caught, and so the thresholds, has not been checked against the pitches one after another.
 - The chase shows a missed sound after it is scored, and costs a light for every answer. Both may change how readily a visitor answers, and so the thresholds and the false alarm rate. Neither has been checked against a plain run of the same search.
 - Fear may affect thresholds. The research is thin and mixed. The product avoids startle and uses no-sound trials to detect guessing.
 - The digits-in-noise door uses home-made speech material with no reference data. Its outcome is part of the game and is never reported as a measurement.
@@ -102,7 +103,7 @@ Every number below lives in `src/config` and is expected to change after listeni
 | Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16: the anchor is now a comfortable music volume, likely louder than rubbed hands, and the lower cap keeps the loudest sound no louder at the ear than before |
 | Quietest playable level | 70 dB below the anchor, or higher: the level at which a sound's RMS is 84 dB below full scale with the visitor's calibration (the playable floor) |
 | Response window after a sound starts | 1.8 s. Shortened from 2.0 s on 2026-11-16 by the owner after playing: a room took too long |
-| Gap between trials | random, 1.0 to 2.5 s. Shortened from 1.5 to 4.0 s on 2026-11-16 for the same reason |
+| Gap between trials | random, 0.8 to 1.6 s. Shortened from 1.5 to 4.0 s on 2026-11-16 and from 1.0 to 2.5 s on 2026-11-17, both times after the project owner played and found the visit too long and too quiet |
 | Share of no-sound trials | 15 to 25 percent |
 | False alarm rate that marks a visit unreliable, applied to each room | above 30 percent |
 | False alarm rate over a whole visit that marks the visit unreliable | above 20 percent |

@@ -110,7 +110,7 @@ function soundTrial(
     ear: "left" as const,
     requestedLevelDb,
     playedLevelDb,
-    clampLimit: playedLevelDb === requestedLevelDb ? null : "anchorCap",
+    clampLimit: playedLevelDb === requestedLevelDb ? null : "ceiling",
   } as const;
   if (status === "discarded") {
     return { ...common, status: "discarded", discardedAtMs: 2500 };

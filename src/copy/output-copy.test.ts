@@ -60,7 +60,7 @@ const levels = [
   200,
 ];
 
-const clampLimits = ["anchorCap", "rise", "ceiling"] as const;
+const clampLimits = ["ceiling"] as const;
 
 const refusalReasons = [
   "busy",
@@ -70,7 +70,7 @@ const refusalReasons = [
   "unsupported",
   "peakBoundNotMet",
   "renderFailed",
-  "fadeTooShort",
+  "beyondCeiling",
 ];
 
 /** The output of every function for representative inputs, each with a name. */

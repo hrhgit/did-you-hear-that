@@ -19,7 +19,7 @@ export const practiceCopy = Object.freeze({
   /** The label of the ripple of a caught practice sound. */
   caughtLine: "That's it. You heard it.",
   tryAgainLabel: "Try again",
-  goOnLabel: "Go on without practice",
+  goOnLabel: "Start counting",
 });
 
 /** The side named in the not-heard lines. */
@@ -43,6 +43,6 @@ export function notHeardLines(ears: readonly AnswerSide[]): readonly string[] {
   return Object.freeze([
     `The practice sound was not caught on ${sides}, even a little louder.`,
     "Check that the earpieces are in and that the volume is where you set it.",
-    "Try again plays the practice once more. Going on starts the counting anyway; a side you cannot hear here will show as louder than this room can play.",
+    "Start counting goes on anyway; a side you cannot hear here will show as louder than this room can play. Try again plays the practice once more.",
   ]);
 }

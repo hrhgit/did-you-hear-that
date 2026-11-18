@@ -5,10 +5,11 @@ import { resultPageCopy } from "../../src/copy/result-page-copy";
 import { roomCopy } from "../../src/copy/room-copy";
 import { expectNoHorizontalScroll, openPage } from "./page-checks";
 import { previewServers } from "./preview-servers";
-import { button, enterFirstRoom, heading } from "./visit-steps";
+import { button, enterRoom, heading } from "./visit-steps";
 
-// One whole short visit on the public page, in which nobody answers: every room, the replay of
-// the missed sounds from its first sound to its last, and the picture. It takes several minutes
+// One whole short visit on the public page, in which nobody answers: the one room until every
+// creature has gone home, the replay of the missed sounds from its first sound to its last, and
+// the picture. It takes several minutes
 // of real time, because the page waits for answers that never come, so it runs only when asked:
 //
 //   WHOLE_VISIT=1 npx playwright test whole-visit --project=desktop
@@ -39,11 +40,13 @@ test("walks a short visit that nobody answers, through the replay of every misse
 }) => {
   test.setTimeout(15 * 60_000);
   const record = await openPage(page, address);
-  await enterFirstRoom(page);
+  await enterRoom(page);
 
-  // Nobody answers. Each room's practice is then not heard, and the house asks whether to try
-  // again; this goes on without it. Between two rooms the house waits for a press; after the last
-  // room it asks whether to play the missed sounds again.
+  // Nobody answers. The roll call is then not caught, and the house asks whether to try again;
+  // this goes on without it. After that the one room waits for no press until its last creature
+  // has gone home and the house asks whether to play the missed sounds again. A site set back
+  // to one room at a time (`roomsTogetherMaxCount: 1`) rests between two rooms and waits for a
+  // press there, so that press is given too wherever it is asked for.
   const replayHeading = heading(page, replayCopy.heading);
   const goOn = page.locator(".visit-rest").getByRole("button", {
     name: roomCopy.goOnButton,

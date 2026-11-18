@@ -57,6 +57,8 @@ The single door to the speakers. It owns the `AudioContext`.
 
 The visit as a state machine: entry, calibration, headphone check, rules, rooms, last door, missed-sound replay, result, swapped repeat. It is the only part that knows the order of things.
 
+The rooms of a visit run together as one room (`.kiro/specs/one-room/`): up to `visitFlowConfig.roomsTogetherMaxCount` threshold searches, one for each pitch, take turns in one room run. The roll call practises every pitch first; then a seeded draw after every scored trial says whose trial comes next. Each pitch stays a room of the visit log, so the replay, the result and the swapped repeat read the log as before. With the count at 1 the rooms run one after another.
+
 - Asks the engine for the next trial, asks the output to play it, waits for an answer or for the response window to close, and tells the engine the outcome.
 - Records every trial in a visit log: time, room, ear, level, outcome. The replay, the result page, the stored result and the no-headphone replay mode are all drawn from this log.
 - Reads the clock only through an injected timer, so tests can run a whole visit instantly.
@@ -65,9 +67,10 @@ The visit as a state machine: entry, calibration, headphone check, rules, rooms,
 
 Draws snapshots of the session state and forwards the visitor's input. It holds no state of its own beyond animation.
 
-- The house cross-section stays on screen for the whole visit. The current room is lit.
-- Ambient motion in a room (dust, a swinging lamp, a gap under a door) runs on its own random schedule, seeded separately from the trial schedule. It is not given the trial schedule at all, so it cannot leak it.
-- A ripple is drawn only after an answer has been scored, at the place the sound came from, labelled with pitch and level.
+- The visit is shown as one dark room with a doorway at each side and the lantern in the middle (`src/ui/room/`). A row of cards along the floor shows each creature, its catches and its quietest catch on each side, each on the scale of its own search.
+- Nothing in the room moves with the trials. The lantern sways on its own clock, and the page is never told whose turn it is.
+- A creature is drawn only after an answer has been scored: in the doorway of the side its sound came from, with rings and a line naming its pitch and level, or leaving by that side if it went by.
+- The result page still draws the cross-section of the house (`src/ui/house/`).
 - Input is the left and right arrow keys on a keyboard and the left and right halves of the screen on touch.
 
 ### storage

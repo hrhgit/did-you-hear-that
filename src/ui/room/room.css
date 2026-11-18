@@ -1,0 +1,1893 @@
+/*
+ * The one room of a visit: a wall with a doorway at each side, the floor, and the lantern that
+ * hangs in the middle. Everything the game shows is in this room. Who makes a sound stands at the
+ * centre while it is practised. A caught sound shows its creature in the doorway of its side. The
+ * row of cards along the floor keeps who is still about.
+ *
+ * Nothing here cuts: every change of brightness is a fade of at least a fifth of a second
+ * (audio-safety rule 9). Nothing that moves by itself has a side: the lantern sways and its lights
+ * flicker in the middle of the room, on their own clock. Reduced motion keeps the fades and takes
+ * away everything that travels.
+ */
+
+/* ─── The measures of the room ─────────────────────────────────────────────────────────── */
+
+.visit {
+  /* The floor: the cards along the foot of the page, and above them what the house says. */
+  --room-shelf: 9.75rem;
+  --room-caption: 4.75rem;
+  --room-floor: calc(var(--room-shelf) + var(--room-caption));
+
+  /* The two doorways. */
+  --room-door-width: clamp(6rem, min(17vw, 26dvh), 15rem);
+  --room-door-inset: clamp(0.75rem, 6vw, 6rem);
+  --room-door-ratio: 2.1;
+  /* What is kept free between the bar and the top of a doorway. */
+  --room-top-zone: 1.25rem;
+  --room-door-top: max(
+    calc(var(--visit-bar) + var(--room-top-zone)),
+    calc(
+      100dvh - var(--room-floor) - var(--room-door-ratio) *
+        var(--room-door-width)
+    )
+  );
+  /* The wall between the doorways. */
+  --room-gap: calc(
+    100vw - 2 * (var(--room-door-inset) + var(--room-door-width))
+  );
+
+  /* The lantern, the words under it, and who stands under those. */
+  --room-lantern-drop: 3.25rem;
+  --room-words-zone: 16rem;
+  --room-centre-size: clamp(
+    5rem,
+    calc(
+      100dvh - var(--room-floor) - var(--visit-bar) - var(--room-words-zone)
+    ),
+    15rem
+  );
+}
+
+/* Each creature has a colour of its own. It is only ever a glow or an accent, never a word. */
+[data-creature="cellar"] {
+  --creature-hue: #ef6f7a;
+}
+
+[data-creature="corridor"] {
+  --creature-hue: #a77bff;
+}
+
+[data-creature="nursery"] {
+  --creature-hue: #6fc3b8;
+}
+
+[data-creature="stairs"] {
+  --creature-hue: #9ccf6a;
+}
+
+[data-creature="attic"] {
+  --creature-hue: #7aa2ff;
+}
+
+/* ─── The picture ──────────────────────────────────────────────────────────────────────── */
+
+.room-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity var(--visit-fade) ease;
+}
+
+/* Behind a sheet of text the room is only just there. */
+.visit[data-house="faint"] .room-scene {
+  opacity: 0.2;
+}
+
+.room-picture {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transition: opacity 0.9s ease;
+}
+
+/* A dark lantern dims the room, as slowly as every other change of its brightness. */
+.visit[data-lantern="dark"] .room-picture {
+  opacity: 0.6;
+}
+
+/* The wall: old paper in faint stripes, and a panelled foot. */
+.room-wall {
+  position: absolute;
+  inset: 0 0 var(--room-floor);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgb(138 147 166 / 0.04) 0 1px,
+      transparent 1px 3.25rem
+    ),
+    linear-gradient(to bottom, #0a0d15 0%, var(--color-wall) 78%);
+}
+
+.room-wall::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: clamp(2.25rem, 8dvh, 4.5rem);
+  border-top: 1px solid var(--color-graphite-faint);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(6.5rem - 1px),
+      rgb(61 69 85 / 0.55) calc(6.5rem - 1px) 6.5rem
+    ),
+    rgb(8 11 18 / 0.4);
+}
+
+/* A doorway: a round arch, dark inside, in a frame of two pencil lines. */
+.room-door {
+  position: absolute;
+  top: var(--room-door-top);
+  bottom: var(--room-floor);
+  width: var(--room-door-width);
+  transition: top 0.9s ease;
+}
+
+.room-door-left {
+  left: var(--room-door-inset);
+  /* Where a sound that went by leaves to. */
+  --room-away: -45%;
+}
+
+.room-door-right {
+  right: var(--room-door-inset);
+  --room-away: 45%;
+}
+
+.room-door-opening {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: calc(var(--room-door-width) / 2)
+    calc(var(--room-door-width) / 2) 0 0;
+  background: linear-gradient(to bottom, #030509, #070a11);
+  box-shadow:
+    0 0 0 1px var(--color-graphite),
+    0 0 0 0.5rem #10141d,
+    0 0 0 calc(0.5rem + 1px) var(--color-graphite-faint);
+  transition: box-shadow 0.25s ease;
+}
+
+/*
+ * The doorway of the side a visitor answers with shows the press, as its word below does. Every
+ * press shows the same way, whether or not a sound was waiting, so it tells nothing about one.
+ */
+.visit:has(.visit-answer-left[data-pressed="true"])
+  .room-door-left
+  .room-door-opening,
+.visit:has(.visit-answer-right[data-pressed="true"])
+  .room-door-right
+  .room-door-opening {
+  box-shadow:
+    0 0 0 1px var(--color-moonlight),
+    0 0 0 0.5rem #171c28,
+    0 0 0 calc(0.5rem + 1px) var(--color-graphite);
+}
+
+/* The light that falls through a doorway when its sound was caught, in the creature's colour. */
+.room-door-light,
+.room-door-light > span {
+  position: absolute;
+  inset: 0;
+}
+
+.room-door-light > span {
+  background: radial-gradient(
+    ellipse 90% 60% at 50% 78%,
+    color-mix(in srgb, var(--creature-hue, var(--color-lamp)) 70%, transparent),
+    transparent 78%
+  );
+  opacity: 0;
+  animation: room-door-light 2.8s ease-out both;
+}
+
+@keyframes room-door-light {
+  0% {
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 0.85;
+  }
+
+  62% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Where a creature stands: on the floor line, in the middle of its doorway or of the room. */
+.room-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+}
+
+.room-stage > * {
+  grid-area: 1 / 1;
+  width: 92%;
+  aspect-ratio: 1;
+}
+
+.room-stage-centre > * {
+  width: 100%;
+}
+
+/* The bat flies and the ghost floats, so neither stands on the floor. */
+.room-door .room-stage > [data-creature="attic"] {
+  translate: 0 -62%;
+}
+
+.room-door .room-stage > [data-creature="corridor"] {
+  translate: 0 -16%;
+}
+
+.room-stage-centre > [data-creature="attic"] {
+  translate: 0 -16%;
+}
+
+.room-stage-centre > [data-creature="corridor"] {
+  translate: 0 -6%;
+}
+
+/*
+ * A caught sound: its creature lunges out of the doorway, larger than life, settles, stays a
+ * moment and fades (the game layer, 2026-11-17).
+ */
+.room-sighting[data-reaction="caught"] {
+  transform-origin: 50% 100%;
+  animation: room-caught 3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes room-caught {
+  0% {
+    opacity: 0;
+    transform: translateY(18%) scale(0.6);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translateY(-4%) scale(1.14);
+  }
+
+  22% {
+    transform: none;
+  }
+
+  74% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+/*
+ * A sound that went by: the outline of its creature darts away through the doorway, with a fainter
+ * afterimage a beat behind it.
+ */
+:is(.room-sighting, .room-trail)[data-reaction="slipped"] {
+  animation: room-slipped 1.6s cubic-bezier(0.5, 0, 0.75, 0.4) both;
+}
+
+.room-trail[data-reaction="slipped"] {
+  filter: blur(2px);
+  animation-delay: 0.12s;
+  opacity: 0;
+  --room-trail: 0.4;
+}
+
+@keyframes room-slipped {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(1);
+  }
+
+  14% {
+    opacity: calc(0.85 * var(--room-trail, 1));
+    transform: translateX(0) scale(1.04);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(calc(var(--room-away, 0) * 2.2)) scale(0.9);
+  }
+}
+
+/*
+ * The wash over one side of the room after a scored sound: a glow in the creature's colour for a
+ * catch, a shade for one that got away. Each comes and goes as a fade, never a flash.
+ */
+.room-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  pointer-events: none;
+}
+
+.room-side-left {
+  left: 0;
+  --room-side-at: 0%;
+}
+
+.room-side-right {
+  right: 0;
+  --room-side-at: 100%;
+}
+
+.room-side > span {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.room-side > span[data-wash="catch"] {
+  background: radial-gradient(
+    ellipse 85% 75% at var(--room-side-at) 62%,
+    color-mix(in srgb, var(--creature-hue, var(--color-lamp)) 45%, transparent),
+    transparent 75%
+  );
+  animation: room-wash-catch 2.4s ease-out both;
+}
+
+.room-side > span[data-wash="miss"] {
+  background: radial-gradient(
+    ellipse 90% 80% at var(--room-side-at) 55%,
+    rgb(2 3 8 / 0.7),
+    transparent 78%
+  );
+  animation: room-wash-miss 1.8s ease-in-out both;
+}
+
+@keyframes room-wash-catch {
+  0% {
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes room-wash-miss {
+  0% {
+    opacity: 0;
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Who stands in plain view comes in a fade and leaves in one. */
+.room-figure {
+  animation: room-figure-in 0.6s ease-out both;
+}
+
+.room-figure[data-leaving="true"] {
+  animation: room-figure-out 0.45s ease-in both;
+}
+
+/*
+ * At the roll call the next one is named in the moment the last sound of the one before it is
+ * answered. So the one that leaves stays for its hop, and the next one waits until it has left.
+ */
+.room-stage-centre .room-figure {
+  animation-delay: 0.7s;
+}
+
+.room-stage-centre .room-figure[data-leaving="true"] {
+  animation-delay: 0.4s;
+}
+
+@keyframes room-figure-in {
+  from {
+    opacity: 0;
+    transform: translateY(5%);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes room-figure-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.room-figure-hop {
+  width: 100%;
+  height: 100%;
+}
+
+/* Its sound was caught at the roll call: one small hop. */
+.room-figure-cheer {
+  animation: room-hop 0.7s ease-out both;
+}
+
+@keyframes room-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  32% {
+    transform: translateY(-9%);
+  }
+
+  58% {
+    transform: translateY(0);
+  }
+
+  76% {
+    transform: translateY(-3%);
+  }
+}
+
+/* The floor: boards that run away from the visitor, fading into the dark at their feet. */
+.room-floor {
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--room-floor);
+  overflow: hidden;
+  border-top: 1px solid var(--color-graphite-faint);
+  background: linear-gradient(to bottom, #111620 0%, var(--color-night) 62%);
+}
+
+.room-floor::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -50%;
+  left: -50%;
+  height: 135%;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(5.5rem - 1px),
+    rgb(138 147 166 / 0.16) calc(5.5rem - 1px) 5.5rem
+  );
+  transform: perspective(32rem) rotateX(60deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 82%);
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 82%);
+}
+
+/*
+ * The light of the lantern: around the lantern itself, and a pool on the floor under it. As
+ * strong as the lantern has lights left.
+ */
+.room-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 32rem 23rem at 50% calc(var(--visit-bar) + 1rem),
+      rgb(243 181 98 / 0.2),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 27rem 5.5rem at 50% calc(100% - var(--room-floor) + 1.75rem),
+      rgb(243 181 98 / 0.13),
+      transparent 72%
+    );
+  opacity: var(--room-light, 0);
+  transition: opacity 0.9s ease;
+}
+
+/* The rings of a sound, from the middle of the doorway of its side. */
+.room-rings {
+  position: absolute;
+  bottom: calc(var(--room-floor) + var(--room-door-width) * 0.55);
+  width: 0;
+  height: 0;
+}
+
+.room-rings-left {
+  left: calc(var(--room-door-inset) + var(--room-door-width) / 2);
+}
+
+.room-rings-right {
+  right: calc(var(--room-door-inset) + var(--room-door-width) / 2);
+}
+
+.room-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--room-door-width) * 2.5);
+  aspect-ratio: 1;
+  margin: calc(var(--room-door-width) * -1.25) 0 0
+    calc(var(--room-door-width) * -1.25);
+  border: 1.5px solid var(--color-lamp);
+  border-radius: 50%;
+  opacity: 0;
+  animation: room-ring 1.8s ease-out both;
+  animation-delay: calc(var(--room-ring, 0) * 0.24s);
+}
+
+@keyframes room-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.22);
+  }
+
+  16% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* The middle of the room, where the one that is making its sound stands at the roll call. */
+.room-centre {
+  position: absolute;
+  bottom: calc(var(--room-floor) - 0.6rem);
+  left: 50%;
+  width: var(--room-centre-size);
+  height: var(--room-centre-size);
+  margin-left: calc(var(--room-centre-size) / -2);
+}
+
+/* Its shadow on the floor. */
+.room-centre::before {
+  content: "";
+  position: absolute;
+  right: 16%;
+  bottom: -3%;
+  left: 16%;
+  height: 9%;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.6);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.room-centre[data-held="true"]::before {
+  opacity: 1;
+}
+
+/* ─── The lantern ──────────────────────────────────────────────────────────────────────── */
+
+/*
+ * It hangs from the top of the page on a chain. The count of caught sounds stands at its left and
+ * the sounds caught in a row at its right. Each keeps its own column, so the lantern stays in the
+ * middle whether or not either is said.
+ */
+.room-lantern-post {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  column-gap: 1rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.room-lantern-post p {
+  margin: 0 0 0.35rem;
+  font-size: 0.9375rem;
+  font-style: italic;
+  line-height: 1.25;
+}
+
+.visit-chase-caught {
+  grid-column: 1;
+  justify-self: end;
+  text-align: right;
+}
+
+.room-lantern-hang {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 0;
+  animation: room-lantern-sway 8s ease-in-out infinite alternate;
+}
+
+.visit-chase-streak {
+  grid-column: 3;
+  justify-self: start;
+  color: var(--color-lamp);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* The count of catches in a row grows for a moment each time it rises. */
+.visit-chase-streak[data-bump="a"],
+.visit-chase-streak[data-bump="b"] {
+  animation: room-streak-bump 0.6s ease-out;
+}
+
+.visit-chase-streak[data-bump="b"] {
+  animation-name: room-streak-bump-again;
+}
+
+@keyframes room-streak-bump {
+  0% {
+    transform: scale(1);
+  }
+
+  30% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes room-streak-bump-again {
+  0% {
+    transform: scale(1);
+  }
+
+  30% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes room-lantern-sway {
+  from {
+    transform: rotate(-1.3deg);
+  }
+
+  to {
+    transform: rotate(1.3deg);
+  }
+}
+
+.room-lantern-chain {
+  width: 0;
+  height: calc(var(--visit-bar) - 0.5rem);
+  border-left: 1.5px dashed var(--color-graphite);
+}
+
+.room-lantern-cap {
+  width: 2.4rem;
+  height: 0.6rem;
+  border: 1.5px solid var(--color-graphite);
+  border-bottom: 0;
+  border-radius: 1.2rem 1.2rem 0 0;
+}
+
+/* The glass and the flare that rises from it after a catch. */
+.room-lantern-body {
+  position: relative;
+}
+
+.room-lantern-flare {
+  position: absolute;
+  inset: -1.6rem -2.2rem;
+  pointer-events: none;
+}
+
+.room-lantern-flare > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(243 181 98 / 0.55),
+    rgb(243 181 98 / 0.18) 55%,
+    transparent
+  );
+  opacity: 0;
+  animation: room-lantern-flare 1.4s ease-out both;
+}
+
+@keyframes room-lantern-flare {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  20% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+/* The glass: two upright lines with the lights between them. */
+.visit-lantern {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-width: 3.9rem;
+  padding: 0.55rem 0.7rem 0.4rem;
+  border: solid var(--color-graphite);
+  border-width: 1.5px 1.5px 0;
+}
+
+.room-lantern-foot {
+  width: 4.7rem;
+  height: 0.3rem;
+  border: 1.5px solid var(--color-graphite);
+  border-radius: 0 0 0.3rem 0.3rem;
+}
+
+/*
+ * Each light is a small flame drawn in pencil. A spent light keeps its outline and loses its
+ * colour, slowly. Lights that are lit together are lit one after another.
+ */
+.visit-lantern-cell {
+  width: 0.72rem;
+  height: 0.72rem;
+  margin: 0.2rem 0.08rem 0;
+  border: 1.5px solid var(--color-graphite);
+  border-radius: 0 60% 55% 60%;
+  background: transparent;
+  box-shadow: 0 0 0 0 transparent;
+  transform: rotate(45deg);
+  transition:
+    background-color 0.6s ease,
+    border-color 0.6s ease,
+    box-shadow 0.6s ease;
+}
+
+.visit-lantern-cell[data-lit="true"] {
+  border-color: var(--color-lamp);
+  background: var(--color-lamp-low);
+  box-shadow: 0 0 0.75rem 0.1rem rgb(243 181 98 / 0.55);
+  transition-delay: calc(var(--lantern-order, 0) * 0.14s);
+  animation: room-flame 2.7s ease-in-out infinite alternate;
+}
+
+.visit-lantern-cell[data-lit="true"]:nth-child(2) {
+  animation-delay: -0.9s;
+  animation-duration: 3.1s;
+}
+
+.visit-lantern-cell[data-lit="true"]:nth-child(3n) {
+  animation-delay: -1.7s;
+  animation-duration: 2.3s;
+}
+
+@keyframes room-flame {
+  0% {
+    scale: 1;
+  }
+
+  45% {
+    scale: 1.07 0.95;
+  }
+
+  100% {
+    scale: 0.95 1.08;
+  }
+}
+
+/* ─── The words under the lantern ──────────────────────────────────────────────────────── */
+
+/*
+ * What the roll call is, who is making its sound, and through the counting one still line. A soft
+ * dark stands behind the words, so that they read as well in the lantern's light as without it.
+ */
+.visit-practice {
+  position: absolute;
+  top: calc(var(--visit-bar) + var(--room-lantern-drop));
+  right: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(34rem, var(--room-gap) - 2rem);
+  margin: 0 auto;
+  text-align: center;
+  pointer-events: none;
+  transition:
+    opacity 0.6s ease,
+    display 0.6s allow-discrete;
+}
+
+/* They come in a fade and go in one, as a sheet does. */
+@starting-style {
+  .visit-practice {
+    opacity: 0;
+  }
+}
+
+.visit-practice[hidden] {
+  opacity: 0;
+}
+
+.visit-practice::before {
+  content: "";
+  position: absolute;
+  inset: -0.75rem -2rem;
+  z-index: -1;
+  background: radial-gradient(
+    closest-side,
+    rgb(8 11 18 / 0.78) 0%,
+    rgb(8 11 18 / 0.6) 55%,
+    transparent 100%
+  );
+}
+
+.visit-practice p {
+  margin: 0;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.visit-practice-heading {
+  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
+  font-style: italic;
+}
+
+.visit-practice-heading + .visit-practice-words {
+  margin-top: 0.3rem;
+}
+
+.visit-practice-words {
+  display: grid;
+}
+
+/* The line of a dark lantern stands where the counting's lines stand, in their place. */
+.visit-practice-words > * {
+  grid-area: 1 / 1;
+}
+
+.visit-practice-lines p {
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+}
+
+.visit-lantern-dark {
+  color: var(--color-moonlight);
+  font-style: italic;
+}
+
+.visit[data-lantern="dark"] .visit-practice-lines {
+  visibility: hidden;
+}
+
+/* Who is making its sound now. Said only at the roll call, where nothing counts. */
+.room-intro {
+  margin-top: 0.7rem;
+  font-size: clamp(1rem, 0.95rem + 0.3vw, 1.125rem);
+}
+
+.visit-practice p.visit-practice-sound {
+  margin-top: 0.25rem;
+  color: var(--color-lamp);
+  font-size: 1rem;
+  font-style: italic;
+}
+
+/* ─── The answers and what the house says ──────────────────────────────────────────────── */
+
+/* The word of each answer stands on the floor under its doorway. */
+.visit-answer-hint {
+  position: absolute;
+  top: calc(100% - var(--room-floor) + 0.4rem);
+  width: var(--room-door-width);
+  padding: 0.15rem 0.2rem;
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.25;
+  text-align: center;
+  transition: color 0.3s ease;
+}
+
+.visit-answer-left .visit-answer-hint {
+  left: var(--room-door-inset);
+}
+
+.visit-answer-right .visit-answer-hint {
+  right: var(--room-door-inset);
+}
+
+/*
+ * What the house says about a sound that has been answered, on the floor between the doorways,
+ * and under it a second line for the one time something more happened: a creature went home.
+ */
+.visit-caption-block {
+  position: absolute;
+  inset: auto calc(var(--room-door-inset) + var(--room-door-width) + 1rem)
+    var(--room-shelf);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  height: var(--room-caption);
+  text-align: center;
+  pointer-events: none;
+}
+
+.visit-caption,
+.visit-caption-note {
+  margin: 0;
+  font-style: italic;
+  line-height: 1.3;
+  text-wrap: balance;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.visit-caption {
+  font-size: clamp(1rem, 0.92rem + 0.4vw, 1.1875rem);
+}
+
+/* What the house says about a catch stands out; a sound that got away reads cooler. */
+.visit-caption[data-tone="catch"] {
+  color: var(--color-lamp);
+  font-size: clamp(1.0625rem, 0.96rem + 0.5vw, 1.3125rem);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.visit-caption[data-tone="miss"] {
+  color: color-mix(in srgb, var(--color-moonlight) 62%, #7aa2ff);
+  font-weight: 600;
+}
+
+.visit-caption-note {
+  color: var(--color-lamp);
+  font-size: 0.9375rem;
+}
+
+.visit-caption[data-shown="true"],
+.visit-caption-note[data-shown="true"] {
+  opacity: 1;
+  transition-duration: 0.35s;
+}
+
+/* The note keeps its place while there is none, so the line above it never moves. */
+.visit-caption-note {
+  min-height: 1.3em;
+}
+
+/* ─── The cards ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * One card for each creature, along the foot of the page. A card holds only its own creature: its
+ * picture, its name, how many of its sounds were caught, and a bar at each side for the quietest
+ * catch on that side. The two bars of one card can be set against each other. Nothing joins one
+ * card to another, because the creatures cannot be compared (wording.md).
+ */
+.creature-shelf {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 3;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(0.35rem, 1.6vw, 1.4rem);
+  height: var(--room-shelf);
+  margin: 0;
+  padding: 0.4rem 1rem 0.8rem;
+  list-style: none;
+  pointer-events: none;
+  transition:
+    opacity var(--visit-fade) ease,
+    display var(--visit-fade) allow-discrete;
+}
+
+@starting-style {
+  .creature-shelf {
+    opacity: 0;
+  }
+}
+
+.visit[data-house="faint"] .creature-shelf {
+  opacity: 0.2;
+}
+
+.visit .creature-shelf[hidden] {
+  opacity: 0;
+}
+
+.creature-card {
+  display: flex;
+  flex: 0 1 8.25rem;
+  min-width: 0;
+}
+
+/* The face of a card is shaped like the doorways: a round arch. */
+.creature-card-face {
+  position: relative;
+  display: grid;
+  flex: 1;
+  grid-template-columns: 0.55rem minmax(0, 1fr) 0.55rem;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-items: end;
+  column-gap: 0.45rem;
+  min-width: 0;
+  padding: 0.55rem 0.6rem 0.4rem;
+  border: 1px solid var(--color-graphite-faint);
+  border-radius: 2.6rem 2.6rem 0.25rem 0.25rem;
+  background: rgb(8 11 18 / 0.74);
+  transition: border-color 0.6s ease;
+}
+
+/* The one that is making its sound at the roll call. */
+.creature-card[data-state="calling"] .creature-card-face {
+  border-color: var(--color-lamp);
+}
+
+.creature-card[data-state="gone"] .creature-card-face {
+  border-style: dashed;
+}
+
+/* One of its sounds was caught: the card is lit for a moment. */
+.creature-card-flash,
+.creature-card-glint {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.creature-card-glint {
+  border: 1px solid var(--color-lamp);
+  box-shadow:
+    0 0 1rem rgb(243 181 98 / 0.35),
+    inset 0 0 1.4rem
+      color-mix(
+        in srgb,
+        var(--creature-hue, var(--color-lamp)) 30%,
+        transparent
+      );
+  opacity: 0;
+  animation: creature-glint 1.5s ease-out both;
+}
+
+@keyframes creature-glint {
+  0% {
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+.creature-portrait {
+  position: relative;
+  grid-row: 1;
+  grid-column: 2;
+  align-self: stretch;
+  min-height: 0;
+  transition: opacity 0.9s ease;
+}
+
+.creature-portrait > .creature-art {
+  position: absolute;
+  inset: 0;
+}
+
+.creature-card[data-state="gone"] .creature-portrait {
+  opacity: 0.5;
+}
+
+/* A bar: empty until a sound is caught on its side, then filled as far as the quietest catch. */
+.creature-bar {
+  position: relative;
+  grid-row: 1;
+  align-self: end;
+  justify-self: center;
+  width: 100%;
+  height: 78%;
+  overflow: hidden;
+  border: 1px solid var(--color-graphite-faint);
+  border-radius: 0.3rem;
+}
+
+.creature-bar-left {
+  grid-column: 1;
+}
+
+.creature-bar-right {
+  grid-column: 3;
+}
+
+.creature-bar-fill {
+  position: absolute;
+  inset: auto 0 0;
+  height: 0;
+  background: linear-gradient(to top, var(--color-lamp-low), var(--color-lamp));
+  transition: height 1.2s ease;
+}
+
+.creature-bar[data-caught="true"] .creature-bar-fill {
+  height: calc(10% + var(--creature-depth, 0) * 90%);
+}
+
+.creature-mark,
+.creature-name,
+.creature-status {
+  grid-row: 2;
+  overflow: hidden;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.creature-mark {
+  color: var(--color-graphite);
+  font-size: 0.6875rem;
+}
+
+.creature-mark-left {
+  grid-column: 1;
+}
+
+.creature-mark-right {
+  grid-column: 3;
+}
+
+.creature-name {
+  grid-column: 2;
+  font-size: 0.9375rem;
+  font-style: italic;
+}
+
+.creature-status {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  min-height: 1.2em;
+  color: var(--color-graphite);
+  font-size: 0.75rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ─── The creatures ────────────────────────────────────────────────────────────────────── */
+
+/* Pale bodies, dark eyes, and one accent each in the creature's own colour. */
+.creature-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.creature-skin {
+  fill: var(--color-moonlight);
+}
+
+.creature-shade {
+  fill: #b9b5ab;
+}
+
+.creature-ink {
+  fill: none;
+  stroke: var(--color-night);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.creature-ink-heavy {
+  stroke-width: 3.6;
+}
+
+.creature-limb {
+  fill: none;
+  stroke: var(--color-moonlight);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.creature-eye {
+  fill: var(--color-night);
+}
+
+.creature-shine {
+  fill: var(--color-moonlight);
+}
+
+.creature-shut {
+  display: none;
+  fill: none;
+  stroke: var(--color-night);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.creature-hue {
+  fill: none;
+  stroke: var(--creature-hue);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.creature-hue-fill,
+.creature-hue-soft {
+  fill: var(--creature-hue);
+  stroke: none;
+}
+
+.creature-hue-soft {
+  opacity: 0.6;
+}
+
+.creature-rivet {
+  fill: var(--color-night);
+  opacity: 0.5;
+}
+
+.creature-part {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Gone home: its eyes are shut. */
+.creature-art[data-mood="asleep"] .creature-eye:not(.creature-mouth),
+.creature-art[data-mood="asleep"] .creature-shine {
+  display: none;
+}
+
+.creature-art[data-mood="asleep"] .creature-shut {
+  display: inline;
+}
+
+/* One that went by: only its shape, in dashes. */
+.creature-art[data-mood="outline"] :is(.creature-skin, .creature-shade) {
+  fill: none;
+  stroke: var(--color-graphite);
+  stroke-width: 1.8;
+  stroke-dasharray: 4 4;
+}
+
+.creature-art[data-mood="outline"] .creature-limb {
+  stroke: var(--color-graphite);
+  stroke-width: 1.8;
+  stroke-dasharray: 4 4;
+}
+
+.creature-art[data-mood="outline"]
+  :is(
+    .creature-eye,
+    .creature-ink,
+    .creature-hue,
+    .creature-shine,
+    .creature-shut,
+    .creature-rivet
+  ) {
+  display: none;
+}
+
+/*
+ * How each one moves while it makes its sound at the roll call, and when it shows after a catch:
+ * the bat beats its wings, the beetle scuttles, the toy's key turns, the knocker knocks and the
+ * ghost wavers. None of it happens before an answer inside the counting.
+ */
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-wing-left {
+  transform-origin: 100% 65%;
+  animation: creature-flap-left 0.3s ease-in-out infinite alternate;
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-wing-right {
+  transform-origin: 0% 65%;
+  animation: creature-flap-right 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes creature-flap-left {
+  from {
+    transform: rotate(15deg) scaleY(0.88);
+  }
+
+  to {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes creature-flap-right {
+  from {
+    transform: rotate(-15deg) scaleY(0.88);
+  }
+
+  to {
+    transform: rotate(12deg);
+  }
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-legs {
+  animation: creature-scuttle 0.17s steps(2, jump-none) infinite alternate;
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-feelers {
+  transform-origin: 50% 100%;
+  animation: creature-twitch 0.42s ease-in-out infinite alternate;
+}
+
+@keyframes creature-scuttle {
+  from {
+    transform: translateY(-1.6px);
+  }
+
+  to {
+    transform: translateY(1.6px);
+  }
+}
+
+@keyframes creature-twitch {
+  from {
+    transform: rotate(-7deg);
+  }
+
+  to {
+    transform: rotate(7deg);
+  }
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-key {
+  animation: creature-wind 0.7s linear infinite;
+}
+
+@keyframes creature-wind {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  50% {
+    transform: scaleY(-1);
+  }
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-fist-left {
+  animation: creature-knock 0.46s ease-in-out infinite;
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-part-fist-right {
+  animation: creature-knock 0.46s ease-in-out -0.23s infinite;
+}
+
+@keyframes creature-knock {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(-9px);
+  }
+
+  58% {
+    transform: translateY(2px);
+  }
+}
+
+:is(.room-sighting[data-reaction="caught"], .room-figure[data-sounding="true"])
+  .creature-art[data-creature="corridor"] {
+  transform-origin: 50% 100%;
+  animation: creature-waver 1s ease-in-out infinite alternate;
+}
+
+@keyframes creature-waver {
+  from {
+    transform: skewX(-4deg) translateX(-2%);
+  }
+
+  to {
+    transform: skewX(4deg) translateX(2%);
+  }
+}
+
+/* While it waits its turn at the centre it only breathes. */
+.room-stage-centre
+  .room-figure:not([data-sounding="true"], [data-leaving="true"])
+  .creature-art {
+  transform-origin: 50% 100%;
+  animation: creature-breathe 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes creature-breathe {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(0.985, 1.03);
+  }
+}
+
+/* ─── The replay of missed sounds and the room of a swapped repeat ─────────────────────── */
+
+/*
+ * While missed sounds are played again the strip of words takes the foot of the page, the floor
+ * begins above it, and the creature of the sound stands in the doorway of its side.
+ */
+.visit[data-replay="playing"] {
+  --room-floor: var(--visit-caption);
+  --room-top-zone: 1.25rem;
+}
+
+/* A room with no cards, as the room of a swapped repeat is, has a low foot and tall doorways. */
+.visit[data-shelf="none"] {
+  --room-shelf: 2.75rem;
+}
+
+/* ─── A window that is not tall ────────────────────────────────────────────────────────── */
+
+@media (max-height: 700px) {
+  .visit {
+    --room-shelf: 7.25rem;
+    --room-words-zone: 14.5rem;
+  }
+
+  .creature-card-face {
+    padding: 0.4rem 0.5rem 0.3rem;
+    border-radius: 2rem 2rem 0.25rem 0.25rem;
+  }
+}
+
+/* ─── A narrow upright screen ──────────────────────────────────────────────────────────── */
+
+/*
+ * The wall between the doorways is too narrow for words, so the words span the page above the
+ * doorways. At the roll call they are long and the doorways give them room. Once it counts, one
+ * short line is left and the doorways grow to their height.
+ */
+@media (max-width: 40rem) and (orientation: portrait) {
+  .visit {
+    --room-shelf: 7rem;
+    --room-caption: 6.5rem;
+    --room-door-width: 6rem;
+    --room-door-inset: 0.5rem;
+    --room-door-ratio: 2.6;
+    --room-lantern-drop: 4.25rem;
+    /* Room for the lantern and for the counting's lines on four rows, as the narrowest page has. */
+    --room-top-zone: 9.75rem;
+    --room-words-zone: 14.5rem;
+    --room-centre-size: min(
+      calc(var(--room-gap) - 1rem),
+      clamp(
+        5rem,
+        calc(
+          100dvh - var(--room-floor) - var(--visit-bar) - var(--room-words-zone)
+        ),
+        15rem
+      )
+    );
+  }
+
+  .visit[data-roll-call="true"] {
+    --room-top-zone: 14.5rem;
+  }
+
+  .visit[data-replay="playing"] {
+    --room-top-zone: 1.25rem;
+  }
+
+  /* The bar's buttons stand where the chain would hang, so the lantern hangs under the bar. */
+  .room-lantern-post {
+    top: var(--visit-bar);
+  }
+
+  .room-lantern-chain {
+    height: 0.5rem;
+  }
+
+  /* No room for the keys under the words of the answers. The rules name them. */
+  .visit-answer-keys {
+    display: none;
+  }
+
+  .visit-practice {
+    width: calc(100vw - 1.5rem);
+  }
+
+  .visit-practice-lines p {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .room-intro {
+    margin-top: 0.5rem;
+    font-size: 1rem;
+  }
+
+  /* What the house says spans the page, under the two words of the answers. */
+  .visit-caption-block {
+    inset: auto 0.75rem var(--room-shelf);
+    height: calc(var(--room-caption) - 1.9rem);
+  }
+
+  .visit-caption {
+    font-size: 1rem;
+  }
+
+  .visit-caption[data-tone="catch"] {
+    font-size: 1.0625rem;
+  }
+
+  .visit-caption-note {
+    font-size: 0.875rem;
+  }
+
+  .creature-shelf {
+    gap: 0.3rem;
+    padding: 0.3rem 0.5rem 0.6rem;
+  }
+
+  .creature-card-face {
+    grid-template-columns: 0.4rem minmax(0, 1fr) 0.4rem;
+    column-gap: 0.2rem;
+    padding: 0.4rem 0.3rem 0.3rem;
+    border-radius: 1.6rem 1.6rem 0.25rem 0.25rem;
+  }
+
+  /* No room for the marks under the bars: the left bar is the left side, as everywhere here. */
+  .creature-mark {
+    display: none;
+  }
+
+  .creature-name {
+    grid-column: 1 / -1;
+    font-size: 0.8125rem;
+  }
+
+  /*
+   * Five cards side by side leave each one little more than the width of its longest word. So the
+   * count reaches a little into the card's edge at each side, and is set smaller on the narrowest
+   * pages.
+   */
+  .creature-status {
+    margin-inline: -0.2rem;
+    font-size: clamp(0.625rem, 3vw, 0.6875rem);
+  }
+}
+
+/* ─── A short, wide screen: a phone on its side ────────────────────────────────────────── */
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .visit {
+    --room-shelf: 4.75rem;
+    --room-caption: 3.75rem;
+    --room-lantern-drop: 0.5rem;
+    --room-words-zone: 7.5rem;
+    --room-top-zone: 0.9rem;
+  }
+
+  /*
+   * At the roll call the page is not tall enough for the cards and for everything the words say.
+   * So the cards wait: the floor is low, the one that is making its sound stands under the words,
+   * larger, and the cards come in when the counting begins. Who each one is, the words say.
+   */
+  .visit[data-roll-call="true"] {
+    --room-shelf: 0rem;
+    --room-words-zone: 10.5rem;
+  }
+
+  .visit[data-roll-call="true"] .creature-shelf {
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  /* The lantern shares the row of the bar. */
+  .room-lantern-chain {
+    height: 0.25rem;
+  }
+
+  .room-lantern-cap {
+    height: 0.4rem;
+  }
+
+  .visit-lantern {
+    padding: 0.3rem 0.6rem 0.25rem;
+  }
+
+  .room-lantern-post p {
+    margin-bottom: 0.2rem;
+    font-size: 0.875rem;
+  }
+
+  .visit-practice-heading {
+    font-size: 1.0625rem;
+  }
+
+  .visit-practice-lines p {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .room-intro {
+    margin-top: 0.3rem;
+    font-size: 0.9375rem;
+  }
+
+  .visit-practice p.visit-practice-sound {
+    margin-top: 0.1rem;
+    font-size: 0.9375rem;
+  }
+
+  .visit-answer-hint {
+    top: calc(100% - var(--room-floor) + 0.2rem);
+    font-size: 0.9375rem;
+  }
+
+  .visit-caption,
+  .visit-caption[data-tone="catch"] {
+    font-size: 0.9375rem;
+  }
+
+  .visit-caption-note {
+    font-size: 0.8125rem;
+  }
+
+  .creature-shelf {
+    padding: 0.25rem 0.75rem 0.4rem;
+    transition:
+      opacity var(--visit-fade) ease,
+      visibility var(--visit-fade),
+      display var(--visit-fade) allow-discrete;
+  }
+
+  .creature-card {
+    flex-basis: 6.5rem;
+  }
+
+  .creature-card-face {
+    grid-template-rows: minmax(0, 1fr) auto;
+    padding: 0.3rem 0.45rem 0.2rem;
+    border-radius: 1.4rem 1.4rem 0.25rem 0.25rem;
+  }
+
+  .creature-mark {
+    display: none;
+  }
+
+  .creature-name {
+    grid-column: 1 / -1;
+    font-size: 0.8125rem;
+  }
+
+  /* The count of each card is in its name for anyone who cannot see it, and in the lantern's. */
+  .creature-status {
+    display: none;
+  }
+}
+
+/*
+ * A phone on its side that is also narrow: the bar's buttons reach as far as the lantern's left.
+ * So both counts stand at its right, one above the other. Each keeps a row of its own, so neither
+ * moves when the other comes or goes.
+ */
+@media (max-height: 520px) and (orientation: landscape) and (max-width: 48rem) {
+  .room-lantern-post {
+    grid-template-rows: repeat(2, 1fr);
+  }
+
+  .room-lantern-post p {
+    margin-bottom: 0;
+  }
+
+  .room-lantern-hang {
+    grid-row: 1 / -1;
+    align-self: start;
+  }
+
+  .visit-chase-caught {
+    grid-row: 1;
+    grid-column: 3;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .visit-chase-streak {
+    grid-row: 2;
+    align-self: start;
+  }
+}
+
+/*
+ * On a phone on its side the floor rises when the cards come in. It rises as slowly as the
+ * doorways grow, and everything that stands on it rises with it.
+ */
+@media (max-height: 520px) and (orientation: landscape) and (prefers-reduced-motion: no-preference) {
+  .room-wall,
+  .room-rings,
+  .visit-caption-block {
+    transition: bottom 0.9s ease;
+  }
+
+  .room-door {
+    transition:
+      top 0.9s ease,
+      bottom 0.9s ease;
+  }
+
+  .room-floor {
+    transition: height 0.9s ease;
+  }
+
+  .room-centre {
+    transition:
+      bottom 0.9s ease,
+      width 0.9s ease,
+      height 0.9s ease,
+      margin-left 0.9s ease;
+  }
+
+  .visit-answer-hint {
+    transition:
+      color 0.3s ease,
+      top 0.9s ease;
+  }
+}
+
+/* ─── Reduced motion ───────────────────────────────────────────────────────────────────── */
+
+/* The fades stay, shorter. Nothing sways, flickers, hops, beats or travels. */
+@media (prefers-reduced-motion: reduce) {
+  .room-lantern-hang,
+  .visit-lantern-cell[data-lit="true"],
+  .room-figure-cheer,
+  .creature-art,
+  .creature-part {
+    animation: none !important;
+  }
+
+  .room-door {
+    transition: none;
+  }
+
+  .room-sighting[data-reaction="caught"] {
+    animation-name: room-caught-still;
+  }
+
+  .room-sighting[data-reaction="slipped"] {
+    animation-name: room-slipped-still;
+  }
+
+  .room-trail {
+    display: none;
+  }
+
+  .room-lantern-flare > span {
+    animation-name: room-wash-catch;
+  }
+
+  .visit-chase-streak[data-bump] {
+    animation: none;
+  }
+
+  .room-figure {
+    animation-name: room-figure-in-still;
+  }
+
+  .room-ring {
+    animation-name: room-ring-still;
+    transform: scale(0.6);
+  }
+
+  .room-glow,
+  .room-picture,
+  .creature-portrait {
+    transition-duration: 0.4s;
+  }
+
+  .creature-bar-fill {
+    transition-duration: 0.25s;
+  }
+
+  .visit-caption,
+  .visit-caption-note,
+  .visit-caption[data-shown="true"],
+  .visit-caption-note[data-shown="true"] {
+    transition-duration: 0.25s;
+  }
+}
+
+@keyframes room-caught-still {
+  0% {
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  72% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes room-slipped-still {
+  0% {
+    opacity: 0;
+  }
+
+  14% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes room-figure-in-still {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes room-ring-still {
+  0% {
+    opacity: 0;
+  }
+
+  16% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
