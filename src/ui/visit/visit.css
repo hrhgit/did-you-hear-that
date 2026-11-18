@@ -736,14 +736,12 @@ p.visit-swap-turn-back {
   display: none !important;
 }
 
-/* A sheet that appears fades in. Browsers without @starting-style show it at once, in the dark. */
+/* Fade in newly shown controls and sheets. Hidden ones leave the screen immediately. */
 .visit-sheet,
 .visit-rest,
 .visit-replay,
 .visit-bar > * {
-  transition:
-    opacity 0.6s ease,
-    display 0.6s allow-discrete;
+  transition: opacity 0.6s ease;
 }
 
 @starting-style {

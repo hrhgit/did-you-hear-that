@@ -11,9 +11,7 @@
   overflow: hidden auto;
   background: var(--color-night);
   text-align: left;
-  transition:
-    opacity 0.6s ease,
-    display 0.6s allow-discrete;
+  transition: opacity 0.6s ease;
 }
 
 @starting-style {
