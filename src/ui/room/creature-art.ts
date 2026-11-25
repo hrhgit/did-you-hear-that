@@ -22,6 +22,11 @@ const portraits = new Set<HTMLCanvasElement>();
 let ticking = false;
 
 function paintPortrait(canvas: HTMLCanvasElement, nowMs: number): void {
+  const cssWidth = canvas.clientWidth;
+  const cssHeight = canvas.clientHeight;
+  if (cssWidth === 0 || cssHeight === 0) {
+    return;
+  }
   const ctx = canvas.getContext("2d");
   if (ctx === null) {
     return;
@@ -30,8 +35,8 @@ function paintPortrait(canvas: HTMLCanvasElement, nowMs: number): void {
     2,
     canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1,
   );
-  const width = Math.max(1, Math.round(canvas.clientWidth * ratio));
-  const height = Math.max(1, Math.round(canvas.clientHeight * ratio));
+  const width = Math.max(1, Math.round(cssWidth * ratio));
+  const height = Math.max(1, Math.round(cssHeight * ratio));
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;

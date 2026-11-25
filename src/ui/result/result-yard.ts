@@ -293,10 +293,10 @@ export function attachResultYard(
   frame.prepend(canvas);
   frame.dataset.yard = "true";
 
+  let lastGeometry: readonly number[] | null = null;
   const repaint = (): void => {
     const section = drawing.querySelector("svg");
-    const ctx = canvas.getContext("2d");
-    if (section === null || ctx === null) {
+    if (section === null) {
       return;
     }
     const ratio = Math.min(2, view.devicePixelRatio || 1);
@@ -304,12 +304,6 @@ export function attachResultYard(
     const box = section.getBoundingClientRect();
     if (box.width === 0 || frameBox.width === 0) {
       return;
-    }
-    const width = Math.max(1, Math.round(frameBox.width * ratio));
-    const height = Math.max(1, Math.round(frameBox.height * ratio));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
     }
     // The drawing keeps its proportions inside its box, centred ("xMidYMid meet").
     const scale = Math.min(
@@ -320,6 +314,30 @@ export function attachResultYard(
       box.left - frameBox.left + (box.width - resultViewBox.width * scale) / 2;
     const offsetY =
       box.top - frameBox.top + (box.height - resultViewBox.height * scale) / 2;
+    const geometry = [
+      ratio,
+      frameBox.width,
+      frameBox.height,
+      scale,
+      offsetX,
+      offsetY,
+    ];
+    // Replacing the drawing and observing its frame can both ask for the same yard.
+    if (lastGeometry?.every((value, index) => value === geometry[index])) {
+      return;
+    }
+    const ctx = canvas.getContext("2d");
+    if (ctx === null) {
+      return;
+    }
+    const width = Math.max(1, Math.round(frameBox.width * ratio));
+    const height = Math.max(1, Math.round(frameBox.height * ratio));
+    if (canvas.width !== width) {
+      canvas.width = width;
+    }
+    if (canvas.height !== height) {
+      canvas.height = height;
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
     ctx.setTransform(
@@ -337,8 +355,13 @@ export function attachResultYard(
       resultViewBox.x + (frameBox.width - offsetX) / scale,
       resultViewBox.y + (frameBox.height - offsetY) / scale,
     );
+    lastGeometry = geometry;
   };
 
+  canvas.addEventListener("contextrestored", () => {
+    lastGeometry = null;
+    repaint();
+  });
   if (typeof view.ResizeObserver === "function") {
     new view.ResizeObserver(() => {
       repaint();

@@ -10,6 +10,7 @@ import {
   paintSweet,
   paintYard,
 } from "./night-paint";
+import { createSparkPainter } from "./spark-paint";
 
 /** A side of the room: the side a sound came from. */
 export type RoomSide = "left" | "right";
@@ -64,6 +65,8 @@ export interface SceneWords {
  */
 export interface RoomScene {
   readonly element: HTMLElement;
+  /** Holds the last frame while the result sheet covers the room. */
+  setCovered(covered: boolean): void;
   /** Who stands in plain view, or null for nobody. The one before leaves in a fade. */
   setFeatured(feature: RoomFeature | null): void;
   /** The beat the room plays, or null while none plays. Jack swells on each beat. */
@@ -106,6 +109,15 @@ const judgementHues: Readonly<Record<RhythmJudgement, string>> = Object.freeze({
   trick: "#c9a0ff",
   steady: "#c8c0e0",
 });
+
+const biteSparkHue = "#ff8a3a";
+const sparkHues = [
+  ...Object.values(hues),
+  judgementHues.perfect,
+  judgementHues.great,
+  judgementHues.good,
+  biteSparkHue,
+];
 
 interface Shadow {
   readonly side: RoomSide;
@@ -274,6 +286,7 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
   let height = 1;
   let ratio = 1;
   let yard: HTMLCanvasElement | null = null;
+  let paintSpark: ReturnType<typeof createSparkPainter> | null = null;
 
   const layout = () => {
     const groundY = height * groundFraction;
@@ -305,11 +318,20 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
     if (w === width && h === height && nextRatio === ratio && yard !== null) {
       return true;
     }
+    if (paintSpark === null || nextRatio !== ratio) {
+      paintSpark = createSparkPainter(doc, sparkHues, nextRatio);
+    }
     width = w;
     height = h;
     ratio = nextRatio;
-    canvas.width = Math.round(w * ratio);
-    canvas.height = Math.round(h * ratio);
+    const pixelWidth = Math.round(w * ratio);
+    const pixelHeight = Math.round(h * ratio);
+    if (canvas.width !== pixelWidth) {
+      canvas.width = pixelWidth;
+    }
+    if (canvas.height !== pixelHeight) {
+      canvas.height = pixelHeight;
+    }
     yard = doc.createElement("canvas");
     yard.width = canvas.width;
     yard.height = canvas.height;
@@ -680,25 +702,9 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
         paintSweet(ctx, Math.floor(particle.spin * 10), particle.size * 1.4);
       } else {
         ctx.globalCompositeOperation = "lighter";
-        ctx.fillStyle = particle.hue;
-        ctx.shadowColor = particle.hue;
-        ctx.shadowBlur = 8;
         ctx.translate(particle.x, particle.y);
         ctx.rotate(particle.spin + life * 4);
-        ctx.beginPath();
-        for (let point = 0; point < 4; point += 1) {
-          const angle = (point / 4) * Math.PI * 2;
-          ctx.lineTo(
-            Math.cos(angle) * particle.size * 2,
-            Math.sin(angle) * particle.size * 2,
-          );
-          ctx.lineTo(
-            Math.cos(angle + Math.PI / 4) * particle.size * 0.6,
-            Math.sin(angle + Math.PI / 4) * particle.size * 0.6,
-          );
-        }
-        ctx.closePath();
-        ctx.fill();
+        paintSpark?.(ctx, particle.hue, particle.size);
       }
       ctx.restore();
     }
@@ -731,18 +737,28 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
   }
 
   const painting = canPaint(doc);
-  if (painting && view !== null) {
-    const frame = (nowMs: number): void => {
-      if (element.isConnected && resize()) {
-        const ctx = canvas.getContext("2d");
-        if (ctx !== null) {
-          paintFrame(ctx, nowMs);
-        }
-      }
+  let covered = false;
+  let frameRequested = false;
+  const requestFrame = (): void => {
+    if (painting && view !== null && !covered && !frameRequested) {
+      frameRequested = true;
       view.requestAnimationFrame(frame);
-    };
-    view.requestAnimationFrame(frame);
+    }
+  };
+  function frame(nowMs: number): void {
+    frameRequested = false;
+    if (covered) {
+      return;
+    }
+    if (element.isConnected && resize()) {
+      const ctx = canvas.getContext("2d");
+      if (ctx !== null) {
+        paintFrame(ctx, nowMs);
+      }
+    }
+    requestFrame();
   }
+  requestFrame();
 
   /** The shadow of a side that is still under way, which the turn's outcome now resolves. */
   const resolveShadows = (atMs: number): void => {
@@ -770,6 +786,16 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
 
   return {
     element,
+    setCovered(next) {
+      if (covered === next) {
+        return;
+      }
+      covered = next;
+      // Keep the last frame at its painted size as the result fades over it.
+      picture.style.width = covered ? `${String(width)}px` : "";
+      picture.style.height = covered ? `${String(height)}px` : "";
+      requestFrame();
+    },
     setFeatured(feature) {
       const key = feature === null ? null : `${feature.id}@${feature.place}`;
       const shownKey =
@@ -912,7 +938,14 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
         const g = layout();
         view?.setTimeout(() => {
           const x = g.cx + (side === "left" ? -1 : 1) * g.jackSize * 0.4;
-          burst(x, g.groundY - g.jackSize * 0.5, "#ff8a3a", 14, "spark", 200);
+          burst(
+            x,
+            g.groundY - g.jackSize * 0.5,
+            biteSparkHue,
+            14,
+            "spark",
+            200,
+          );
           particles.push({
             x,
             y: g.groundY - g.jackSize * 0.3,
