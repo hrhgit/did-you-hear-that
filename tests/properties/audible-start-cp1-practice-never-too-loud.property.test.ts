@@ -45,7 +45,7 @@ const runs = 50;
 const timeoutMs = 120_000;
 
 const { capRelativeToAnchorDb, upwardStepDb } = hearingMethodConfig;
-const { practiceStartLevelDb, chimeMaxLevelDb } = visitFlowConfig;
+const { practiceStartLevelDb, chimeMaxLevelDb, missLevelDb } = visitFlowConfig;
 
 describe("audible-start CP1. Practice is never louder than allowed, never a jump, never below the floor (R12 to R14, R20)", () => {
   it.each(roomRuns)(
@@ -94,6 +94,12 @@ describe("audible-start CP1. Practice is never louder than allowed, never a jump
             if (request.purpose === "chime") {
               expect(request.soundId).toBe("chime");
               expect(request.levelDb).toBeLessThanOrEqual(chimeMaxLevelDb);
+              continue;
+            }
+            if (request.purpose === "miss") {
+              // The puff when a creature gets to Jack (2026-11-20): no room, no search.
+              expect(request.soundId).toBe("snuff");
+              expect(request.levelDb).toBeLessThanOrEqual(missLevelDb);
               continue;
             }
             expect(

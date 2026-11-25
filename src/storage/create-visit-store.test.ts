@@ -16,7 +16,7 @@ function fields(
     savedVisitId,
     savedAtEpochMs: 1795180800000,
     savedOnLocalDate: "2026-11-20",
-    visitType: "quick",
+    visitType: "full",
     headphoneName: "White earbuds",
     payloadJson: `{"payloadOf":"${savedVisitId}"}`,
     ...change,

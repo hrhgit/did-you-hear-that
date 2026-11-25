@@ -29,13 +29,13 @@ let earpieceVisit: SimulatedRepeatedResult;
 
 test.beforeAll(async () => {
   earVisit = await simulatedRepeatedResult(
-    "quick",
+    "full",
     // Inside the playable range, whose floor is −35 dB with this calibration (audible-start).
     { kind: "thresholds", leftDb: -30, rightDb: -15 },
     { floor: { kind: "firstOffered" }, swaps: true, imbalanceDb: 0 },
   );
   earpieceVisit = await simulatedRepeatedResult(
-    "quick",
+    "full",
     // Inside the playable range with the louder earpiece too: at −30 the left ear, on the louder
     // earpiece, would hear the floor itself and offer no repeat (audible-start).
     { kind: "thresholds", leftDb: -25, rightDb: -25 },

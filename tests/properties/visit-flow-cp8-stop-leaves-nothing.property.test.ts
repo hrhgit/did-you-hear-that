@@ -63,7 +63,7 @@ const endingArbitrary: fc.Arbitrary<VisitorEnding> = fc.record({
 
 /** A short visit to start after the front door: no answers, no rests, no disturbances. */
 const nextVisitScript = (script: VisitorScript): VisitorScript => ({
-  visitType: "quick",
+  visitType: "full",
   calibrationTargetDb: script.calibrationTargetDb,
   firstHeadphoneCheckAnswer: "left",
   listener: { kind: "extreme", name: "neverAnswers", seed: 0 },

@@ -18,7 +18,7 @@ for (const server of previewServers) {
   const address = `http://localhost:${server.port}${server.basePath}`;
 
   test.describe(`front door at the ${server.name} (${address})`, () => {
-    test("shows the title, the headphones line, three ways in and the privacy line", async ({
+    test("shows the title, the headphones line, two ways in and the privacy line", async ({
       page,
     }) => {
       await openPage(page, address);
@@ -33,7 +33,7 @@ for (const server of previewServers) {
       const ways = page.getByRole("group", {
         name: frontDoorCopy.choicesLabel,
       });
-      await expect(ways.getByRole("button")).toHaveCount(3);
+      await expect(ways.getByRole("button")).toHaveCount(2);
       for (const choice of Object.values(frontDoorCopy.choices)) {
         await expect(
           ways.getByRole("button", { name: choice.button }),
@@ -121,7 +121,7 @@ for (const server of previewServers) {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await page.keyboard.press("Tab");
       const quick = page.getByRole("button", {
-        name: frontDoorCopy.choices.quick.button,
+        name: frontDoorCopy.choices.full.button,
       });
       await expect(quick).toBeFocused();
       const outline = await quick.evaluate(

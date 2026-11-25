@@ -137,7 +137,7 @@ async function lastHeardSide(page: Page): Promise<"left" | "right"> {
   return last.channel === "left" ? "right" : "left";
 }
 
-test("walks a short visit with a quieter left ear, then visits a floor again with the headphones swapped", async ({
+test("walks a visit with a quieter left ear, then visits a floor again with the headphones swapped", async ({
   page,
 }) => {
   test.setTimeout(20 * 60_000);

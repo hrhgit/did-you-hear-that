@@ -333,7 +333,7 @@ describe("creatureCardLabel", () => {
     expect(
       creatureCardLabel("cellar", "gone", 7, { left: -25, right: -10 }),
     ).toBe(
-      "Thump, the knocker, gone back to the cellar. 7 caught. Quietest catch on your left: 25 dB quieter than your calibration. Quietest catch on your right: 10 dB quieter than your calibration.",
+      "Thump, the skeleton, gone back to the cellar. 7 caught. Quietest catch on your left: 25 dB quieter than your calibration. Quietest catch on your right: 10 dB quieter than your calibration.",
     );
   });
 

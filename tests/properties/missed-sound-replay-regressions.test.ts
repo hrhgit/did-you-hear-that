@@ -47,7 +47,7 @@ describe("missed-sound replay regressions", () => {
     // script had ended the pause. The stage ignores the proceed while the pause holds (R11.7);
     // `canProceed` is false at that moment, and the replay goes on after the resume.
     const plan: VisitLogPlan = {
-      visitType: "quick",
+      visitType: "full",
       visitSeed: 0,
       calibrationSettingsDb: [-27],
       freeTops: [flatTops(0)],
@@ -127,7 +127,7 @@ describe("missed-sound replay regressions", () => {
     // demanded at least two for the "times" form, which "Once" is not. The line is right: one
     // answer on the other side is written "Once you named the other side." (design.md, "The copy").
     const plan: VisitLogPlan = {
-      visitType: "quick",
+      visitType: "full",
       visitSeed: 0,
       calibrationSettingsDb: [-17, -6],
       freeTops: [flatTops(0), flatTops(0)],
@@ -168,7 +168,7 @@ describe("missed-sound replay regressions", () => {
     // before the first replayed sound has started does not count (R12.3, D9), so the replay goes
     // on and plays every sound.
     const plan: VisitLogPlan = {
-      visitType: "quick",
+      visitType: "full",
       visitSeed: 0,
       calibrationSettingsDb: [-27],
       freeTops: [flatTops(0)],

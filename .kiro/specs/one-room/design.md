@@ -99,7 +99,7 @@ The page reads four things of the one room, all from the snapshot of the stage `
 
 - `snapshot.room.together` says whether the creatures take turns. Then the bar has no room name and no place in an order of rooms.
 - `snapshot.room.creatures` is the list for the cards: who has begun a run, whether each is `about` or `gone`, its count and its quietest catch on each side, with the top and the floor that the bar of a card is drawn between.
-- `snapshot.room.practice.practising` says whose practice sound plays or is about to play, so that the page can show that creature in the middle of the room. `practice.notHeard` names the creatures and sides for the not-heard notice.
+- `snapshot.room.practice.practising` says whose practice sound plays or is about to play, so that the page can show that creature: in the doorway that `practice.soundEar` names while that sound plays, and in the middle of the room between sounds. `practice.notHeard` names the creatures and sides for the not-heard notice.
 - `trialScored`, `practiceSoundScored` and `roomFinished` carry the room they are about. The page turns each into what it shows (`reaction-of-event.ts`).
 
 Nothing was added to the commands: `answer`, `pause`, `resume`, `goOnWithoutPractice` and `stop` do in the one room what they did in a room.
@@ -156,7 +156,7 @@ export interface RoomCreature {
 // On RoomPractice:
 /**
  * In `practice`: the room whose sound is practised now, so that the screen can show who is making
- * it. Never which side. Null in `notHeard` and `counting`. Always present in the snapshots the
+ * it. It never says which side: that is `soundEar`, and only while the sound plays. Null in `notHeard` and `counting`. Always present in the snapshots the
  * flow gives; optional only so that literals written before it still compile (one-room spec).
  */
 readonly practising?: VisitRoom | null;
@@ -265,7 +265,7 @@ export interface MixedRoomRunnerOptions extends RunnerCommonOptions {
 - **A round.** Every room in order, and for each the left ear and then the right. A side hears the room's sound at `practiceLevelsDb(searchCapDb, settings)`: the anchor, or the room's cap if that is lower, and one upward step louder after a sound it did not catch, up to `practiceSoundsPerEarMaxCount` sounds (2). A catch ends that side's practice. Gaps, windows and answers are those of a practice in the audible-start light plan.
 - **The log.** Each practice sound is logged in the log's `practice` with its own room and attempt, never among the trials. The round is counted across the rooms. The number of a practice sound is its number within its room and round.
 - **Not heard.** When a round has left sides uncaught, `notHeard(missed)` is called once, after the last room of the round, with every room and side that was not caught, in the order practised. The flow begins the pause `practiceNotHeard`. `resume` plays a new round for those sides alone. `goOn` starts the counting without them.
-- **What the screen is told.** `practice()` gives `phase`, `soundPlaying`, `practising` and `notHeard`. `practising` is the room whose sound plays or is about to play, through the whole phase `practice`, and null in `notHeard` and `counting`. The side is never given.
+- **What the screen is told.** `practice()` gives `phase`, `soundPlaying`, `soundEar`, `practising` and `notHeard`. `practising` is the room whose sound plays or is about to play, through the whole phase `practice`, and null in `notHeard` and `counting`. The side is given only as `soundEar`, and only while the practice sound plays; null at every other time.
 - **Handing over.** When every side has caught its sound, or the visitor goes on, `countingStarted` is called once and the mixed runner is started. The flow then lights the lantern, sets the scale of the chase, and emits `countingStarted` for each member.
 - **A caught practice sound** gives `practiceSoundScored` with the reaction `ripple`. Together, its line is `rollCallCaughtLine`: "That was Squeak."
 - **One room.** `createPractisedRoomRunner` creates this runner with one room and gives its `notHeard` the ears alone, as before. An empty list throws `RangeError("A practice needs at least one room.")`.
@@ -321,7 +321,7 @@ Each of the five sounds has a maker (D9). It lives on the floor that was that so
 | `stairs` | 4 kHz | Scritch | the beetle | the stairs | "A dry scrape." | `#9ccf6a` |
 | `attic` | 8 kHz | Squeak | the bat | the attic | "A thin, high whine." | `#7aa2ff` |
 
-The quick visit has Murmur, Scritch and Squeak. The full visit has all five.
+The visit has all five. (An earlier quick visit of Murmur, Scritch and Squeak was dropped on 2026-11-20.)
 
 **The drawings** are this project's own, in `creature-art.ts`: pale bodies, dark eyes, and one accent each in the creature's own colour, in a box of 120 by 120. Thump is a heavy round body with two big fists. Murmur is a rounded sheet with tall eyes and a hem of three lobes. Tink is a tin box on two feet with a key in its side. Scritch is an oval shell with six legs and two feelers. Squeak is a small body between two spread wings. Each is drawn in three moods: awake, asleep with its eyes shut once it has gone home, and as a dashed outline when it went by. No figure, mark or logo of anyone else is used. The owner asked whether the mark of the hackathon's host could be the ghost, and then set that aside; the creatures stay original.
 
@@ -331,7 +331,7 @@ The quick visit has Murmur, Scritch and Squeak. The full visit has all five.
 
 | Moment | What is shown | Why it tells nothing |
 |---|---|---|
-| The roll call, while a creature is practised | The creature at the exact middle of the room, with its introduction. While its practice sound plays, the line that a sound is playing. | Practice counts for nothing, and the middle has no side (product.md, the exception for practice). |
+| The roll call, while a creature is practised | The creature with its introduction: in the doorway of the side its practice sound comes from while that sound plays, and at the exact middle of the room between sounds. While its practice sound plays, the line that a sound is playing. | Practice counts for nothing, and the line names no side; the doorway shows the side only while its sound plays (product.md, the exception for practice). |
 | A practice sound is caught | Rings at the doorway of the side answered, a hop, and "That was Squeak." | The answer has been given. |
 | The counting, between decisions | Nobody. The doorways are empty, the cards stand still. | |
 | A counted sound is caught | Its creature in the doorway of its side, lit, with rings. Its card lights and counts. The line of the catch. | The trial is scored. |
@@ -397,9 +397,9 @@ export interface RoomScene {
 }
 ```
 
-- `setFeatured` puts a creature in plain view: at the centre for the roll call, or in a doorway while a missed sound is played again.
+- `setFeatured` puts a creature in plain view: at the centre for the roll call between sounds, or in a doorway while a practice sound plays or while a missed sound is played again.
 - `caught` shows a creature in the doorway of its side, lit, with three rings. `slipped` shows its outline leaving by that doorway.
-- `rings` and `cheer` answer a caught practice sound: rings at the side that was answered, and one hop of the creature at the centre.
+- `rings` and `cheer` answer a caught practice sound: rings at the side that was answered, and one hop of the creature in plain view, in its doorway or at the centre.
 - `setLight` follows the lantern: the room dims as the lights are spent.
 - Nothing in the scene moves by itself except the lantern, which sways and flickers in the middle of the room on its own clock. It has no side, and it does not follow the trials.
 
@@ -462,7 +462,7 @@ What was left out on purpose: points, a timer, levels, anything that rewards spe
 
 ## Measurements
 
-**The length of a visit.** Measured on 2026-11-17 with a probe that is not kept in the repository: 200 simulated visitors for each visit type, the same visitors both ways, whole visits through the visit flow's harness at a calibration of −22 dB, thresholds from 35 dB below the calibration to 5 dB above it, answers 0 to 1.4 s after the window opens, no rests. The time is the time in the rooms with their practice.
+**The length of a visit.** (Before the time limit of 2026-11-20, and with the quick visit that has since been dropped.) Measured on 2026-11-17 with a probe that is not kept in the repository: 200 simulated visitors for each visit type, the same visitors both ways, whole visits through the visit flow's harness at a calibration of −22 dB, thresholds from 35 dB below the calibration to 5 dB above it, answers 0 to 1.4 s after the window opens, no rests. The time is the time in the rooms with their practice.
 
 | Visit | Way | Median | 90th percentile | Longest | Trials, median |
 |---|---|---|---|---|---|
@@ -582,7 +582,7 @@ The browser suite needs a quiet machine. One run beside other heavy work on 2026
 | R8 One lantern and one chase | The flow's and the chase score's unit tests; CP3, CP4. |
 | R9 The creatures and their words | `creature-copy.test.ts`; `npm run check:copy`. |
 | R10 The screen of the room | `screen-of-snapshot.test.ts`, `reaction-of-event.test.ts`; `room.spec.ts`. |
-| R11 Nothing before the answer | CP3; the screen-leak properties; `room.spec.ts` (the unanswered silent turn, the practice with no side). |
+| R11 Nothing before the answer | CP3; the screen-leak properties; `room.spec.ts` (the unanswered silent turn, the practice, whose side shows only while its sound plays). |
 | R12 No jump scares on the screen | `room.spec.ts` (fades, both motion settings). |
 | R13 Small screens | `room.spec.ts` (seven sizes, three states); `visit.spec.ts` at the phone size. |
 | R14 A screen for everyone | The axe-core rules in `visit.spec.ts`, `replay.spec.ts` and `swapped-repeat.spec.ts`; the labels in `creature-copy.test.ts` and `screen-of-snapshot.test.ts`. |
@@ -598,7 +598,7 @@ Not checked by any test: what the room sounds like, whether five sounds are told
 
 - **Audio safety.** Every sound still goes through the one output stage. The cap, the ceiling, the fades, the silent other ear and the stop control are untouched. Rule 4 is restated for the one room with the owner's approval and checked by two properties. Rule 9 is kept on the screen: every change of brightness is a fade.
 - **The hearing method.** Each search is the threshold search, with the same steps, start, cap, floor, no-sound share and trial limit. Mixing left and right trials in random order was already the method; this spec also mixes the pitches. Whether that changes thresholds is not known (see "Steering", the known limits).
-- **The experience rule.** The page is not told whose turn it is, and draws a counted creature only from a scored trial. The practice shows who and never which side.
+- **The experience rule.** The page is not told whose turn it is, and draws a counted creature only from a scored trial. The practice shows who, and its side only while that side's sound plays.
 - **What the result may claim.** A card sets the left ear against the right for one creature. Nothing compares creatures, and nothing compares visitors.
 - **Wording.** Levels are relative to the calibration. The fixed line stands. The copy check passes.
 - **Structure.** The one number is in `src/config`. Every string is in `src/copy`. The turn source is seeded and passed in; nothing in `src` reads the clock or `Math.random` as a global. `src/ui` imports only `src/session`, `src/copy` and `src/config`.
@@ -670,7 +670,7 @@ Each decision below that had more than one option was made by the owner's coordi
 
 **Q20. FOR THE OWNER. Listening.** Nobody has listened to the one room. Three things only a listening session can tell: whether the five sounds are told apart by ear, above all Murmur and Tink, which are neighbours in pitch; whether a quiet creature right after a louder one on the same ear is harder to catch than it should be; and whether the turns feel like a game or like noise.
 
-**Q21. FOR THE OWNER. A shorter visit.** The owner said one room took too long. The one room does not make the visit shorter (Measurements): the quick visit still has about 73 trials. Shorter needs fewer trials: a lower trial limit, a larger step, fewer creatures, or one ear's search ending the other's. Each of those changes the method in `hearing-method.md` and what the result can say. The coordinator did not decide it.
+**Q21. A shorter visit. Decided by the owner on 2026-11-20: a time limit of 5 minutes on the counting and one visit only, the full one.** The shorter visit of three creatures is gone. The room's counting closes after `visitFlowConfig.roomTimeLimitMs` (5 minutes, practice, rests and pauses not counted); a creature that is found sooner still goes home sooner, and one still open when time is up ends as unreliable with the trial limit's reason (`cutOff` in the engine). The original question follows. The owner said one room took too long. The one room does not make the visit shorter (Measurements): the quick visit still has about 73 trials. Shorter needs fewer trials: a lower trial limit, a larger step, fewer creatures, or one ear's search ending the other's. Each of those changes the method in `hearing-method.md` and what the result can say. The coordinator did not decide it.
 
 **Q22. FOR THE OWNER. The disclosure.** The code of this spec was written by Claude Code, not by Kiro. The submission must say so, in words the owner chooses.
 

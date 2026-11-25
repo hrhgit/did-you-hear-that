@@ -36,7 +36,7 @@ export interface CreatureShelf {
 interface Card {
   readonly element: HTMLElement;
   readonly face: HTMLElement;
-  readonly art: SVGElement;
+  readonly art: HTMLCanvasElement;
   readonly flash: HTMLElement;
   readonly bars: Readonly<Record<"left" | "right", HTMLElement>>;
   readonly name: HTMLElement;

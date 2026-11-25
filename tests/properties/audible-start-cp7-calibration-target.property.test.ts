@@ -17,12 +17,12 @@ import { performanceOffsetMaxMs } from "./visit-flow-arbitraries";
 
 // audible-start CP7 (design.md, "Correctness properties"; R3). For any sequence of targets,
 // presses of louder and quieter, starts and stops at drawn times, with the hiss repeats: every
-// played setting is on the control's grid, the first of each calibration is the bottom and each is
-// at most `calibrationRiseMaxDb` above the one before; the target is always on the grid within the
-// control; NaN and values that are not numbers change nothing; ±Infinity give the ends; a target
-// set before the start leaves the target at the bottom after it; louder and quieter give what they
-// gave before audible-start. The first part runs the calibration controller on an output shell, the
-// second the visit flow on the Visit_Harness.
+// played setting is on the control's grid, the first of each calibration is the start setting (the
+// middle of the control) and each is at most `calibrationRiseMaxDb` above the one before; the target
+// is always on the grid within the control; NaN and values that are not numbers change nothing;
+// ±Infinity give the ends; a target set before the start leaves the target at the start setting
+// after it; louder and quieter give what they gave before audible-start. The first part runs the
+// calibration controller on an output shell, the second the visit flow on the Visit_Harness.
 
 // The shell renders through the synth; these properties give it the worst-case renderers (audio-output D43).
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
@@ -41,6 +41,9 @@ const {
   calibrationRiseMaxDb,
 } = audioOutputConfig;
 const topDb = calibrationSettingTopDb();
+
+/** Where a calibration starts: the middle of the control, rounded down to the grid (audible-start, 2026-11-18). */
+const startDb = bottomDb + Math.floor((topDb - bottomDb) / 2 / stepDb) * stepDb;
 
 /** Every setting of the control's grid, from the bottom to the top. */
 const gridDb: readonly number[] = Array.from(
@@ -95,7 +98,7 @@ function createPlayedChecker() {
   let previousDb: number | null = null;
   return {
     faults,
-    /** A new calibration: its first played setting must be the bottom. */
+    /** A new calibration: its first played setting is the one asked for, the start unless the target moved first. */
     begin(): void {
       previousDb = null;
     },
@@ -104,9 +107,10 @@ function createPlayedChecker() {
         faults.push(`${String(settingDb)} dB is not on the control's grid`);
       }
       if (previousDb === null) {
-        if (settingDb !== bottomDb) {
+        const askedDb = expectedTargetDb(requestedDb);
+        if (askedDb !== null && settingDb !== askedDb) {
           faults.push(
-            `the first repeat of a calibration played at ${String(settingDb)} dB`,
+            `the first repeat of a calibration played at ${String(settingDb)} dB for a target of ${String(requestedDb)} dB`,
           );
         }
       } else if (settingDb > previousDb + calibrationRiseMaxDb) {
@@ -125,7 +129,7 @@ function createPlayedChecker() {
 }
 
 describe("audible-start CP7. The calibration target (Universal; R3)", () => {
-  it("on the calibration controller: the target follows the table, louder and quieter as before, and the repeats rise by at most one step from the bottom", async () => {
+  it("on the calibration controller: the target follows the table, louder and quieter as before, and the repeats rise by at most one step from the start", async () => {
     await fc.assert(
       fc.asyncProperty(
         seedArbitrary,
@@ -171,7 +175,9 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
           });
           await shell.output.activate();
 
-          let modelTargetDb = bottomDb;
+          // The shell is active, so the controller already shows the start: its target is the start
+          // until the visitor moves it.
+          let modelTargetDb = startDb;
           let elapsedMs = 0;
           for (const step of path) {
             advance(shell, step.atMs - elapsedMs);
@@ -214,8 +220,8 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
                   await shell.output.activate();
                 }
                 controller.open();
-                // Whatever the target was before, a calibration starts at the bottom (D3).
-                modelTargetDb = bottomDb;
+                // Whatever the target was before, a calibration starts at the middle (D3).
+                modelTargetDb = startDb;
                 break;
               case "keep":
                 controller.keep();
@@ -248,7 +254,7 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
     );
   }, 120_000);
 
-  it("on the visit flow: the snapshot's target is the bottom until the sound starts, then follows the table; it is ignored while a pause holds; the played setting rises by at most one step", async () => {
+  it("on the visit flow: the snapshot's target is the middle until the sound starts, then follows the table; it is ignored while a pause holds; the played setting rises by at most one step", async () => {
     await fc.assert(
       fc.asyncProperty(
         seedArbitrary,
@@ -270,7 +276,7 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
             music: "reject",
           });
           const { flow } = harness;
-          flow.chooseVisit("quick");
+          flow.chooseVisit("full");
           await harness.settle();
           const startMs = harness.now();
 
@@ -285,13 +291,15 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
           /** True from the visit's start, or a device change, until the visitor starts the sound. */
           let fresh = true;
           /** The controller's target, which the snapshot shows once the calibration is not fresh. */
-          let modelTargetDb = bottomDb;
+          let modelTargetDb = startDb;
           /** The setting the controller last played, which louder and quieter read. */
           let controllerPlayedDb: number | null = null;
+          /** The highest target the visitor has asked for, so far. */
+          let highestAskedDb = startDb;
 
           const expectShown = (snapshot: Calibration, label: string): void => {
             expect(snapshot.targetSettingDb, label).toBe(
-              fresh ? bottomDb : modelTargetDb,
+              fresh ? startDb : modelTargetDb,
             );
             expect(snapshot.controlBottomDb).toBe(bottomDb);
             expect(snapshot.controlTopDb).toBe(topDb);
@@ -334,12 +342,12 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
                   return;
                 }
                 fresh = false;
-                modelTargetDb = bottomDb;
+                modelTargetDb = startDb;
                 const after = calibrationOf(flow.snapshot());
-                // A target set before the start leaves the target at the bottom (R3.5, D3).
+                // A target set before the start leaves the target at the start setting (R3.5, D3).
                 expect(after.playing).toBe(true);
-                expect(after.targetSettingDb).toBe(bottomDb);
-                expect([null, bottomDb]).toContain(after.playedSettingDb);
+                expect(after.targetSettingDb).toBe(startDb);
+                expect([null, startDb]).toContain(after.playedSettingDb);
                 return;
               }
               case "resume": {
@@ -370,13 +378,15 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
             await harness.advanceTo(startMs + step.atMs);
             expectShown(calibrationOf(flow.snapshot()), `before ${step.kind}`);
             await give(step);
+            highestAskedDb = Math.max(highestAskedDb, modelTargetDb);
             expectShown(calibrationOf(flow.snapshot()), `after ${step.kind}`);
           }
           await harness.advance(afterPathMs);
           expectShown(calibrationOf(flow.snapshot()), "at the end");
 
-          // Every played setting the flow showed, in order: on the grid, the first after a fresh
-          // screen the bottom, and none more than one step of the hiss above the one before.
+          // Every played setting the flow showed, in order: on the grid, the first no higher than the
+          // highest setting the visitor asked for (it is the start unless the target moved before the
+          // first repeat played), and none more than one step of the hiss above the one before.
           let previousDb: number | null = null;
           for (const { snapshot } of harness.snapshots) {
             if (snapshot.stage !== "calibration") {
@@ -386,7 +396,7 @@ describe("audible-start CP7. The calibration target (Universal; R3)", () => {
             if (playedDb !== null) {
               expect(isOnGrid(playedDb)).toBe(true);
               if (previousDb === null) {
-                expect(playedDb).toBe(bottomDb);
+                expect(playedDb).toBeLessThanOrEqual(highestAskedDb);
               } else {
                 expect(playedDb - previousDb).toBeLessThanOrEqual(
                   calibrationRiseMaxDb,

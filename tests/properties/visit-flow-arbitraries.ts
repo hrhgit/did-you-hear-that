@@ -61,7 +61,7 @@ export const performanceOffsetMaxMs = 1_000_000;
 const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
 const visitTypeArbitrary: fc.Arbitrary<VisitType> = fc.constantFrom(
-  "quick",
+  "full",
   "full",
 );
 

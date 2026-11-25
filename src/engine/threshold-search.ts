@@ -168,6 +168,21 @@ export function createThresholdSearch(options: {
   return Object.freeze({
     current: (): SearchStep => step,
 
+    cutOff: () => {
+      if (step.kind === "finished") {
+        return step;
+      }
+      for (const earSearch of Object.values(ears)) {
+        earSearch.cutOff();
+      }
+      const finished = Object.freeze({
+        kind: "finished" as const,
+        result: buildResult(),
+      });
+      step = finished;
+      return finished;
+    },
+
     respond: (response: VisitorResponse): SearchStep => {
       if (step.kind === "finished") {
         throw new Error("The room has finished, so no response is expected.");

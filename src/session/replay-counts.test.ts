@@ -135,9 +135,9 @@ function noSound(order: number): VisitTrial {
  */
 const log: VisitLog = deepFreeze({
   formatVersion: 1,
-  visitType: "quick",
+  visitType: "full",
   visitSeed: 42,
-  rooms: visitRooms("quick"),
+  rooms: visitRooms("full"),
   calibrations: [
     { calibrationIndex: 0, settingDb: -20, roomTopLevelDb, keptAtMs: 0 },
     { calibrationIndex: 1, settingDb: -22, roomTopLevelDb, keptAtMs: 5000 },

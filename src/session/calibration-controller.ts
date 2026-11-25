@@ -13,7 +13,10 @@ import type {
   PlayRefusal,
 } from "../audio/output/create-audio-output";
 import type { RangeReport } from "../audio/output/range-report";
-import { calibrationTargetSettingDb } from "./calibration-target-setting";
+import {
+  calibrationStartSettingDb,
+  calibrationTargetSettingDb,
+} from "./calibration-target-setting";
 
 /** What the calibration screen shows (design.md, "The calibration controller"). */
 export interface CalibrationSnapshot {
@@ -114,6 +117,11 @@ export function createCalibrationController(options: {
   let waitingForSound = false;
   let handle: TimerHandle | null = null;
   let targetSettingDb = calibrationSettingMinDb;
+  /**
+   * Whether the target is still the start's, the middle of the control, and the visitor has not
+   * moved it. Such a target follows the top when the sound changes, so the start stays central.
+   */
+  let targetIsStart = true;
   let playedSettingDb: number | null = null;
   let playedSound: "music" | "hiss" | null = null;
   let atTop = false;
@@ -208,7 +216,7 @@ export function createCalibrationController(options: {
     if (!playing || output.startCalibrationMusic === undefined) {
       return;
     }
-    const outcome = output.startCalibrationMusic();
+    const outcome = output.startCalibrationMusic(targetSettingDb);
     if (outcome.kind === "refused") {
       if (outcome.reason === "notReady") {
         // The music cannot be played after all: the shell has turned to the hiss.
@@ -304,7 +312,11 @@ export function createCalibrationController(options: {
   };
 
   output.onCalibrationSoundChange?.(() => {
-    // The top may have moved, from the hiss's to the music's: the target stays within it.
+    // The top may have moved, from the hiss's to the music's. A target the visitor has not moved
+    // stays in the middle of the new control; any other stays within it.
+    if (targetIsStart) {
+      targetSettingDb = calibrationStartSettingDb(control());
+    }
     moveTarget(targetSettingDb);
     if (waitingForSound) {
       waitingForSound = false;
@@ -337,7 +349,9 @@ export function createCalibrationController(options: {
       cancelNext();
       stopMusic();
       output.beginCalibration();
-      targetSettingDb = calibrationSettingMinDb;
+      // A new calibration starts in the middle of the control, where the slider and the sound begin.
+      targetSettingDb = calibrationStartSettingDb(control());
+      targetIsStart = true;
       playedSettingDb = null;
       playedSound = null;
       atTop = false;
@@ -352,6 +366,7 @@ export function createCalibrationController(options: {
     },
 
     louder() {
+      targetIsStart = false;
       moveTarget(
         Math.max(targetSettingDb, playedSettingDb ?? targetSettingDb) +
           calibrationSettingStepDb,
@@ -360,6 +375,7 @@ export function createCalibrationController(options: {
     },
 
     quieter() {
+      targetIsStart = false;
       moveTarget(
         (playedSettingDb ?? targetSettingDb) - calibrationSettingStepDb,
       );
@@ -368,6 +384,7 @@ export function createCalibrationController(options: {
 
     setTarget(settingDb) {
       if (moveTarget(settingDb)) {
+        targetIsStart = false;
         notify();
       }
     },

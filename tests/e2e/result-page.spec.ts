@@ -41,10 +41,10 @@ let silentVisit: VisitToSave;
 test.beforeAll(async () => {
   // Inside the playable range: with the calibration these visits keep, every room's search floor
   // is −35 dB (audible-start, the playable floor).
-  quickVisit = await simulatedResult("quick", {
+  quickVisit = await simulatedResult("full", {
     kind: "thresholds",
     leftDb: -30,
-    rightDb: -20,
+    rightDb: -24,
   });
   fullVisit = await simulatedResult("full", {
     kind: "thresholds",
@@ -52,7 +52,7 @@ test.beforeAll(async () => {
     rightDb: -30,
   });
   laterQuickVisit = await simulatedResult(
-    "quick",
+    "full",
     { kind: "thresholds", leftDb: -25, rightDb: -30 },
     20261127,
   );
@@ -165,7 +165,7 @@ const counts = {
 };
 
 test.describe("the result of a visit", () => {
-  test("draws a short visit: the head, the rooms it entered from the top down, and the rooms it skipped left empty", async ({
+  test("draws a visit: the head, the rooms it entered from the top down, and the rooms it skipped left empty", async ({
     page,
   }) => {
     const record = await openSheet(page, quickVisit);
@@ -448,7 +448,7 @@ test.describe("the result of a visit", () => {
     await savedVisits(page)
       .getByRole("button", { name: resultPageCopy.showButton })
       .click();
-    await expect(page.locator(".result-floor-words")).toHaveCount(3);
+    await expect(page.locator(".result-floor-words")).toHaveCount(5);
     await expect(page.locator(".result-shown-visit")).toContainText(
       "The new pair",
     );
@@ -492,10 +492,10 @@ test.describe("the result of a visit", () => {
 
     // The same name, whatever its letter case and spacing, brings the earlier visit's outlines.
     await name.fill("  the OLD  grey pair ");
-    await expect(outlines).toHaveCount(6);
+    await expect(outlines).toHaveCount(2 * ghostSoundIds.length);
     await expect(comparison).toBeVisible();
     await expect(comparison).not.toHaveText(comparisonCopy.noEarlierVisitLine);
-    for (const roomId of ["corridor", "stairs", "attic"] as const) {
+    for (const roomId of ghostSoundIds) {
       await expect(
         drawnFloor(page, roomId).locator(".result-earlier"),
       ).toHaveCount(2);

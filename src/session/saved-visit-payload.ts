@@ -62,7 +62,6 @@ const earStates: readonly string[] = Object.freeze([
 ]);
 
 const visitTypeNames: Readonly<Record<VisitType, true>> = Object.freeze({
-  quick: true,
   full: true,
 });
 

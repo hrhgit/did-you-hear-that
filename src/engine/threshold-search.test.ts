@@ -347,6 +347,80 @@ describe("createThresholdSearch", () => {
     });
   });
 
+  describe("cutOff", () => {
+    it("finishes the room at once, with both open ears unreliable for the trial limit and every trial so far kept", () => {
+      const search = create(createSeededRandom(21));
+      const played: Trial[] = [];
+      for (let count = 0; count < 5; count += 1) {
+        const trial = trialOf(search.current());
+        played.push(trial);
+        search.respond(stepListener(-52)(trial));
+      }
+      const step = search.cutOff();
+      expect(step.kind).toBe("finished");
+      expect(search.current()).toBe(step);
+      expect(step.result.trials.map((record) => record.trial)).toEqual(played);
+      for (const ear of ["left", "right"] as const) {
+        const earResult = step.result[ear];
+        expect(earResult.state).toBe("unreliable");
+        if (earResult.state === "unreliable") {
+          expect(earResult.reasons).toContain("trialLimit");
+        }
+      }
+      expect(() => search.respond("none")).toThrow(Error);
+    });
+
+    it("keeps the end of an ear that had already been found and cuts off only the other", () => {
+      // The left ear is a step listener, found within a few presentations; the right one is
+      // caught and missed in turn and is still going long after.
+      const respondOf = (): Responder => {
+        let rightCount = 0;
+        return (trial) => {
+          if (trial.kind === "noSound") {
+            return "none";
+          }
+          if (trial.ear === "left") {
+            return trial.levelDb >= -52 ? "left" : "none";
+          }
+          rightCount += 1;
+          return rightCount % 2 === 1 ? "right" : "none";
+        };
+      };
+      let seen = false;
+      for (let answered = 1; answered <= 40 && !seen; answered += 1) {
+        const search = create(createSeededRandom(24));
+        const respond = respondOf();
+        let step = search.current();
+        for (
+          let count = 0;
+          count < answered && step.kind === "trial";
+          count += 1
+        ) {
+          step = search.respond(respond(step.trial));
+        }
+        if (step.kind !== "trial") {
+          break;
+        }
+        const cut = search.cutOff();
+        if (cut.result.left.state === "found") {
+          seen = true;
+          expect(cut.result.right.state).toBe("unreliable");
+          if (cut.result.right.state === "unreliable") {
+            expect(cut.result.right.reasons).toContain("trialLimit");
+          }
+        }
+      }
+      expect(seen).toBe(true);
+    });
+
+    it("returns the same finished step when the room is already over", () => {
+      const search = create(createSeededRandom(23));
+      runRoom(search, neverAnswers);
+      const finished = search.current();
+      expect(search.cutOff()).toBe(finished);
+    });
+  });
+
   describe("respond", () => {
     it("throws a TypeError for an invalid response and changes nothing", () => {
       const random = createStubRandom(0.3);

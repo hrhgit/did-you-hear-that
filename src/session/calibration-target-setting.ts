@@ -44,3 +44,19 @@ export function calibrationTargetSettingDb(
   );
   return Math.max(bottomDb, bottomDb + stepCount * stepDb);
 }
+
+/**
+ * The setting a calibration starts at: the middle of the control, rounded down to the grid, so the
+ * first sound is neither the quietest nor the loudest the control allows. The owner asked for this
+ * on 2026-11-18: the slider and the calibration sound both begin in the middle. With the hiss's top
+ * (−4 dB) that is −22 dB; with the music's top (−5 dB) it is −23 dB. A pure function.
+ *
+ * Throws the same `RangeError` as `calibrationTargetSettingDb` for a control it cannot use.
+ */
+export function calibrationStartSettingDb(
+  control: CalibrationControlRange,
+): number {
+  const { bottomDb, topDb } = control;
+  const middleDb = bottomDb + (topDb - bottomDb) / 2;
+  return calibrationTargetSettingDb(middleDb, control) ?? bottomDb;
+}

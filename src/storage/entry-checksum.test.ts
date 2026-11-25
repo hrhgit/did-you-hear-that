@@ -51,18 +51,17 @@ describe("entryChecksum", () => {
         savedVisitId: "00000000",
         savedAtEpochMs: 0,
         savedOnLocalDate: "2026-01-01",
-        visitType: "quick",
+        visitType: "full",
         headphoneName: null,
         payloadJson: "",
       }),
-    ).toBe("4bd9ccfd");
+    ).toBe("557af3c3");
   });
 
   it.each([
     ["savedVisitId", { savedVisitId: "3f9a0c12" }],
     ["savedAtEpochMs", { savedAtEpochMs: 1795180800001 }],
     ["savedOnLocalDate", { savedOnLocalDate: "2026-11-21" }],
-    ["visitType", { visitType: "quick" }],
     ["headphoneName to another name", { headphoneName: "White earbudS" }],
     ["headphoneName to null", { headphoneName: null }],
     ["payloadJson", { payloadJson: "{ }" }],

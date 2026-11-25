@@ -24,7 +24,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 - **Practice**, **Practice_Sound**, **Not_Heard_Notice**: as in the audible-start spec's light plan. A room practises before it counts; a Practice_Sound counts for nothing; the notice offers to try again or to go on.
 - **Rise_Limit**, **Cap**, **Ceiling**: as in the audio-output spec and `audio-safety.md` (rules 4, 2 and 1).
 - **Contract_File**: `src/session/visit-flow-types.ts`. This spec only adds to it (visit-flow D1).
-- **Room**: one room of the visit as the Visit_Log and the result keep it: one pitch and one sound (`VisitRoom`). A quick visit has three and a full visit five.
+- **Room**: one room of the visit as the Visit_Log and the result keep it: one pitch and one sound (`VisitRoom`). A visit has five.
 - **Creature**: a Room as the visitor meets it in the One_Room: the maker of that Room's sound, with a name, a kind and a home.
 - **One_Room**: the room the screen shows, in which the searches of several Rooms take turns.
 - **Rooms_Together_Count**: `visitFlowConfig.roomsTogetherMaxCount`: how many Rooms' searches take turns in one Room_Run at most.
@@ -115,7 +115,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 2. THE Visit_Flow SHALL log every Practice_Sound in the Visit_Log's practice, with its own Room and attempt, and never among the trials.
 3. WHEN a round of the Roll_Call has left a side of a Member uncaught, THE Visit_Flow SHALL begin the Pause `practiceNotHeard` once, after the last Member of the round, and its view SHALL name every side that was not caught, in the order practised.
 4. WHEN `resume` is called in that Pause, THE Visit_Flow SHALL practise a new round for those sides alone. WHEN `goOnWithoutPractice` is called, THE Counting SHALL start without them.
-5. WHILE the Roll_Call is in its phase `practice`, THE view SHALL give `practising`: the Room whose sound plays or is about to play. It SHALL never give the side.
+5. WHILE the Roll_Call is in its phase `practice`, THE view SHALL give `practising`: the Room whose sound plays or is about to play. It SHALL give the side, as `soundEar`, only while that Practice_Sound plays, and never at any other time.
 6. WHEN the Roll_Call is over, THE Visit_Flow SHALL light the Lantern, SHALL emit `countingStarted` once for each Member, and SHALL start the Counting of all Members at once.
 7. THE roll call's runner SHALL throw a `RangeError` for an empty list of Rooms, and `createPractisedRoomRunner` SHALL be that runner with one Room, so that a Room alone practises on the same code.
 8. WHEN a Practice_Sound is caught Together, THE line of `practiceSoundScored` SHALL name the Creature that made it.
@@ -181,7 +181,7 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 #### Acceptance criteria
 
 1. THE screen SHALL show the Scene for the whole of the stage `room`: a Doorway at the left and at the right, the hanging Lantern with the count beside it, the Shelf with one Card for each Creature, the two answers, and the Caption.
-2. WHILE the Roll_Call practises a Creature, THE screen SHALL show that Creature at the exact middle of the Scene with its introduction, and SHALL say that a sound is playing while its Practice_Sound plays.
+2. WHILE the Roll_Call practises a Creature, THE screen SHALL show that Creature with its introduction: in the Doorway of the side its Practice_Sound comes from while that sound plays, and at the exact middle of the Scene between sounds. It SHALL say that a sound is playing while its Practice_Sound plays.
 3. WHEN a Practice_Sound is caught, THE screen SHALL show rings at the Doorway of its side and the house's line that names the Creature.
 4. WHEN a counted sound is caught, THE screen SHALL show its Creature in the Doorway of its side, SHALL light its Card, and SHALL say the line of the catch.
 5. WHEN a counted sound went by or was answered on the other side, THE screen SHALL show its Creature leaving through the Doorway of its side and SHALL say the line.
@@ -194,13 +194,13 @@ Acceptance criteria use EARS notation: ubiquitous (`THE <system> SHALL`), event-
 
 ### Requirement 11: Nothing before the answer
 
-**User story:** As the project owner, I want the one room to keep the experience rule: nothing on the screen may tell when a sound plays or on which side before the visitor has answered.
+**User story:** As the project owner, I want the one room to keep the experience rule: nothing on the screen may tell when a sound plays or on which side before the visitor has answered, except in the practice of the roll call (criterion 3 below).
 
 #### Acceptance criteria
 
 1. Between the start of a counted trial's gap and its Decision, nothing on the screen SHALL change because of that trial: no Creature, no Card, no word of the bar, no line and no light.
 2. THE Creature of a counted sound SHALL be shown only after the Decision of its trial.
-3. THE Practice MAY say that a sound is playing and who makes it, and SHALL never show the side: the practising Creature stands at the middle of the Scene, at the same distance from both Doorways.
+3. THE Practice MAY say that a sound is playing and who makes it, and its line SHALL name no side. While a Practice_Sound plays, the practising Creature SHALL stand in the Doorway of the side that sound comes from; between sounds it stands at the middle of the Scene, at the same distance from both Doorways.
 4. THE Lantern SHALL change only with the visitor's own answers, with a catch in the moment it is scored and with the clock.
 5. THE screen-leak properties of `tests/properties/screen-leak/` SHALL hold for the screen record of whole visits Together as they hold One_At_A_Time: a predictor that reads the screen does no better than chance at telling whether a trial has a sound and on which side.
 

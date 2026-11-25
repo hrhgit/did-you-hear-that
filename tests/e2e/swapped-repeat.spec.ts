@@ -1,5 +1,4 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { lanternConfig } from "../../src/config/lantern-config";
 import { oneRoomCopy } from "../../src/copy/creature-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
@@ -12,6 +11,7 @@ import type {
 } from "../../src/session/visit-flow-types";
 import type { ReplaySheet } from "../../src/ui/visit/start-replay-sheet";
 import { devServer } from "./dev-server";
+import { expectDrawn, expectFeatured, expectRingsFrom } from "./scene-record";
 import {
   expectNoHorizontalScroll,
   expectNoSeriousAccessibilityProblem,
@@ -247,8 +247,7 @@ test.describe("the swapped repeat of a floor", () => {
     expect(await requests(page)).toEqual(["startSwappedRoom"]);
 
     // Inside the room the sheet is gone and the room is in full view. The bar names the floor
-    // and its pitch. Nothing counts lights here, so the lantern burns with every light and has
-    // no name of its own, and the room has no cards along its foot. Nobody is in a doorway.
+    // and its pitch. Nothing is scored here, so the room shows no score, and it has no cards along its foot. Nobody is in a doorway.
     await show(page, moments.room);
     await expect(sheet(page)).toBeHidden();
     await expect(page.locator("main")).toHaveAttribute("data-house", "full");
@@ -257,19 +256,14 @@ test.describe("the swapped repeat of a floor", () => {
     ).toBeVisible();
     await expect(page.locator(".visit-room-name")).toHaveText("Stairs");
     await expect(page.locator(".visit-room-progress")).toHaveText("4 kHz");
-    await expect(
-      page.locator(".visit-lantern-cell[data-lit='true']"),
-    ).toHaveCount(lanternConfig.cellCount);
-    await expect(page.locator(".visit-lantern")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
+    await expect(page.locator(".rhythm-hud")).toBeHidden();
     await expect(page.locator("main")).toHaveAttribute("data-shelf", "none");
     await expect(
       page.getByRole("list", { name: oneRoomCopy.shelfLabel }),
     ).toBeHidden();
-    await expect(page.locator(".room-figure, .room-sighting")).toHaveCount(0);
-    await expect(page.locator(".room-ring")).toHaveCount(0);
+    await expectFeatured(page, null);
+    await expectDrawn(page, "none");
+    await expectRingsFrom(page, null);
     await expect(stopButton(page)).toBeVisible();
     await expect(button(page, swappedRepeatCopy.pauseButton)).toBeVisible();
     for (const half of await page.locator(".visit-answer").all()) {
@@ -299,15 +293,8 @@ test.describe("the swapped repeat of a floor", () => {
     );
     // The creature of the floor shows in the doorway of the ear that heard it, with rings, and
     // nothing shows at the other side.
-    const sighting = page.locator(".room-door-left .room-sighting");
-    await expect(sighting).toHaveCount(1);
-    await expect(sighting).toHaveAttribute("data-creature", "stairs");
-    await expect(sighting).toHaveAttribute("data-reaction", "caught");
-    await expect(page.locator(".room-rings-left .room-ring")).toHaveCount(3);
-    await expect(page.locator(".room-door-right .room-sighting")).toHaveCount(
-      0,
-    );
-    await expect(page.locator(".room-rings-right .room-ring")).toHaveCount(0);
+    await expectDrawn(page, "caught", "left", "stairs");
+    await expectRingsFrom(page, "left");
 
     await button(page, swappedRepeatCopy.pauseButton).click();
     await stopButton(page).click();

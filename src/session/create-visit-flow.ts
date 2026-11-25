@@ -1,6 +1,6 @@
 import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
-import { lanternConfig } from "../config/lantern-config";
+import { beatMsOf, rhythmConfig } from "../config/rhythm-config";
 import type { VisitType } from "../config/hearing-method-config";
 import type { RandomSource } from "../config/seeded-random";
 import { createSeededRandom } from "../config/seeded-random";
@@ -34,6 +34,7 @@ import { createWebAudioBackend } from "../audio/output/web-audio-backend";
 import type { RoomResult } from "../engine/search-types";
 import { createThresholdSearch } from "../engine/threshold-search";
 import { createCalibrationController } from "./calibration-controller";
+import { calibrationStartSettingDb } from "./calibration-target-setting";
 import type { MissedSoundReplayController } from "./create-missed-sound-replay";
 import { createMissedSoundReplay } from "./create-missed-sound-replay";
 import type {
@@ -46,8 +47,10 @@ import type {
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
 import { judgeHeadphoneCheck } from "./judge-headphone-check";
-import type { Lantern } from "./lantern";
-import { createLantern } from "./lantern";
+import type { BeatClock, BeatTiming } from "./beat-clock";
+import { createBeatClock } from "./beat-clock";
+import type { RhythmScore } from "./rhythm-score";
+import { createRhythmScore, judgementOf } from "./rhythm-score";
 import type {
   PractisedRoom,
   PractisedRoomRunner,
@@ -113,6 +116,11 @@ export type VisitFlowTestOptions = {
    * room run at most. 1 runs the rooms one after another, as before the one-room spec.
    */
   readonly roomsTogetherMaxCount?: number;
+  /**
+   * In place of `visitFlowConfig.roomTimeLimitMs`: how long the counting of a room run may last.
+   * `null` sets no limit, so that a test can let every search run to its end.
+   */
+  readonly roomTimeLimitMs?: number | null;
 } & (
   | { readonly backend: AudioBackend }
   | {
@@ -129,7 +137,7 @@ const drawSeed = (source: RandomSource): number =>
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
 
-const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
+const visitTypes: readonly VisitType[] = Object.freeze(["full"]);
 
 const entryChoices: EntrySnapshot["choices"] = Object.freeze(
   visitTypes.map((visitType) =>
@@ -253,8 +261,10 @@ interface Visit {
   judgement: HeadphoneCheckJudgement | null;
   /** The room run under way: its practice, then the searches of its rooms. */
   runner: PractisedRoomRunner | null;
-  /** The lantern of the room run under way, from the start of its counting, or null. */
-  lantern: Lantern | null;
+  /** The rhythm score of the room run under way, from the start of its counting, or null. */
+  rhythm: RhythmScore | null;
+  /** The room's beat while it plays, or null (the rhythm game, 2026-11-18). */
+  beatClock: BeatClock | null;
   /** The chase of the room run under way, over all its rooms, from the start of its counting, or null. */
   chase: Chase | null;
   /** The rooms of the last room run started, in visit order. The first is the room of the `room` stage. */
@@ -303,6 +313,18 @@ export function createVisitFlow(
   if (!Number.isInteger(roomsTogetherMaxCount) || roomsTogetherMaxCount < 1) {
     throw new RangeError(
       `The rooms that run together must be a whole number from 1 up, but got ${String(roomsTogetherMaxCount)}.`,
+    );
+  }
+  const roomTimeLimitMs =
+    "roomTimeLimitMs" in options && options.roomTimeLimitMs !== undefined
+      ? options.roomTimeLimitMs
+      : visitFlowConfig.roomTimeLimitMs;
+  if (
+    roomTimeLimitMs !== null &&
+    (!Number.isFinite(roomTimeLimitMs) || roomTimeLimitMs <= 0)
+  ) {
+    throw new RangeError(
+      `The time limit of a room must be above 0 and finite, or null, but got ${String(roomTimeLimitMs)}.`,
     );
   }
   /** Whether several rooms' searches take turns in one room (one-room design.md, D1). */
@@ -458,9 +480,15 @@ export function createVisitFlow(
           atTop: fresh ? false : controller.atTop,
           line: fresh ? freshLine : controller.line,
           keepRefusal: current.keepRefusal,
-          // The bottom until the visitor first starts the sound: `open` puts the target there
-          // (audible-start R3.5, R3.6, D3).
-          targetSettingDb: fresh ? controlBottomDb : controller.targetSettingDb,
+          // The middle of the control until the visitor first starts the sound: `open` puts the
+          // target there too, so the slider and the sound begin together (owner, 2026-11-18).
+          targetSettingDb: fresh
+            ? calibrationStartSettingDb({
+                bottomDb: controlBottomDb,
+                topDb: controller.controlTopDb,
+                stepDb: audioOutputConfig.calibrationSettingStepDb,
+              })
+            : controller.targetSettingDb,
           calibrationSound,
           heading: current.calibrationAgain
             ? lines.againHeading
@@ -494,12 +522,14 @@ export function createVisitFlow(
           together,
           creatures: creaturesOf(current),
           practice: roomPracticeOf(current),
-          lantern:
-            current.lantern === null
+          rhythm: current.rhythm?.standing() ?? null,
+          beat:
+            current.beatClock === null
               ? null
               : Object.freeze({
-                  cells: current.lantern.cells(),
-                  cellCount: lanternConfig.cellCount,
+                  firstBeatAtMs: current.beatClock.firstBeatPageMs,
+                  beatMs: current.beatClock.beatMs,
+                  beatsPerBar: current.beatClock.beatsPerBar,
                 }),
           chase:
             current.chase === null
@@ -578,6 +608,7 @@ export function createVisitFlow(
     return Object.freeze({
       phase,
       soundPlaying,
+      soundEar: soundPlaying ? (state?.soundEar ?? null) : null,
       heading: inPractice ? copy.heading : null,
       lines: inPractice ? copy.lines : copy.countingLines,
       soundPlayingLine: soundPlaying ? practiceCopy.soundPlayingLine : null,
@@ -731,10 +762,50 @@ export function createVisitFlow(
     stageToken += 1;
   };
 
-  /** Puts out the lantern of a room run that is over, with its chase. */
-  const dropLantern = (current: Visit): void => {
-    current.lantern?.stop();
-    current.lantern = null;
+  /** Starts the room's beat, or keeps none if the output stage refuses it (the rhythm game). */
+  const startBeat = (current: Visit): void => {
+    const askedAtPageMs = timer.now();
+    const outcome = output.startBeat({
+      levelDb: rhythmConfig.beatLevelDb,
+      duckDb: rhythmConfig.beatDuckDb,
+      beatMs: beatMsOf(rhythmConfig),
+      beatsPerBar: rhythmConfig.beatsPerBar,
+    });
+    current.beatClock =
+      outcome.kind === "started"
+        ? createBeatClock({
+            startAudioMs: outcome.startMs,
+            beatMs: outcome.beatMs,
+            beatsPerBar: outcome.beatsPerBar,
+            pair: output.timestampPair(),
+            askedAtPageMs,
+            scheduleLeadMs: audioOutputConfig.scheduleLeadMs,
+          })
+        : null;
+  };
+
+  /** Stops the room's beat. The turns that follow wait their gaps alone until it starts again. */
+  const stopBeat = (current: Visit): void => {
+    if (current.beatClock !== null) {
+      output.stopBeat();
+      current.beatClock = null;
+    }
+  };
+
+  /** How the runners of a room run put their turns on the beat. */
+  const beatTimingOf = (current: Visit): BeatTiming =>
+    Object.freeze({
+      clock: () => current.beatClock,
+      cueLeadMs: rhythmConfig.cueLeadBeats * beatMsOf(rhythmConfig),
+      cued: (atMs: number) => {
+        emit({ kind: "turnCued", atMs, beatMs: beatMsOf(rhythmConfig) });
+      },
+    });
+
+  /** Ends the game of a room run that is over: its beat, its score and its chase. */
+  const endRoomGame = (current: Visit): void => {
+    stopBeat(current);
+    current.rhythm = null;
     current.chase = null;
   };
 
@@ -772,7 +843,7 @@ export function createVisitFlow(
     current.timerHandles.clear();
     current.runner?.abandon();
     current.runner = null;
-    dropLantern(current);
+    endRoomGame(current);
     // A swapped repeat under way plays nothing more and gives no record (visit-flow D35).
     current.repeat?.leave();
     current.repeat = null;
@@ -863,7 +934,7 @@ export function createVisitFlow(
     }
     runner.abandon();
     current.runner = null;
-    dropLantern(current);
+    endRoomGame(current);
     // A room whose search had finished keeps its result. The others begin again.
     for (const { room, attempt } of unfinishedMembers(current)) {
       current.recorder.attemptEnded({
@@ -904,6 +975,7 @@ export function createVisitFlow(
         abandonAttempt(current);
       } else {
         current.runner?.pause();
+        stopBeat(current);
       }
     }
     calibration.close();
@@ -943,6 +1015,7 @@ export function createVisitFlow(
     switch (stage) {
       case "room":
         if (calibrated && current.runner !== null) {
+          startBeat(current);
           current.runner.resume();
         } else {
           calibrateAgain(current);
@@ -1109,7 +1182,7 @@ export function createVisitFlow(
   /** Every search of the room run has finished: the rest, or the end of the rooms. */
   const roomRunFinished = (current: Visit) => (): void => {
     current.runner = null;
-    dropLantern(current);
+    endRoomGame(current);
     if (current.finishedRooms.size < current.rooms.length) {
       enterStage("betweenRooms");
       return;
@@ -1262,42 +1335,36 @@ export function createVisitFlow(
           if (creature !== undefined) {
             countIntoChase(creature.tally, entry);
           }
-          // A catch lights one cell and an answer on the wrong side or at nothing dims one. The
-          // lantern only shows how the chase goes: every answer counts (the game layer, 2026-11-17).
-          if (entry.kind === "sound" && entry.outcome === "caught") {
-            current.lantern?.giveBack();
-          } else if (
-            entry.outcome === "wrongSide" ||
-            entry.outcome === "falseAlarm"
-          ) {
-            current.lantern?.spend();
-          }
+          // The rhythm game only shows how the chase goes: every answer counts as before.
+          const judgement = current.rhythm?.judge(entry) ?? judgementOf(entry);
           emit({
             kind: "trialScored",
             room,
             trial: entry,
             reaction: reactionTo(entry),
+            judgement,
+            ...(current.rhythm === null
+              ? {}
+              : { standing: current.rhythm.standing() }),
           });
         },
         trackFinished: roomFinished(current),
         finished: roomRunFinished(current),
+        ...(roomTimeLimitMs === null ? {} : { timeLimitMs: roomTimeLimitMs }),
         pauseFromOutput,
         soundRefused,
-        // The game layer of 2026-11-17: a reminder after a long quiet, a chime after a catch, and
-        // a dimmed cell for an answer that decided nothing.
+        // The game layer of 2026-11-17: a chime after a catch, and a broken combo for an answer
+        // that decided nothing. On the beat there is no reminder (the rhythm game, 2026-11-18).
+        beat: beatTimingOf(current),
         game: {
           reminderAfterQuietMs: visitFlowConfig.reminderAfterQuietMs,
           reminderAboveCaughtDb: visitFlowConfig.reminderAboveCaughtDb,
           reminderUncaughtLevelDb: hearingMethodConfig.startingLevelDb,
           chimeAboveCaughtDb: visitFlowConfig.chimeAboveCaughtDb,
           chimeMaxLevelDb: visitFlowConfig.chimeMaxLevelDb,
+          missLevelDb: visitFlowConfig.missLevelDb,
           reminderScored: (entry, { room }) => {
             const caught = entry.outcome === "caught";
-            if (caught) {
-              current.lantern?.giveBack();
-            } else if (entry.outcome === "wrongSide") {
-              current.lantern?.spend();
-            }
             emit({
               kind: "reminderSoundScored",
               room,
@@ -1308,8 +1375,13 @@ export function createVisitFlow(
                 : null,
             });
           },
-          answerIgnored: () => {
-            current.lantern?.spend();
+          answerIgnored: (side) => {
+            current.rhythm?.kickAtNothing();
+            emit({
+              kind: "kickedAtNothing",
+              side,
+              standing: current.rhythm?.standing() ?? null,
+            });
           },
         },
         ...presented,
@@ -1324,6 +1396,7 @@ export function createVisitFlow(
         recorder: current.recorder,
         latestOffset: current.latestOffset,
         counting,
+        beat: beatTimingOf(current),
         practiceScored: (entry) => {
           const room = roomAt(current, entry.roomIndex);
           const caught = entry.outcome === "caught";
@@ -1336,15 +1409,12 @@ export function createVisitFlow(
             trial: entry,
             reaction: caught ? "ripple" : "none",
             line: caught ? caughtLine : null,
+            judgement: judgementOf(entry),
           });
         },
         countingStarted: () => {
-          // The lantern is lit when the room begins to count (the game layer, 2026-11-16).
-          // A dark lantern stops nothing: the room goes on (the game layer, 2026-11-17).
-          current.lantern = createLantern({
-            timer: current.timer,
-            cameBack: () => undefined,
-          });
+          // The score, the combo and Jack's flame start when the room begins to count.
+          current.rhythm = createRhythmScore();
           current.chase = {
             ...emptyChaseTally(),
             // The scale of the room run holds every level any of its rooms may play.
@@ -1374,6 +1444,7 @@ export function createVisitFlow(
       for (const { room, attempt } of members) {
         emit({ kind: "roomStarted", room, attempt });
       }
+      startBeat(current);
       runner.start();
     });
   };
@@ -1437,7 +1508,8 @@ export function createVisitFlow(
           playRefusal: null,
           judgement: null,
           runner: null,
-          lantern: null,
+          rhythm: null,
+          beatClock: null,
           chase: null,
           members: Object.freeze([]),
           creatures: new Map(),
@@ -1639,8 +1711,8 @@ export function createVisitFlow(
         }
         const current = inVisit("room");
         if (current !== null) {
-          // Every answer counts. The lantern only follows how they went (the game layer,
-          // 2026-11-17): the runner dims it for an answer that decided nothing.
+          // Every answer counts. The rhythm game only follows how they went: the runner breaks the
+          // combo for an answer that decided nothing.
           current.runner?.answer(side, pressedAtMs);
           return;
         }
@@ -1703,6 +1775,7 @@ export function createVisitFlow(
             calibrateAgain(current);
             return;
           }
+          startBeat(current);
           current.runner.goOn();
         });
       });

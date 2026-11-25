@@ -44,10 +44,10 @@ const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
 /**
  * The page changes that fall in a trial's window, from its presentation up to its decision, other
- * than the lantern's.
+ * than the chase.
  */
 function momentsInWindow(record: ScreenRecord, trial: RecordedTrial): number {
-  return withoutLantern(
+  return withoutChase(
     record.moments.filter(
       (moment) =>
         moment.atMs >= trial.presentedAtMs && moment.atMs < trial.decidedAtMs,
@@ -56,21 +56,14 @@ function momentsInWindow(record: ScreenRecord, trial: RecordedTrial): number {
 }
 
 /**
- * The lantern may change between decisions: it follows the visitor's own presses, and the clock
- * (the game layer of 2026-11-16). That its lights come back only `rechargeMs` after a press or
- * after the light before, and that a press costs exactly one, is checked on the flow itself
- * (visit-flow CP3). Here every change of the lantern must be one light, up or down, and nothing
- * else on the page may change with it. The predictor below still sees every change.
+ * The chase may change between decisions: a kick at nothing breaks the combo (the rhythm game of
+ * 2026-11-18), and it follows the visitor's own presses alone. Nothing else on the page may
+ * change with it. The predictor below still sees every change.
  */
-function withoutLantern(moments: readonly ScreenMoment[]): ScreenMoment[] {
-  for (const moment of moments) {
-    if (moment.what === "lantern") {
-      expect(moment.lantern).toBeDefined();
-      const { from, to } = moment.lantern ?? { from: 0, to: 0 };
-      expect(Math.abs(to - from)).toBe(1);
-    }
-  }
-  return moments.filter((moment) => moment.what !== "lantern");
+function withoutChase(moments: readonly ScreenMoment[]): ScreenMoment[] {
+  return moments.filter(
+    (moment) => moment.what !== "chase" && moment.what !== "whiff",
+  );
 }
 
 /**
@@ -134,7 +127,7 @@ describe.each(roomRuns)("$name", ({ roomsTogetherMaxCount, together }) => {
       "draws nothing from one decision to the next in a visit that is left alone",
       async () => {
         await assertOverVisits(false, (record, trial) => {
-          expect(withoutLantern(momentsBeforeDecision(record, trial))).toEqual(
+          expect(withoutChase(momentsBeforeDecision(record, trial))).toEqual(
             [],
           );
         });
@@ -198,7 +191,7 @@ describe.each(roomRuns)("$name", ({ roomsTogetherMaxCount, together }) => {
       "draws nothing from one decision to the next in the repeated room of a visit that is left alone",
       async () => {
         await assertOverRepeats(false, (record, trial) => {
-          expect(withoutLantern(momentsBeforeDecision(record, trial))).toEqual(
+          expect(withoutChase(momentsBeforeDecision(record, trial))).toEqual(
             [],
           );
         });
@@ -233,7 +226,7 @@ describe.each(roomRuns)("$name", ({ roomsTogetherMaxCount, together }) => {
         ...(await visits(30_000, false)),
         ...(await visits(40_000, true)),
       ];
-    }, 2 * timeoutMs);
+    }, 6 * timeoutMs); // Whole visits of five creatures, a good many of them.
 
     /** The samples of every record, each visit with ambient motion of its own. */
     function samplesOf(

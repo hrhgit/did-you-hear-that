@@ -158,6 +158,12 @@ export interface VisitHarnessOptions {
    * properties of the one-room spec pass the shipped count.
    */
   readonly roomsTogetherMaxCount?: number;
+  /**
+   * The time limit of the counting. `null`, the default, sets none: the properties of the earlier
+   * specs let every search run to its own end, and the properties of the time limit (2026-11-20)
+   * pass a number, or the shipped `visitFlowConfig.roomTimeLimitMs`.
+   */
+  readonly roomTimeLimitMs?: number | null;
   /** Further options of the fake backend. */
   readonly backend?: Omit<
     FakeAudioBackendOptions,
@@ -387,6 +393,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
     }
   };
   const roomsTogetherMaxCount = options.roomsTogetherMaxCount ?? 1;
+  const roomTimeLimitMs = options.roomTimeLimitMs ?? null;
   const real = createVisitFlow(
     output === null
       ? {
@@ -395,6 +402,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
           seed: options.seed,
           onTrialPresented,
           roomsTogetherMaxCount,
+          roomTimeLimitMs,
         }
       : {
           output,
@@ -402,6 +410,7 @@ export function createVisitHarness(options: VisitHarnessOptions): VisitHarness {
           seed: options.seed,
           onTrialPresented,
           roomsTogetherMaxCount,
+          roomTimeLimitMs,
         },
   );
   flowRef = real;

@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { VisitType } from "../../src/config/hearing-method-config";
-import { lanternConfig } from "../../src/config/lantern-config";
+import { rhythmConfig } from "../../src/config/rhythm-config";
 import type { GhostSoundId } from "../../src/config/sound-id";
 import {
   creatureCardLabel,
@@ -19,13 +19,12 @@ import {
 } from "../../src/copy/creature-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { practiceCopy } from "../../src/copy/practice-copy";
+import { roomCopy } from "../../src/copy/room-copy";
 import {
-  caughtCountLine,
-  chaseCopy,
-  lanternLabel,
-  roomCopy,
-  streakLine,
-} from "../../src/copy/room-copy";
+  relitLine,
+  rhythmCopy,
+  rhythmHudLabel,
+} from "../../src/copy/rhythm-copy";
 import type {
   RoomSnapshot,
   VisitEvent,
@@ -33,6 +32,13 @@ import type {
 import { visitRooms } from "../../src/session/visit-rooms";
 import type { ReplaySheet } from "../../src/ui/visit/start-replay-sheet";
 import { devServer } from "./dev-server";
+import {
+  countOf,
+  expectDrawn,
+  expectFeatured,
+  expectRingsFrom,
+  scene,
+} from "./scene-record";
 import {
   expectNoHorizontalScroll,
   expectNoSeriousAccessibilityProblem,
@@ -45,7 +51,7 @@ import {
 import { simulatedRoomVisit, type RoomMoment } from "./simulated-room";
 
 // The one room of a visit in a real browser: the roll call, the counting, what a scored sound
-// shows, the lantern, a creature that goes home, and the room at every size of screen. A visit
+// shows, the score of the rhythm game, a creature that goes home, and the room at every size of screen. A visit
 // takes minutes and its turns are drawn by lot, so these tests do not walk one. A simulated
 // visitor walks it in Node, on the fake audio backend, and the development replay sheet draws the
 // moments that visit gave, in the order a visitor's page is handed them. That sheet has no sound
@@ -63,26 +69,26 @@ type SheetWindow = Window & { replaySheet: ReplaySheet };
 const sides: readonly Side[] = ["left", "right"];
 const otherSide = (side: Side): Side => (side === "left" ? "right" : "left");
 
-/** A quick visit by a visitor who hears every practice sound, then catches some and lets some by. */
+/** A visit by a visitor who hears every practice sound, then catches some and lets some by. */
 let quick: Moments;
 /** A full visit by the same visitor: five creatures, the most the room holds. */
 let full: Moments;
-/** A quick visit in which nothing is ever answered. */
+/** A visit in which nothing is ever answered. */
 let unanswered: Moments;
-/** A quick visit by a visitor who presses at every turn, sound or none, so the lantern goes dark. */
+/** A visit by a visitor who presses at every turn, sound or none, so Jack's flame dims. */
 let pressedAlways: Moments;
 
 test.beforeAll(async () => {
   // Inside the playable range: with the calibration these visits keep, every creature's search
   // floor is −35 dB (audible-start, the playable floor).
   const listener = { kind: "thresholds", leftDb: -32, rightDb: -24 } as const;
-  quick = await simulatedRoomVisit("quick", listener);
+  quick = await simulatedRoomVisit("full", listener);
   full = await simulatedRoomVisit("full", listener);
-  unanswered = await simulatedRoomVisit("quick", {
+  unanswered = await simulatedRoomVisit("full", {
     kind: "extreme",
     name: "neverAnswers",
   });
-  pressedAlways = await simulatedRoomVisit("quick", {
+  pressedAlways = await simulatedRoomVisit("full", {
     kind: "extreme",
     name: "alwaysAnswers",
   });
@@ -229,38 +235,36 @@ const button = (page: Page, name: string): Locator =>
   page.getByRole("button", { name, exact: true });
 const picture = (page: Page): Locator =>
   page.getByRole("img", { name: oneRoomCopy.sceneLabel });
-const centre = ".room-stage-centre";
-/**
- * Whoever stands in plain view in a place. One that is leaving stays in the page until its place
- * is taken again, so it is left out.
- */
-const standing = (page: Page, place = ""): Locator =>
-  page.locator(`${place} .room-figure:not([data-leaving="true"])`);
-/** Everything a doorway can show of a creature: one that stands in it, and one seen for a sound. */
-const inDoorway = (page: Page, side: Side): Locator =>
-  page.locator(
-    `.room-door-${side} .room-figure, .room-door-${side} .room-sighting`,
-  );
 const card = (page: Page, id: GhostSoundId): Locator =>
   page.locator(`.creature-card[data-creature="${id}"]`);
-const lantern = (page: Page): Locator => page.locator(".visit-lantern");
-const litCells = (page: Page): Locator =>
-  page.locator(".visit-lantern-cell[data-lit='true']");
+const hud = (page: Page): Locator => page.locator(".rhythm-hud");
+const comboCount = (page: Page): Locator => page.locator(".rhythm-combo-count");
+/** The box of the score by its name, which says the whole standing of the game. */
+const hudNamed = (page: Page, snapshot: RoomSnapshot): Locator => {
+  const rhythm = snapshot.rhythm;
+  if (rhythm == null) {
+    throw new Error("The room keeps no score in this snapshot.");
+  }
+  return page.getByRole("group", {
+    name: rhythmHudLabel(
+      rhythm.score,
+      rhythm.combo,
+      rhythm.flame,
+      rhythm.flameMax,
+    ),
+  });
+};
 const caption = (page: Page): Locator => page.locator(".visit-caption");
 const captionNote = (page: Page): Locator =>
   page.locator(".visit-caption-note");
-const mainMarkup = (page: Page): Promise<string> =>
-  page.evaluate(() => document.querySelector("main")?.outerHTML ?? "");
-
 /**
- * Marks every ring, every sighting, every light of a doorway and every light on a card that is on
- * the page now. The rings of an answered sound and the light of a card stay in the page after they
- * fade, so this is how what a later moment draws is told from what was there.
+ * Marks every light on a card that is on the page now. The light of a card stays in the page after
+ * it fades, so this is how what a later moment draws is told from what was there.
  */
 async function markDrawn(page: Page): Promise<void> {
   await page.evaluate(() => {
     for (const drawn of document.querySelectorAll<HTMLElement>(
-      ".room-ring, .room-sighting, .room-door-light > span, .creature-card-glint",
+      ".creature-card-glint",
     )) {
       drawn.dataset.before = "true";
     }
@@ -270,9 +274,6 @@ async function markDrawn(page: Page): Promise<void> {
 /** What matches `selector` and was drawn after the last `markDrawn`. */
 const drawnSince = (page: Page, selector: string): Locator =>
   page.locator(`${selector}:not([data-before])`);
-
-const opacityOf = (part: Locator): Promise<number> =>
-  part.evaluate((element) => Number(getComputedStyle(element).opacity));
 
 /** What an element's transitions are on, and how long the shortest of them takes, in seconds. */
 const fadeOf = (part: Locator): Promise<{ on: string; seconds: number }> =>
@@ -317,11 +318,11 @@ async function boxesOf(
 }
 
 test.describe("the one room", () => {
-  test("calls a creature to the middle of the room for its practice sound, and shows no side", async ({
+  test("shows a creature on the side of its practice sound while it plays, and names no side in words", async ({
     page,
   }) => {
     const record = await openPage(page, address);
-    const rooms = visitRooms("quick");
+    const rooms = visitRooms("full");
     const playing = find(quick, "practice sound", practiceSoundPlaying);
     const first = practisingAt(quick, playing);
     const { practice } = roomAt(quick, playing);
@@ -354,27 +355,16 @@ test.describe("the one room", () => {
       await expect(answer).toBeVisible();
     }
 
-    // The one that makes the sound stands in the middle of the room, which is no side.
-    await expect(standing(page)).toHaveCount(1);
-    const figure = standing(page, centre);
-    await expect(figure).toHaveAttribute("data-creature", first);
-    await expect(figure).toHaveAttribute("data-sounding", "true");
-    await settle(page);
-    expect(await opacityOf(figure)).toBe(1);
-    const place = await boxesOf({ figure });
-    const pageWidth = await page.evaluate(() => window.innerWidth);
-    expect((place.figure?.x ?? 0) + (place.figure?.width ?? 0) / 2).toBeCloseTo(
-      pageWidth / 2,
-      0,
-    );
-    // Neither doorway shows anything, and no ring was drawn.
-    for (const side of sides) {
-      await expect(inDoorway(page, side)).toHaveCount(0);
-      await expect(
-        page.locator(`.room-door-${side} .room-door-light > span`),
-      ).toHaveCount(0);
+    // Practice counts for nothing, so while its sound plays the one that makes it stands on the
+    // side the sound comes from (product.md, "Experience rules"). Nothing was drawn for a turn,
+    // and no ring went out.
+    const ear = practice?.soundEar;
+    if (ear == null) {
+      throw new Error("A practice sound that plays has a side.");
     }
-    await expect(page.locator(".room-ring")).toHaveCount(0);
+    await expectFeatured(page, first, ear, true);
+    await expectDrawn(page, "none");
+    await expect(scene(page)).toHaveAttribute("data-rings", "0");
 
     // Every creature of the visit has its card, and the card of the one that is sounding says so.
     await expect(page.locator(".creature-card")).toHaveCount(rooms.length);
@@ -398,17 +388,16 @@ test.describe("the one room", () => {
       );
     }
 
-    // The lantern hangs unlit and unnamed, and nothing is counted beside it.
-    await expect(page.locator(".visit-lantern-cell")).toHaveCount(
-      lanternConfig.cellCount,
+    // Nothing is scored at the roll call: a warm-up, with no score, combo or flame.
+    await expect(page.locator(".rhythm-warm-up")).toHaveText(
+      rhythmCopy.warmUpWord,
     );
-    await expect(litCells(page)).toHaveCount(0);
-    await expect(lantern(page)).toHaveAttribute("aria-hidden", "true");
-    await expect(page.locator(".visit-chase-caught")).toBeHidden();
-    await expect(page.locator(".visit-chase-streak")).toBeHidden();
+    await expect(page.locator(".rhythm-score")).toBeHidden();
+    await expect(page.locator(".rhythm-combo")).toBeHidden();
+    await expect(page.locator(".rhythm-flame")).toBeHidden();
 
-    // The same creature's sound in the other ear is drawn as the very same page: a visitor who
-    // watches the screen learns that a practice sound is playing and whose it is, never where.
+    // The same creature's sound in the other ear stands it on the other side, and the words of
+    // the page stay the same: they never name a side.
     const firstScored = find(quick, "scored practice sound", practiceScored);
     const again = find(
       quick,
@@ -426,9 +415,11 @@ test.describe("the one room", () => {
     expect(eventAt(quick, secondScored, "practiceSoundScored").trial.ear).toBe(
       otherSide(eventAt(quick, firstScored, "practiceSoundScored").trial.ear),
     );
-    const drawn = await mainMarkup(page);
+    const words = await page.locator(".visit-practice").innerText();
     await hand(page, quick.slice(again, again + 1));
-    expect(await mainMarkup(page)).toBe(drawn);
+    expect(roomAt(quick, again).practice?.soundEar).toBe(otherSide(ear));
+    await expectFeatured(page, first, otherSide(ear), true);
+    expect(await page.locator(".visit-practice").innerText()).toBe(words);
 
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
@@ -459,52 +450,38 @@ test.describe("the one room", () => {
 
     // Until the answer, nothing.
     await steps.before(caughtAt);
-    await expect(page.locator(".room-ring")).toHaveCount(0);
-    await expect(page.locator(".room-figure-cheer")).toHaveCount(0);
+    await expect(scene(page)).toHaveAttribute("data-rings", "0");
+    await expect(scene(page)).toHaveAttribute("data-cheers", "0");
     await expect(caption(page)).not.toHaveAttribute("data-shown", "true");
     await expect(page.locator(".creature-card-glint")).toHaveCount(0);
 
     // The answer: rings from the side that was pressed, a hop where the creature stands, its
     // name under the room and a light on its card.
     await steps.through(caughtAt);
-    await expect(page.locator(`.room-rings-${side} .room-ring`)).toHaveCount(3);
-    await expect(
-      page.locator(`.room-rings-${otherSide(side)} .room-ring`),
-    ).toHaveCount(0);
-    await expect(
-      page.locator(
-        `${centre} .room-figure[data-creature="${roomId}"] .room-figure-cheer`,
-      ),
-    ).toHaveCount(1);
+    await expect(scene(page)).toHaveAttribute("data-rings", "1");
+    await expectRingsFrom(page, side);
+    await expectFeatured(page, roomId);
+    await expect(scene(page)).toHaveAttribute("data-cheers", "1");
     expect(event.line).toBe(rollCallCaughtLine(roomId));
     await expect(caption(page)).toHaveAttribute("data-shown", "true");
     await expect(caption(page)).toHaveText(rollCallCaughtLine(roomId));
     await expect(
       card(page, roomId).locator(".creature-card-glint"),
     ).toHaveCount(1);
-    // The creature itself never goes to a doorway at the roll call.
-    for (const doorSide of sides) {
-      await expect(inDoorway(page, doorSide)).toHaveCount(0);
-    }
+    // The creature itself never goes to a side at the roll call.
+    await expectDrawn(page, "none");
 
     // It waits where it stands for its sound in the other ear, and says nothing meanwhile.
     const waiting = nextRoom(quick, caughtAt);
     expect(practisingAt(quick, waiting)).toBe(roomId);
     await steps.through(waiting);
-    await expect(standing(page, centre)).toHaveAttribute(
-      "data-creature",
-      roomId,
-    );
-    await expect(standing(page, centre)).toHaveAttribute(
-      "data-sounding",
-      "false",
-    );
+    await expectFeatured(page, roomId, "centre", false);
     await expect(page.locator(".visit-practice-sound")).toBeHidden();
     await expect(page.locator(".room-intro")).toHaveText(
       creatureIntroLine(roomId),
     );
 
-    // Then the next one takes its place, and the one before fades out of sight.
+    // Then the next one takes its place, and the one before fades out of sight on the canvas.
     const handOver = find(
       quick,
       "second creature at the roll call",
@@ -519,25 +496,19 @@ test.describe("the one room", () => {
     );
     const next = practisingAt(quick, handOver);
     await steps.through(handOver);
-    await expect(standing(page)).toHaveCount(1);
-    await expect(standing(page, centre)).toHaveAttribute("data-creature", next);
-    const leaving = page.locator(`${centre} .room-figure[data-leaving="true"]`);
-    await expect(leaving).toHaveAttribute("data-creature", roomId);
+    await expectFeatured(page, next, "centre");
     await expect(page.locator(".room-intro")).toHaveText(
       creatureIntroLine(next),
     );
     await expect(card(page, next)).toHaveAttribute("data-state", "calling");
     await expect(card(page, roomId)).toHaveAttribute("data-state", "about");
-    await settle(page);
-    expect(await opacityOf(leaving)).toBe(0);
-    expect(await opacityOf(standing(page, centre))).toBe(1);
   });
 
-  test("begins to count with a lit lantern, cards that count, and nobody in view", async ({
+  test("begins to count with Jack's flame full, cards that count, and nobody in view", async ({
     page,
   }) => {
     await openPage(page, address);
-    const rooms = visitRooms("quick");
+    const rooms = visitRooms("full");
     const start = find(quick, "counting", counting);
     const snapshot = roomAt(quick, start);
     await walk(page, quick).through(start);
@@ -553,24 +524,19 @@ test.describe("the one room", () => {
 
     // Nobody stands in view from here on: who makes a counted sound is shown only once it is
     // answered or has gone by.
-    await expect(standing(page)).toHaveCount(0);
-    for (const side of sides) {
-      await expect(inDoorway(page, side)).toHaveCount(0);
-    }
+    await expectFeatured(page, null);
+    await expectDrawn(page, "none");
 
-    // The lantern is lit, has a name, and the count begins beside it.
-    const cellCount = snapshot.lantern?.cellCount ?? 0;
-    expect(cellCount).toBe(lanternConfig.cellCount);
-    await expect(
-      page.getByRole("img", { name: lanternLabel(cellCount, cellCount) }),
-    ).toBeVisible();
-    await expect(litCells(page)).toHaveCount(cellCount);
-    await expect(main(page)).not.toHaveAttribute("data-lantern", "dark");
-    await expect(page.locator(".visit-lantern-dark")).toBeHidden();
-    await expect(page.locator(".visit-chase-caught")).toHaveText(
-      caughtCountLine(0),
-    );
-    await expect(page.locator(".visit-chase-streak")).toBeHidden();
+    // The score begins from nothing, with Jack's flame full, and the box of it has a name.
+    expect(snapshot.rhythm).toMatchObject({
+      score: 0,
+      combo: 0,
+      flame: rhythmConfig.flameMax,
+    });
+    await expect(hudNamed(page, snapshot)).toBeVisible();
+    await expect(comboCount(page)).toHaveText("0");
+    await expect(page.locator(".rhythm-warm-up")).toBeHidden();
+    await expect(page.locator(".rhythm-relit")).toBeHidden();
 
     // The bar says how many are still about, and each card counts its own creature.
     await expect(page.locator(".visit-room-name")).toHaveText(
@@ -607,7 +573,7 @@ test.describe("the one room", () => {
     await expectNoSeriousAccessibilityProblem(page);
   });
 
-  test("shows the creature of a caught sound in the doorway of its side, and counts it on its card", async ({
+  test("kicks the creature of a caught sound away on its side, and counts it on its card", async ({
     page,
   }) => {
     await openPage(page, address);
@@ -621,31 +587,20 @@ test.describe("the one room", () => {
     const { roomId } = event.room;
     const side = event.trial.ear;
 
-    // Up to the answer the doorways are empty, whatever the roll call left of its rings.
+    // Up to the answer nothing of this sound is drawn.
     await steps.before(caughtAt);
-    for (const doorSide of sides) {
-      await expect(inDoorway(page, doorSide)).toHaveCount(0);
-    }
+    const drawingsBefore = await countOf(page, "drawings");
+    const ringsBefore = await countOf(page, "rings");
     await markDrawn(page);
 
-    // The answer: the creature in the doorway of the sound's side, light through that doorway,
-    // rings from it, and what the house says.
+    // The answer: the creature kicked away on the sound's side, rings from it, and what the
+    // house says.
     await steps.through(caughtAt);
-    const sighting = page.locator(`.room-door-${side} .room-sighting`);
-    await expect(sighting).toHaveCount(1);
-    await expect(sighting).toHaveAttribute("data-creature", roomId);
-    await expect(sighting).toHaveAttribute("data-reaction", "caught");
-    await expect(
-      drawnSince(page, `.room-door-${side} .room-door-light > span`),
-    ).toHaveAttribute("data-creature", roomId);
-    await expect(
-      drawnSince(page, `.room-rings-${side} .room-ring`),
-    ).toHaveCount(3);
-    await expect(inDoorway(page, otherSide(side))).toHaveCount(0);
-    await expect(
-      drawnSince(page, `.room-rings-${otherSide(side)} .room-ring`),
-    ).toHaveCount(0);
-    await expect(standing(page)).toHaveCount(0);
+    await expectDrawn(page, "caught", side, roomId);
+    expect(await countOf(page, "drawings")).toBe(drawingsBefore + 1);
+    expect(await countOf(page, "rings")).toBe(ringsBefore + 1);
+    await expectRingsFrom(page, side);
+    await expectFeatured(page, null);
     await expect(caption(page)).toHaveAttribute("data-shown", "true");
     await expect(caption(page)).toHaveText(
       creatureCaughtLine(
@@ -666,7 +621,7 @@ test.describe("the one room", () => {
       ),
     ).toHaveCount(1);
 
-    // The snapshot that follows counts it: beside the lantern and on the creature's own card,
+    // The snapshot that follows counts it: in the combo and on the creature's own card,
     // with a bar for the quietest catch on that side.
     const countedAt = nextRoom(quick, caughtAt);
     const counted = roomAt(quick, countedAt);
@@ -678,9 +633,10 @@ test.describe("the one room", () => {
     }
     await steps.through(countedAt);
     expect(creature.caughtCount).toBe(1);
-    await expect(page.locator(".visit-chase-caught")).toHaveText(
-      caughtCountLine(counted.chase.caughtCount),
+    await expect(comboCount(page)).toHaveText(
+      String(counted.rhythm?.combo ?? 0),
     );
+    await expect(hudNamed(page, counted)).toBeVisible();
     await expect(card(page, roomId).locator(".creature-status")).toHaveText(
       creatureCaughtCountLine(1),
     );
@@ -725,26 +681,24 @@ test.describe("the one room", () => {
       }
     }
 
-    // Catches in a row are counted at the other side of the lantern, from the second on.
-    const streakAt = find(
+    // Turns in a row are counted in the combo, which glows once it runs high.
+    const comboAt = find(
       quick,
-      "second catch in a row",
-      (moment) => (roomOf(moment)?.chase?.streak ?? 0) >= 2,
+      "combo of two",
+      (moment) => (roomOf(moment)?.rhythm?.combo ?? 0) >= 2,
       countedAt,
     );
-    await steps.through(streakAt);
-    await expect(page.locator(".visit-chase-streak")).toHaveText(
-      streakLine(roomAt(quick, streakAt).chase?.streak ?? 0),
+    await steps.through(comboAt);
+    await expect(comboCount(page)).toHaveText(
+      String(roomAt(quick, comboAt).rhythm?.combo ?? 0),
     );
-
-    // What a caught sound shows fades away again.
-    await settle(page);
-    for (const fading of await page.locator(".room-sighting").all()) {
-      expect(await opacityOf(fading)).toBe(0);
-    }
+    await expect(page.locator(".rhythm-combo")).not.toHaveAttribute(
+      "data-combo",
+      "none",
+    );
   });
 
-  test("shows a sound that went by leaving through the doorway of its side", async ({
+  test("lets a sound that went by bite Jack from its side", async ({
     page,
   }) => {
     await openPage(page, address);
@@ -764,36 +718,27 @@ test.describe("the one room", () => {
     const side = event.trial.ear;
 
     await steps.before(slippedAt);
+    const ringsBefore = await countOf(page, "rings");
     await markDrawn(page);
     await steps.through(slippedAt);
 
-    // Its outline, in the doorway it came from, with no light and no ring: it was not caught.
-    const sighting = drawnSince(page, `.room-door-${side} .room-sighting`);
-    await expect(sighting).toHaveCount(1);
-    await expect(sighting).toHaveAttribute("data-creature", roomId);
-    await expect(sighting).toHaveAttribute("data-reaction", "slipped");
-    await expect(
-      page.locator(`.room-door-${side} .room-door-light > span`),
-    ).toHaveCount(0);
-    await expect(page.locator(`.room-rings-${side} .room-ring`)).toHaveCount(0);
-    await expect(drawnSince(page, ".room-ring")).toHaveCount(0);
-    await expect(
-      drawnSince(page, `.room-door-${otherSide(side)} .room-sighting`),
-    ).toHaveCount(0);
+    // Its creature, from the side it came from, reaches Jack, with no ring: it was not caught.
+    await expectDrawn(page, "slipped", side, roomId);
+    expect(await countOf(page, "rings")).toBe(ringsBefore);
     await expect(caption(page)).toHaveAttribute("data-shown", "true");
     await expect(caption(page)).toHaveText(creatureSlippedLine(roomId, side));
     // No card lights for a sound that was not caught.
     await expect(drawnSince(page, ".creature-card-glint")).toHaveCount(0);
   });
 
-  test("says which side a sound was on when the other side was answered, and its fixed line when there was no sound", async ({
+  test("says which side a sound was on when the other side was answered, and its fixed line when there was no sound to kick", async ({
     page,
   }) => {
     await openPage(page, address);
     const steps = walk(page, pressedAlways);
     const start = find(pressedAlways, "counting", counting);
 
-    // An answer to a turn with no sound: the house says so and nothing in the room moves.
+    // An answer to a turn with no sound: the house says so, and the kick meets only smoke.
     const silenceAt = find(
       pressedAlways,
       "answer to a turn with no sound",
@@ -804,19 +749,15 @@ test.describe("the one room", () => {
       "noSound",
     );
     await steps.before(silenceAt);
-    const roomDrawn = await page
-      .locator(".room-picture")
-      .evaluate((element) => element.outerHTML);
+    const ringsBefore = await countOf(page, "rings");
     await steps.through(silenceAt);
     await expect(caption(page)).toHaveAttribute("data-shown", "true");
     await expect(caption(page)).toHaveText(roomCopy.noSoundLine);
-    expect(
-      await page
-        .locator(".room-picture")
-        .evaluate((element) => element.outerHTML),
-    ).toBe(roomDrawn);
+    await expect(scene(page)).toHaveAttribute("data-outcome", "trick");
+    await expect(scene(page)).toHaveAttribute("data-outcome-creature", "none");
+    expect(await countOf(page, "rings")).toBe(ringsBefore);
 
-    // A sound answered on the other side: its creature leaves by the doorway the sound came
+    // A sound answered on the other side: its creature bites Jack from the side the sound came
     // from, and the house names that side.
     const otherSideAt = find(
       pressedAlways,
@@ -831,27 +772,21 @@ test.describe("the one room", () => {
     const { roomId } = event.room;
     const side = event.trial.ear;
     await steps.before(otherSideAt);
-    await markDrawn(page);
+    const ringsBeforeBite = await countOf(page, "rings");
     await steps.through(otherSideAt);
-    const sighting = drawnSince(page, `.room-door-${side} .room-sighting`);
-    await expect(sighting).toHaveCount(1);
-    await expect(sighting).toHaveAttribute("data-creature", roomId);
-    await expect(sighting).toHaveAttribute("data-reaction", "slipped");
-    await expect(
-      drawnSince(page, `.room-door-${otherSide(side)} .room-sighting`),
-    ).toHaveCount(0);
-    await expect(drawnSince(page, ".room-ring")).toHaveCount(0);
+    await expectDrawn(page, "slipped", side, roomId);
+    expect(await countOf(page, "rings")).toBe(ringsBeforeBite);
     await expect(caption(page)).toHaveText(creatureOtherSideLine(roomId, side));
   });
 
-  test("says only that nothing came when a turn with no sound goes by unanswered, and draws nothing in the room", async ({
+  test("says only that nothing came when a turn with no sound goes by unanswered, and lets its shadows go", async ({
     page,
   }) => {
     await openPage(page, address);
     const steps = walk(page, quick);
     const start = find(quick, "counting", counting);
     // Since the game layer of 2026-11-17 the house says that nothing came, once the turn is over,
-    // so that a long silence is never left without a word. The room itself does not move.
+    // so that a long silence is never left without a word. In the yard both shadows go, alike.
     const silenceAt = find(
       quick,
       "unanswered turn with no sound",
@@ -860,81 +795,63 @@ test.describe("the one room", () => {
     );
     expect(eventAt(quick, silenceAt, "trialScored").trial.kind).toBe("noSound");
     await steps.before(silenceAt);
-    const roomDrawn = await page
-      .locator(".room-picture")
-      .evaluate((element) => element.outerHTML);
+    const ringsBefore = await countOf(page, "rings");
     await steps.through(silenceAt);
     await expect(caption(page)).toHaveAttribute("data-shown", "true");
     await expect(caption(page)).toHaveText(roomCopy.nothingCameLine);
-    expect(
-      await page
-        .locator(".room-picture")
-        .evaluate((element) => element.outerHTML),
-    ).toBe(roomDrawn);
+    await expectDrawn(page, "steady");
+    expect(await countOf(page, "rings")).toBe(ringsBefore);
   });
 
-  test("dims slowly when the lantern is out, says why, and comes back with the first light", async ({
+  test("dims Jack's flame as the creatures reach him, and names it for every visitor", async ({
     page,
   }) => {
     await openPage(page, address);
     const steps = walk(page, pressedAlways);
     const start = find(pressedAlways, "counting", counting);
-    const darkAt = find(
+    const dimAt = find(
       pressedAlways,
-      "dark lantern",
-      (moment) => counting(moment) && roomOf(moment)?.lantern?.cells === 0,
+      "a flame below full",
+      (moment) =>
+        counting(moment) &&
+        (roomOf(moment)?.rhythm?.flame ?? rhythmConfig.flameMax) <
+          rhythmConfig.flameMax,
       start,
     );
-    const cellCount = roomAt(pressedAlways, darkAt).lantern?.cellCount ?? 0;
-    await steps.through(darkAt);
-
-    await expect(main(page)).toHaveAttribute("data-lantern", "dark");
-    await expect(litCells(page)).toHaveCount(0);
-    await expect(
-      page.getByRole("img", { name: lanternLabel(0, cellCount) }),
-    ).toBeVisible();
-    // The line stands where the counting's lines stood, and they give it their place.
-    await expect(page.locator(".visit-lantern-dark")).toBeVisible();
-    await expect(page.locator(".visit-lantern-dark")).toHaveText(
-      chaseCopy.lanternDarkLine,
+    const dimmed = roomAt(pressedAlways, dimAt);
+    await steps.through(dimAt);
+    await expect(hudNamed(page, dimmed)).toBeVisible();
+    const flame = await page
+      .locator(".rhythm-flame-fill")
+      .evaluate((bar) =>
+        Number((bar as HTMLElement).style.getPropertyValue("--flame")),
+      );
+    expect(flame).toBeCloseTo(
+      Math.round(dimmed.rhythm?.flame ?? 0) / rhythmConfig.flameMax,
+      6,
     );
-    await expect(page.locator(".visit-practice-lines")).toBeHidden();
-    // The room dims, and no change of its brightness is sudden (audio-safety, rule 9).
-    for (const part of [".room-picture", ".room-glow"]) {
-      const fade = await fadeOf(page.locator(part));
-      expect(fade.on, part).toContain("opacity");
-      expect(fade.seconds, part).toBeGreaterThanOrEqual(0.2);
+    expect(flame).toBeLessThan(1);
+    // A candle that went out is lit again, and the box says so.
+    const relitAt = pressedAlways.findIndex(
+      (moment, index) =>
+        index > dimAt &&
+        counting(moment) &&
+        (roomOf(moment)?.rhythm?.relights ?? 0) > 0,
+    );
+    if (relitAt >= 0) {
+      await steps.through(relitAt);
+      await expect(page.locator(".rhythm-relit")).toHaveText(
+        relitLine(roomAt(pressedAlways, relitAt).rhythm?.relights ?? 0) ?? "",
+      );
     }
-    await settle(page);
-    expect(await opacityOf(page.locator(".room-picture"))).toBeLessThan(1);
-    expect(await opacityOf(page.locator(".room-picture"))).toBeGreaterThan(0.4);
     await expectNoSeriousAccessibilityProblem(page);
-
-    // A light comes back by itself, and the room with it.
-    const litAt = find(
-      pressedAlways,
-      "light that came back",
-      (moment) => counting(moment) && (roomOf(moment)?.lantern?.cells ?? 0) > 0,
-      darkAt,
-    );
-    const cells = roomAt(pressedAlways, litAt).lantern?.cells ?? 0;
-    await steps.through(litAt);
-    await expect(main(page)).not.toHaveAttribute("data-lantern", "dark");
-    await expect(litCells(page)).toHaveCount(cells);
-    await expect(
-      page.getByRole("img", { name: lanternLabel(cells, cellCount) }),
-    ).toBeVisible();
-    await expect(page.locator(".visit-lantern-dark")).toBeHidden();
-    await expect(page.locator(".visit-practice-lines")).toBeVisible();
-    await settle(page);
-    expect(await opacityOf(page.locator(".room-picture"))).toBe(1);
   });
 
   test("sends a creature home when its search is over, on its card and in a line of its own", async ({
     page,
   }) => {
     await openPage(page, address);
-    const rooms = visitRooms("quick");
+    const rooms = visitRooms("full");
     const steps = walk(page, quick);
     const goneAt = find(
       quick,
@@ -1001,7 +918,7 @@ test.describe("the one room", () => {
     page,
   }) => {
     await openPage(page, address);
-    const rooms = visitRooms("quick");
+    const rooms = visitRooms("full");
     const noticeAt = find(
       unanswered,
       "roll call that was not heard",
@@ -1030,7 +947,7 @@ test.describe("the one room", () => {
 
     // The room waits behind it, only just there: nobody stands in it and it takes no answer.
     await expect(main(page)).toHaveAttribute("data-house", "faint");
-    await expect(standing(page)).toHaveCount(0);
+    await expectFeatured(page, null);
     for (const answer of await page.locator(".visit-answer").all()) {
       await expect(answer).toBeHidden();
     }
@@ -1043,7 +960,7 @@ test.describe("the one room", () => {
     expect(await requests(page)).toEqual(["resume"]);
   });
 
-  test("waits behind a pause as it was, and comes back with empty doorways", async ({
+  test("waits behind a pause as it was, and comes back with an empty yard", async ({
     page,
   }) => {
     await openPage(page, address);
@@ -1053,7 +970,7 @@ test.describe("the one room", () => {
     const countedAt = nextRoom(quick, caughtAt);
     const counted = roomAt(quick, countedAt);
     await steps.through(countedAt);
-    await expect(page.locator(".room-sighting")).toHaveCount(1);
+    await expect(scene(page)).toHaveAttribute("data-outcome", "caught");
 
     // A pause: a notice over the room, which keeps its cards and its count behind it.
     const paused: RoomSnapshot = { ...counted, pause: { reason: "visitor" } };
@@ -1072,31 +989,21 @@ test.describe("the one room", () => {
     await expect(page.locator(".creature-card")).toHaveCount(
       counted.creatures?.length ?? 0,
     );
-    await expect(page.locator(".visit-chase-caught")).toHaveText(
-      caughtCountLine(counted.chase?.caughtCount ?? 0),
-    );
-    // Behind a sheet the lantern is part of the picture and says nothing.
-    await expect(lantern(page)).toHaveAttribute("aria-hidden", "true");
+    // Behind a sheet the score is put away.
+    await expect(hud(page)).toBeHidden();
     await expectNoSeriousAccessibilityProblem(page);
 
     await button(page, leavingCopy.goOnButton).click();
     expect(await requests(page)).toEqual(["resume"]);
 
-    // Back in the room: what the last sound left in a doorway is long out of sight, the lantern
+    // Back in the room: what the last sound left in the yard is long out of sight, the score
     // has its name again, and the keys answer.
     await hand(page, [{ kind: "snapshot", snapshot: counted }]);
     await expect(main(page)).toHaveAttribute("data-house", "full");
     await expect(main(page)).toBeFocused();
-    await expect(page.locator(".room-sighting")).toHaveCount(0);
-    await expect(page.locator(".room-ring")).toHaveCount(0);
-    await expect(
-      page.getByRole("img", {
-        name: lanternLabel(
-          counted.lantern?.cells ?? 0,
-          counted.lantern?.cellCount ?? 0,
-        ),
-      }),
-    ).toBeVisible();
+    await expectDrawn(page, "none");
+    await expectRingsFrom(page, null);
+    await expect(hudNamed(page, counted)).toBeVisible();
     for (const answer of await page.locator(".visit-answer").all()) {
       await expect(answer).toBeVisible();
     }
@@ -1113,39 +1020,26 @@ test.describe("the one room", () => {
       const steps = walk(page, quick);
 
       // The roll call: the creature in the middle of the room is there to see either way. With
-      // less motion nothing on the page moves by itself. With every motion something does: the
-      // lantern sways and the creature shifts where it stands.
-      await steps.through(find(quick, "practice sound", practiceSoundPlaying));
+      // less motion nothing on the page moves by itself, the yard included. With every motion the
+      // yard does.
+      const playing = find(quick, "practice sound", practiceSoundPlaying);
+      await steps.through(playing);
       await settle(page);
-      expect(await opacityOf(standing(page, centre))).toBe(1);
-      const moving = await endlessMotions(page);
+      await expectFeatured(page, practisingAt(quick, playing));
+      const yardMotion = reducedMotion === "reduce" ? "still" : "moving";
+      await expect(scene(page)).toHaveAttribute("data-motion", yardMotion);
       if (reducedMotion === "reduce") {
-        expect(moving).toBe(0);
-      } else {
-        expect(moving).toBeGreaterThan(0);
+        expect(await endlessMotions(page)).toBe(0);
       }
 
-      // A caught sound: its creature and its rings show, and fade.
+      // A caught sound: its creature is kicked away on its side.
       const start = find(quick, "counting", counting);
       const caughtAt = find(quick, "caught sound", scored("ripple"), start);
       const caught = eventAt(quick, caughtAt, "trialScored");
-      await steps.before(caughtAt);
-      await markDrawn(page);
       await steps.through(caughtAt);
-      const sighting = page.locator(
-        `.room-door-${caught.trial.ear} .room-sighting[data-reaction="caught"]`,
-      );
-      const ring = drawnSince(
-        page,
-        `.room-rings-${caught.trial.ear} .room-ring`,
-      ).first();
-      await expect.poll(() => opacityOf(sighting)).toBeGreaterThan(0.5);
-      await expect.poll(() => opacityOf(ring)).toBeGreaterThan(0.3);
-      await settle(page);
-      expect(await opacityOf(sighting)).toBe(0);
-      expect(await opacityOf(ring)).toBe(0);
+      await expectDrawn(page, "caught", caught.trial.ear, caught.room.roomId);
 
-      // A sound that went by: its outline shows, and fades.
+      // A sound that went by: its creature bites Jack from its side.
       const slippedAt = find(
         quick,
         "sound that went by",
@@ -1154,22 +1048,21 @@ test.describe("the one room", () => {
       );
       const slipped = eventAt(quick, slippedAt, "trialScored");
       await steps.through(slippedAt);
-      const outline = page.locator(
-        `.room-door-${slipped.trial.ear} .room-sighting[data-reaction="slipped"]`,
+      await expectDrawn(
+        page,
+        "slipped",
+        slipped.trial.ear,
+        slipped.room.roomId,
       );
-      await expect.poll(() => opacityOf(outline)).toBeGreaterThan(0.3);
-      await settle(page);
-      expect(await opacityOf(outline)).toBe(0);
 
-      // The lit lantern flickers only with every motion, and every change of the room's
-      // brightness stays a fade either way (audio-safety, rule 9).
-      await expect(litCells(page)).not.toHaveCount(0);
+      // The yard moves only with every motion, and every change of the room's brightness stays
+      // a fade either way (audio-safety, rule 9).
+      await expect(hud(page)).toBeVisible();
+      await expect(scene(page)).toHaveAttribute("data-motion", yardMotion);
       if (reducedMotion === "reduce") {
         expect(await endlessMotions(page)).toBe(0);
-      } else {
-        expect(await endlessMotions(page)).toBeGreaterThan(0);
       }
-      for (const part of [".room-picture", ".room-glow"]) {
+      for (const part of [".room-picture", ".room-scene"]) {
         const fade = await fadeOf(page.locator(part));
         expect(fade.on, part).toContain("opacity");
         expect(fade.seconds, part).toBeGreaterThanOrEqual(0.2);
@@ -1196,9 +1089,6 @@ test.describe("the one room", () => {
   const fixedParts = (page: Page): Record<string, Locator> => ({
     stop: button(page, roomCopy.stopButton),
     pause: button(page, roomCopy.pauseButton),
-    lantern: page.locator(".room-lantern-hang"),
-    "left doorway": page.locator(".room-door-left"),
-    "right doorway": page.locator(".room-door-right"),
     "left answer": page.locator(".visit-answer-left .visit-answer-hint"),
     "right answer": page.locator(".visit-answer-right .visit-answer-hint"),
   });
@@ -1294,23 +1184,25 @@ test.describe("the one room", () => {
       );
       await hand(page, full.slice(0, playing + 1));
       const cardsWait = cardsWaitThroughRollCall(size);
-      const rollCall = await expectApart("at the roll call", {
+      await expectApart("at the roll call", {
         ...fixedParts(page),
         ...(cardsWait ? {} : cardsOf(page)),
         heading: page.locator(".visit-practice-heading"),
         words: page.locator(".visit-practice-lines"),
         introduction: page.locator(".room-intro"),
         "line of the sound": page.locator(".visit-practice-sound"),
-        creature: standing(page, centre),
+        "warm-up": page.locator(".rhythm-warm-up"),
       });
       if (cardsWait) {
         for (const [name, part] of Object.entries(cardsOf(page))) {
           await expect(part, `the ${name}, at the roll call`).toBeHidden();
         }
       }
-      // The creature in the middle is large enough to tell apart: the smallest the room draws
-      // is 80 px, on a phone on its side.
-      expect(rollCall.creature?.width ?? 0).toBeGreaterThanOrEqual(72);
+      // The yard keeps a useful size: the whole width of the page, and tall enough to see Jack
+      // and the creatures on a phone on its side.
+      const yard = await boxesOf({ yard: page.locator(".room-picture") });
+      expect(yard.yard?.width ?? 0).toBeGreaterThanOrEqual(size.width - 1);
+      expect(yard.yard?.height ?? 0).toBeGreaterThanOrEqual(150);
 
       // The counting, just after a search ended on a catch: the line about the catch, the line
       // about the creature going home, and the counts beside the lantern.
@@ -1332,34 +1224,32 @@ test.describe("the one room", () => {
         ...fixedParts(page),
         ...cardsOf(page),
         "bar's words": page.locator(".visit-room"),
-        caught: page.locator(".visit-chase-caught"),
+        combo: page.locator(".rhythm-combo"),
+        score: page.locator(".rhythm-score"),
         "what the house says": caption(page),
         "where it went": captionNote(page),
       };
-      const countingBoxes = await expectApart("while it counts", {
+      await expectApart("while it counts", {
         ...countingParts,
         words: page.locator(".visit-practice-lines"),
-        ...((after.chase?.streak ?? 0) >= 2
-          ? { "in a row": page.locator(".visit-chase-streak") }
-          : {}),
+        flame: page.locator(".rhythm-flame"),
       });
-      // The doorways keep a useful size: the smallest the room draws is 96 px by 150 px.
-      for (const side of sides) {
-        const door = countingBoxes[`${side} doorway`];
-        expect(door?.width ?? 0, `${side} doorway`).toBeGreaterThanOrEqual(90);
-        expect(door?.height ?? 0, `${side} doorway`).toBeGreaterThanOrEqual(
-          140,
-        );
-      }
 
-      // The same moment made as crowded as a room can get, by hand: a dark lantern with its
-      // line, long counts beside it, and long counts on every card.
-      if (after.lantern == null || after.chase == null) {
+      // The same moment made as crowded as a room can get, by hand: a candle lit again many
+      // times, a long score and combo, and long counts on every card.
+      if (after.rhythm == null || after.chase == null) {
         throw new Error("The room does not count in this snapshot.");
       }
       const crowded: RoomSnapshot = {
         ...after,
-        lantern: { ...after.lantern, cells: 0 },
+        rhythm: {
+          ...after.rhythm,
+          score: 9_999_999,
+          combo: 888,
+          maxCombo: 888,
+          flame: 0,
+          relights: 88,
+        },
         chase: { ...after.chase, caughtCount: 88, streak: 88 },
         creatures: (after.creatures ?? []).map((creature) => ({
           ...creature,
@@ -1367,11 +1257,9 @@ test.describe("the one room", () => {
         })),
       };
       await hand(page, [{ kind: "snapshot", snapshot: crowded }]);
-      await expect(main(page)).toHaveAttribute("data-lantern", "dark");
-      await expectApart("with a dark lantern and long counts", {
+      await expectApart("with a long score and long counts", {
         ...countingParts,
-        "line of the dark lantern": page.locator(".visit-lantern-dark"),
-        "in a row": page.locator(".visit-chase-streak"),
+        "line of the relit candle": page.locator(".rhythm-relit"),
       });
     });
   }

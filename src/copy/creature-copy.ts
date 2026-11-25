@@ -22,7 +22,7 @@ export const creatureCopy: Readonly<Record<GhostSoundId, CreatureCopy>> =
   Object.freeze({
     cellar: Object.freeze({
       name: "Thump",
-      kind: "the knocker",
+      kind: "the skeleton",
       home: "the cellar",
       soundLine: "Three low knocks.",
     }),
@@ -34,13 +34,13 @@ export const creatureCopy: Readonly<Record<GhostSoundId, CreatureCopy>> =
     }),
     nursery: Object.freeze({
       name: "Tink",
-      kind: "the tin toy",
+      kind: "the black cat",
       home: "the nursery",
-      soundLine: "Four small notes.",
+      soundLine: "Four small notes of her bell.",
     }),
     stairs: Object.freeze({
       name: "Scritch",
-      kind: "the beetle",
+      kind: "the spider",
       home: "the stairs",
       soundLine: "A dry scrape.",
     }),
@@ -202,7 +202,8 @@ export function stillAboutLine(count: number): string {
 /** What the visitor reads in the one room, apart from what the house says about a sound. */
 export const oneRoomCopy = Object.freeze({
   /** The name of the room's picture, for a visitor who cannot see it. */
-  sceneLabel: "A dark room with a door at each side, lit by your lantern",
+  sceneLabel:
+    "A moonlit yard with Jack the jack-o'-lantern in the middle, and a way in at each side",
   /** The name of the row of creature cards. */
   shelfLabel: "Who is in the room",
   /** On the card of a creature whose search is over. */

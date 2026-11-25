@@ -91,6 +91,22 @@ export interface AudioBackend {
    * source at the end of the fade. Does nothing without a loop.
    */
   stopLoop(fadeOutMs: number): void;
+  /**
+   * Starts the room's beat looping from `startMs` at the linear `levelGain`, on a path of its own:
+   * `fadeToSilence` leaves it going, and `stopBeat` ends it (the rhythm game, 2026-11-18).
+   */
+  startBeat(
+    channels: ScheduledChannels,
+    startMs: number,
+    levelGain: number,
+  ): void;
+  /**
+   * Lets the beat sink to `duckGain` times its level from `fromMs` to `toMs` on the audio clock,
+   * and rise again after. Does nothing without a beat.
+   */
+  duckBeat(fromMs: number, toMs: number, duckGain: number): void;
+  /** Fades the beat to exact zero over `fadeOutMs` and stops it. Does nothing without a beat. */
+  stopBeat(fadeOutMs: number): void;
   /** Suspends the context. A change of state the shell asked for is not an `interrupted` event. */
   suspend(): void;
   /** Closes the context. A change of state the shell asked for is not an `interrupted` event. */

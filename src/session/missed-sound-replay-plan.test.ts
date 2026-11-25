@@ -12,7 +12,16 @@ import type {
   VisitLog,
   VisitTrial,
 } from "./visit-flow-types";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // Hand-built visit logs (missed-sound-replay design.md, "The replay plan"). Only the fields the
 // plan reads carry meaning; the rest are filled with plausible values.
@@ -167,9 +176,9 @@ function makeLog(parts: {
 }): VisitLog {
   return deepFreeze({
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
-    rooms: visitRooms("quick"),
+    rooms: threeRooms,
     calibrations: parts.calibrations ?? [calibration(0, tops(15))],
     headphoneChecks: [],
     roomAttempts: parts.roomAttempts ?? [run(0), run(1), run(2)],

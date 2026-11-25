@@ -5,6 +5,7 @@ import type { RandomSource } from "../../config/seeded-random";
 import type { SoundId } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import type { Timer, TimerHandle } from "../../config/timer";
+import { renderBeatBar } from "../synth/beat-bar";
 import { decibelsToGain } from "../synth/decibels-to-gain";
 import type {
   AudioBackend,
@@ -141,10 +142,36 @@ export interface PlayRequest {
   readonly levelDb: number;
   readonly purpose: Extract<
     Purpose,
-    "trial" | "practice" | "replay" | "listening" | "reminder" | "chime"
+    | "trial"
+    | "practice"
+    | "replay"
+    | "listening"
+    | "reminder"
+    | "chime"
+    | "miss"
   >;
   readonly random: RandomSource;
+  /**
+   * The audio clock time the sound should start at, for a sound that lands on the room's beat
+   * (the rhythm game, 2026-11-18). Never earlier than the scheduling lead allows: a time already
+   * too close is moved to the earliest start. Left out, the sound starts as soon as it can.
+   */
+  readonly startAtMs?: number;
 }
+
+/** What `startBeat` returns. Times are on the audio clock. */
+export type BeatOutcome =
+  | {
+      readonly kind: "refused";
+      readonly reason: "notRunning" | "notCalibrated" | "unsupported";
+    }
+  | {
+      readonly kind: "started";
+      /** When the first beat of the first bar sounds. */
+      readonly startMs: number;
+      readonly beatMs: number;
+      readonly beatsPerBar: number;
+    };
 
 /** The Output_Shell (design.md, "The output shell"). */
 export interface AudioOutput {
@@ -183,6 +210,23 @@ export interface AudioOutput {
    * running. The room uses it to cut a caught sound short (the game layer, 2026-11-17).
    */
   fadeOutSound(): void;
+  /**
+   * Starts the room's beat in both ears at `levelDb` relative to the anchor, looping until
+   * `stopBeat` or any stop (the rhythm game, 2026-11-18). The beat never makes another sound
+   * `busy`, and `fadeOutSound` leaves it going. A beat already going is replaced.
+   */
+  startBeat(request: {
+    readonly levelDb: number;
+    readonly beatMs: number;
+    readonly beatsPerBar: number;
+    /**
+     * How far under its level the beat sinks while a sound plays, so that the sound has the
+     * room to itself. Absent: the beat plays on at its level under every sound.
+     */
+    readonly duckDb?: number;
+  }): BeatOutcome;
+  /** Fades the beat out. Does nothing while no beat plays. */
+  stopBeat(): void;
 
   clampLog(): readonly ClampLogEntry[];
   timestampPair(): TimestampPair | null;
@@ -207,10 +251,11 @@ export interface CalibrationMusicOutput {
   /** The Control_Top of the sound in use: the music's once it is `music`, the hiss's otherwise. */
   calibrationControlTopDb(): number;
   /**
-   * Starts the music looping in both ears at the bottom of the control, fading in from exact
-   * zero. While it plays, every other sound is refused `busy`.
+   * Starts the music looping in both ears at `startSettingDb` (the bottom of the control when none
+   * is given), fading in from exact zero. The setting is held to the control and rounded down to
+   * its grid. While it plays, every other sound is refused `busy`.
    */
-  startCalibrationMusic(): CalibrationMusicOutcome;
+  startCalibrationMusic(startSettingDb?: number): CalibrationMusicOutcome;
   /** Where the music's level moves to, a step at a time. NaN changes nothing. */
   setCalibrationMusicTarget(settingDb: number): void;
   /** The Played_Setting the music has reached, or null when the music is not playing. */
@@ -239,6 +284,7 @@ interface SoundToSchedule {
   readonly calibrationGain: number;
   readonly purpose: Purpose;
   readonly random: RandomSource;
+  readonly startAtMs?: number;
 }
 
 type ScheduleResult =
@@ -315,6 +361,8 @@ export function createAudioOutput(options: {
   let calibrating = false;
   let lastRepeatSettingDb: number | null = null;
   let busyEndMs: number | null = null;
+  let beatPlaying = false;
+  let beatDuckGain: number | null = null;
   const clampEntries: ClampLogEntry[] = [];
   const stopListeners = new Set<(event: StopEvent) => void>();
   const unsupportedListeners = new Set<(event: UnsupportedEvent) => void>();
@@ -622,8 +670,12 @@ export function createAudioOutput(options: {
     if (state.kind === "inactive" || state.kind === "unsupported") {
       return;
     }
-    // The fade stops the music's loop too (R5.6).
+    // The fade stops the music's loop too (R5.6). The beat has a path of its own.
     backend.fadeToSilence(stopFadeMs);
+    if (beatPlaying) {
+      backend.stopBeat(stopFadeMs);
+      beatPlaying = false;
+    }
     endMusic();
     if (busyEndMs !== null) {
       busyEndMs = Math.min(busyEndMs, backend.currentTimeMs() + stopFadeMs);
@@ -734,9 +786,11 @@ export function createAudioOutput(options: {
     if (sampleRateHz === null) {
       return refused("notRunning");
     }
+    const wantedStartMs = sound.startAtMs ?? Number.NEGATIVE_INFINITY;
     if (
       busyEndMs !== null &&
-      backend.currentTimeMs() + scheduleLeadMs < busyEndMs
+      Math.max(backend.currentTimeMs() + scheduleLeadMs, wantedStartMs) <
+        busyEndMs
     ) {
       return refused("busy");
     }
@@ -760,13 +814,19 @@ export function createAudioOutput(options: {
       return refused(prepared.reason);
     }
     // Read again: rendering took time, and a later start can only end the busy interval later.
-    const startMs = backend.currentTimeMs() + scheduleLeadMs;
+    const startMs = Math.max(
+      backend.currentTimeMs() + scheduleLeadMs,
+      wantedStartMs,
+    );
     const endMs = startMs + (prepared.left.length / sampleRateHz) * 1000;
     backend.schedule(
       { left: prepared.left, right: prepared.right, sampleRateHz },
       startMs,
     );
     busyEndMs = endMs;
+    if (beatPlaying && beatDuckGain !== null) {
+      backend.duckBeat(startMs, endMs, beatDuckGain);
+    }
     if (prepared.clampLimit !== null) {
       clampEntries.push(
         Object.freeze({
@@ -921,7 +981,9 @@ export function createAudioOutput(options: {
 
     calibrationControlTopDb: musicTopDb,
 
-    startCalibrationMusic(): CalibrationMusicOutcome {
+    startCalibrationMusic(
+      startSettingDb: number = calibrationSettingMinDb,
+    ): CalibrationMusicOutcome {
       const stateRefusal = refusalForState();
       if (stateRefusal !== null) {
         return refused(
@@ -948,7 +1010,12 @@ export function createAudioOutput(options: {
         return refused("busy");
       }
       const startMs = backend.currentTimeMs() + scheduleLeadMs;
-      const settingDb = calibrationSettingMinDb;
+      const settingDb = onGridDb(
+        Math.min(
+          Math.max(startSettingDb, calibrationSettingMinDb),
+          musicTopDb(),
+        ),
+      );
       backend.startLoop(
         {
           left: ready.samples,
@@ -1034,7 +1101,58 @@ export function createAudioOutput(options: {
         calibrationGain: decibelsToGain(keptSettingDb),
         purpose: request.purpose,
         random: request.random,
+        ...(request.startAtMs === undefined
+          ? {}
+          : { startAtMs: request.startAtMs }),
       });
+    },
+
+    startBeat(request): BeatOutcome {
+      const stateRefusal = refusalForState();
+      if (stateRefusal !== null) {
+        return Object.freeze({
+          kind: "refused",
+          reason: stateRefusal === "unsupported" ? "unsupported" : "notRunning",
+        } as const);
+      }
+      if (keptSettingDb === null || rateHz === null) {
+        return refused("notCalibrated");
+      }
+      const bar = renderBeatBar(rateHz, request.beatMs, request.beatsPerBar);
+      let peak = 0;
+      for (const sample of bar) {
+        peak = Math.max(peak, Math.abs(sample));
+      }
+      // Held under the ceiling like every other sound.
+      const wantedGain =
+        decibelsToGain(keptSettingDb) * decibelsToGain(request.levelDb);
+      const levelGain =
+        peak > 0
+          ? Math.min(wantedGain, audioSafetyConfig.ceilingFraction / peak)
+          : wantedGain;
+      const startMs = backend.currentTimeMs() + scheduleLeadMs;
+      backend.startBeat(
+        { left: bar, right: bar, sampleRateHz: rateHz },
+        startMs,
+        levelGain,
+      );
+      beatPlaying = true;
+      beatDuckGain =
+        request.duckDb === undefined ? null : decibelsToGain(request.duckDb);
+      return Object.freeze({
+        kind: "started",
+        startMs,
+        beatMs: (Math.round((request.beatMs * rateHz) / 1000) / rateHz) * 1000,
+        beatsPerBar: request.beatsPerBar,
+      });
+    },
+
+    stopBeat() {
+      if (!beatPlaying) {
+        return;
+      }
+      beatPlaying = false;
+      backend.stopBeat(stopFadeMs);
     },
 
     clampLog: () => Object.freeze([...clampEntries]),

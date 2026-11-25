@@ -13,8 +13,10 @@ describe("visitFlowConfig", () => {
       roomsTogetherMaxCount: 5,
       reminderAfterQuietMs: 12000,
       reminderAboveCaughtDb: 10,
-      chimeAboveCaughtDb: 10,
-      chimeMaxLevelDb: -20,
+      chimeAboveCaughtDb: 30,
+      chimeMaxLevelDb: -6,
+      missLevelDb: -10,
+      roomTimeLimitMs: 300000,
     });
   });
 

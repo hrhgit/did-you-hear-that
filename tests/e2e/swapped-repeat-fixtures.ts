@@ -37,7 +37,7 @@ function snapshotOf(
 ): SwappedRepeatSnapshot {
   return {
     stage: "swappedRepeat",
-    visitType: "quick",
+    visitType: "full",
     rooms,
     finishedRoomCount: rooms.length,
     canProceed: true,

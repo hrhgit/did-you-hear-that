@@ -26,6 +26,11 @@ export interface EarSearch {
   /** Throws an Error once the search has ended. */
   record(outcome: SoundOutcome): void;
   ending(): EarEnding | undefined;
+  /**
+   * Ends the search now, short of any rule: an ear still searching ends as `trialLimit`, the
+   * ending of a search cut off before it settled. An ear that has ended is left as it is.
+   */
+  cutOff(): void;
   /** 0 once ended; otherwise at least 1. See D6. */
   remainingPresentationsLowerBound(): number;
   presentations(): readonly Presentation[];
@@ -203,6 +208,10 @@ export function createEarSearch(
     },
 
     ending: (): EarEnding | undefined => currentEnding,
+
+    cutOff: (): void => {
+      currentEnding ??= Object.freeze({ kind: "trialLimit" });
+    },
 
     remainingPresentationsLowerBound: (): number => {
       if (currentEnding !== undefined) {

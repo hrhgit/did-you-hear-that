@@ -6,6 +6,7 @@ import {
   creatureSlippedLine,
 } from "../../copy/creature-copy";
 import { roomCopy } from "../../copy/room-copy";
+import type { RhythmJudgement } from "../../session/rhythm-score";
 import type { VisitEvent } from "../../session/visit-flow-types";
 
 /** What the page does at once for an event of the visit. */
@@ -19,6 +20,8 @@ export type ScreenReaction =
       readonly side: "left" | "right";
       readonly roomId: GhostSoundId;
       readonly line: string;
+      /** How the rhythm game judged a counted catch: its creature is kicked away. Absent elsewhere. */
+      readonly judgement?: RhythmJudgement;
     }
   | {
       /**
@@ -29,11 +32,32 @@ export type ScreenReaction =
       readonly side: "left" | "right";
       readonly roomId: GhostSoundId;
       readonly line: string;
+      /** `miss` or `wrong` for a counted turn: its creature bites Jack. */
+      readonly judgement?: RhythmJudgement;
     }
   | {
-      /** The house says a line and nothing moves. */
+      /**
+       * The house says a line. For a counted turn with no sound, `judgement` says how the shadows
+       * go: a kick at one of them (`trick`, on `side`), or left alone (`steady`).
+       */
       readonly kind: "say";
       readonly line: string;
+      readonly judgement?: "steady" | "trick";
+      readonly side?: "left" | "right";
+    }
+  | {
+      /**
+       * A turn is coming on the off-beat at `atMs`: a shadow creeps in on each side, alike. It is
+       * given for every turn, with a sound or without one, and never says which.
+       */
+      readonly kind: "cue";
+      readonly atMs: number;
+      readonly beatMs: number;
+    }
+  | {
+      /** A kick that met no turn. */
+      readonly kind: "whiff";
+      readonly side: "left" | "right";
     }
   | {
       /**
@@ -65,6 +89,12 @@ export type ScreenReaction =
  * when it is caught.
  */
 export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
+  if (event.kind === "turnCued") {
+    return { kind: "cue", atMs: event.atMs, beatMs: event.beatMs };
+  }
+  if (event.kind === "kickedAtNothing") {
+    return { kind: "whiff", side: event.side };
+  }
   if (event.kind === "replaySoundStarted") {
     return {
       kind: "replayRipple",
@@ -109,8 +139,9 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
   if (event.kind !== "trialScored") {
     return null;
   }
-  const { trial, room, reaction } = event;
+  const { trial, room, reaction, judgement } = event;
   const { roomId } = room;
+  const judged = judgement === undefined ? {} : { judgement };
   if (reaction === "ripple" && trial.kind === "sound") {
     return {
       kind: "ripple",
@@ -122,13 +153,25 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
         room.frequencyHz,
         trial.playedLevelDb,
       ),
+      ...judged,
     };
   }
   if (reaction === "noSoundLine") {
-    return { kind: "say", line: roomCopy.noSoundLine };
+    const side = trial.response === "none" ? {} : { side: trial.response };
+    return {
+      kind: "say",
+      line: roomCopy.noSoundLine,
+      ...(judgement === "trick"
+        ? { judgement: "trick" as const, ...side }
+        : {}),
+    };
   }
   if (reaction === "nothingCame") {
-    return { kind: "say", line: roomCopy.nothingCameLine };
+    return {
+      kind: "say",
+      line: roomCopy.nothingCameLine,
+      ...(judgement === "steady" ? { judgement: "steady" as const } : {}),
+    };
   }
   if (trial.kind === "sound" && reaction === "slipped") {
     return {
@@ -136,6 +179,7 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
       side: trial.ear,
       roomId,
       line: creatureSlippedLine(roomId, trial.ear),
+      ...judged,
     };
   }
   if (trial.kind === "sound" && reaction === "otherSide") {
@@ -144,6 +188,7 @@ export function reactionOfEvent(event: VisitEvent): ScreenReaction | null {
       side: trial.ear,
       roomId,
       line: creatureOtherSideLine(roomId, trial.ear),
+      ...judged,
     };
   }
   return null;

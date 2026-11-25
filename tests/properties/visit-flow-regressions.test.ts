@@ -109,11 +109,17 @@ describe("visit flow regressions", () => {
   // again. The third room's first attempt starts at 216 126 ms and presents its first counted
   // trial at 222 180 ms; the first device change is set at 230 000 ms, in its counting; attempt 2
   // starts at 241 993 ms and would play its first practice sound at 243 993 ms, so the second
-  // device change stays at 242 900 ms. The case asserts that order first, so that it cannot
-  // quietly stop covering two device changes in a row.
+  // device change stays at 242 900 ms.
+  //
+  // The beat of the rhythm game (2026-11-18), on which every sound now starts, moved them again,
+  // and so did the headphone check that a device change sends the visit to. The first change at
+  // 230 000 ms sends it there, and attempt 2 starts at 235 321 ms, not about 3 s after the change as
+  // the figures of 2026-11-18 assumed. Attempt 2 plays its first practice sound at 237 341 ms, so
+  // the second device change is set at 236 300 ms, after the start and before that sound. The case
+  // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
-      visitType: "quick",
+      visitType: "full",
       calibrationTargetDb: -27,
       firstHeadphoneCheckAnswer: "left",
       listener: {
@@ -128,7 +134,7 @@ describe("visit flow regressions", () => {
       extraPresses: [],
       disturbances: [
         { atMs: 230_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 242_900, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 236_300, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };
@@ -158,6 +164,12 @@ describe("visit flow regressions", () => {
       "roomStarted 2:3",
       "first sound 2:3",
       "first trial 2:3",
+      "roomStarted 3:1",
+      "first sound 3:1",
+      "first trial 3:1",
+      "roomStarted 4:1",
+      "first sound 4:1",
+      "first trial 4:1",
     ]);
     checkPausesDiscardAndRepeat(harness, timeline.entries, run);
   });

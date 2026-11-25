@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { lanternConfig } from "../../src/config/lantern-config";
 import { creatureCopy, oneRoomCopy } from "../../src/copy/creature-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { replayCopy } from "../../src/copy/replay-copy";
@@ -10,6 +9,12 @@ import type {
 } from "../../src/session/visit-flow-types";
 import type { ReplaySheet } from "../../src/ui/visit/start-replay-sheet";
 import { devServer } from "./dev-server";
+import {
+  countOf,
+  expectFeatured,
+  expectRingsFrom,
+  scene,
+} from "./scene-record";
 import {
   expectNoHorizontalScroll,
   expectNoSeriousAccessibilityProblem,
@@ -38,12 +43,12 @@ test.beforeAll(async () => {
   // Inside the playable range: with the calibration these visits keep, every creature's search
   // floor is −35 dB (audible-start, the playable floor), and this visitor misses more than 20
   // sounds.
-  replay = await simulatedReplay("quick", {
+  replay = await simulatedReplay("full", {
     kind: "thresholds",
     leftDb: -30,
     rightDb: -20,
   });
-  nothingMissed = await simulatedReplay("quick", {
+  nothingMissed = await simulatedReplay("full", {
     kind: "extreme",
     name: "alwaysAnswersWrongSide",
   });
@@ -75,19 +80,8 @@ const button = (page: Page, name: string): Locator =>
 const sheet = (page: Page): Locator => page.locator(".visit-sheet-replay");
 const panel = (page: Page): Locator => page.locator(".visit-replay");
 const stopButton = (page: Page): Locator => button(page, replayCopy.stopButton);
-const doorway = (page: Page, side: Side): Locator =>
-  page.locator(`.room-door-${side}`);
-/**
- * The creature that stands in a doorway in plain view. One that is leaving stays in the page
- * until its place is taken again, so it is left out.
- */
-const standingIn = (page: Page, side: Side): Locator =>
-  doorway(page, side).locator('.room-figure:not([data-leaving="true"])');
-const standingAnywhere = (page: Page): Locator =>
-  page.locator('.room-figure:not([data-leaving="true"])');
-const ringsOn = (page: Page, side: Side): Locator =>
-  page.locator(`.room-rings-${side} .room-ring`);
-const otherSide = (side: Side): Side => (side === "left" ? "right" : "left");
+/** The picture of the room, on whose canvas the creatures are drawn. */
+const roomPicture = (page: Page): Locator => page.locator(".room-picture");
 
 /** How long the first buttons of the replay ignore presses, and a little more. */
 const guardMs = 800;
@@ -113,13 +107,10 @@ async function boxOf(part: Locator, name: string): Promise<Box> {
 }
 
 /**
- * The boxes of everything that stands on the page while a sound plays on this side, by name: the
- * bar's words and controls, the words under the room, and the creature in its doorway.
+ * The boxes of everything that stands on the page while a sound plays, by name: the bar's words
+ * and controls, and the words under the room. The creature is drawn on the canvas above them.
  */
-async function boxesWhilePlaying(
-  page: Page,
-  side: Side,
-): Promise<Record<string, Box>> {
+async function boxesWhilePlaying(page: Page): Promise<Record<string, Box>> {
   const parts: Record<string, Locator> = {
     stop: stopButton(page),
     room: page.locator(".visit-room"),
@@ -128,7 +119,6 @@ async function boxesWhilePlaying(
     rightCount: page.locator(".visit-replay-count-right"),
     note: page.locator(".visit-replay-note"),
     skip: button(page, replayCopy.skipRestButton),
-    creature: standingIn(page, side),
   };
   const boxes: Record<string, Box> = {};
   for (const [name, part] of Object.entries(parts)) {
@@ -176,7 +166,7 @@ test.describe("the replay of missed sounds", () => {
     await expect(panel(page)).toBeHidden();
     // The room is only just there behind the sheet, and nobody stands in it.
     await expect(page.locator("main")).toHaveAttribute("data-house", "faint");
-    await expect(standingAnywhere(page)).toHaveCount(0);
+    await expectFeatured(page, null);
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
 
@@ -205,7 +195,7 @@ test.describe("the replay of missed sounds", () => {
     }
 
     // After the press and before the first sound: the room is in view and says nothing yet.
-    // Nobody stands in it, its lantern simply burns, and it has no cards along its foot.
+    // Nobody stands in it, nothing is scored, and it has no cards along its foot.
     await show(page, replay.started);
     await expect(sheet(page)).toBeHidden();
     await expect(panel(page)).toBeVisible();
@@ -216,15 +206,9 @@ test.describe("the replay of missed sounds", () => {
     await expect(page.locator(".visit-replay-sound")).toHaveText("");
     await expect(page.locator(".visit-room")).toBeHidden();
     await expect(stopButton(page)).toBeVisible();
-    await expect(standingAnywhere(page)).toHaveCount(0);
-    await expect(page.locator(".room-ring")).toHaveCount(0);
-    await expect(
-      page.locator(".visit-lantern-cell[data-lit='true']"),
-    ).toHaveCount(lanternConfig.cellCount);
-    await expect(page.locator(".visit-lantern")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
+    await expectFeatured(page, null);
+    await expect(scene(page)).toHaveAttribute("data-rings", "0");
+    await expect(page.locator(".rhythm-hud")).toBeHidden();
     await expect(
       page.getByRole("list", { name: oneRoomCopy.shelfLabel }),
     ).toBeHidden();
@@ -253,19 +237,12 @@ test.describe("the replay of missed sounds", () => {
       await expect(page.locator(".visit-room-progress")).toHaveText(
         sound.positionLabel,
       );
-      // That creature stands in the doorway of the sound's side, and rings go out from it.
-      const creature = standingIn(page, sound.ear);
-      await expect(creature).toHaveCount(1);
-      await expect(creature).toHaveAttribute(
-        "data-creature",
-        sound.room.roomId,
-      );
-      await expect(standingIn(page, otherSide(sound.ear))).toHaveCount(0);
-      await expect(standingAnywhere(page)).toHaveCount(1);
-      await expect(ringsOn(page, sound.ear)).toHaveCount(3);
+      // That creature stands on the sound's side, and rings go out from it.
+      await expectFeatured(page, sound.room.roomId, sound.ear, false);
+      await expectRingsFrom(page, sound.ear);
       if (order === 0) {
-        // No sound has played on the other side yet, so no ring was ever drawn there.
-        await expect(page.locator(".room-ring")).toHaveCount(3);
+        // The first sound of the replay is the first to send rings out.
+        await expect(scene(page)).toHaveAttribute("data-rings", "1");
       }
       await expect(panel(page)).toHaveAttribute("data-side", sound.ear);
       await expect(page.locator(".visit-replay-sound")).toHaveText(
@@ -287,9 +264,7 @@ test.describe("the replay of missed sounds", () => {
         await expect(answer).toBeHidden();
       }
       await settle(page);
-      expect(
-        overlappingBoxes(await boxesWhilePlaying(page, sound.ear)),
-      ).toEqual([]);
+      expect(overlappingBoxes(await boxesWhilePlaying(page))).toEqual([]);
       await expectNoHorizontalScroll(page);
     }
     await expectNoSeriousAccessibilityProblem(page);
@@ -301,7 +276,7 @@ test.describe("the replay of missed sounds", () => {
     expect(record.pageErrors).toEqual([]);
   });
 
-  test("keeps the words apart from one another and from the creature down to 360 by 640", async ({
+  test("keeps the words apart from one another and from the room down to 360 by 640", async ({
     page,
   }) => {
     await openPage(page, address);
@@ -321,44 +296,22 @@ test.describe("the replay of missed sounds", () => {
       await page.setViewportSize(size);
       const sizeName = `at ${String(size.width)} by ${String(size.height)}`;
       for (const moment of [longest, last]) {
-        const side = moment.sound.ear;
         await show(page, moment.snapshot);
         await settle(page);
-        const boxes = await boxesWhilePlaying(page, side);
+        const boxes = await boxesWhilePlaying(page);
         expect(overlappingBoxes(boxes), sizeName).toEqual([]);
         await expectNoHorizontalScroll(page);
 
-        // The strip of words is the floor of the room: it begins where the doorway ends, so the
-        // words never stand on the feet of whoever is in the doorway.
-        const door = await boxOf(doorway(page, side), "doorway");
+        // The strip of words is the floor of the room: it begins where the picture ends, so the
+        // words never stand on whoever is drawn in the yard.
+        const picture = await boxOf(roomPicture(page), "picture");
         const strip = await boxOf(panel(page), "strip of words");
         expect(strip.y, sizeName).toBeGreaterThanOrEqual(
-          door.y + door.height - 0.5,
+          picture.y + picture.height - 0.5,
         );
-
-        // The room keeps a useful size above the words. The smallest it draws, on a phone on
-        // its side, is a doorway 172 px tall and a creature 88 px wide: the bounds are a little
-        // under those, so a change that squeezes the room shows here.
-        const creature = boxes.creature;
-        if (creature === undefined) {
-          throw new Error("The page shows no creature.");
-        }
-        expect(door.height, sizeName).toBeGreaterThanOrEqual(160);
-        expect(creature.width, sizeName).toBeGreaterThanOrEqual(80);
-        expect(creature.height, sizeName).toBeGreaterThanOrEqual(80);
-        // The creature is whole: inside its doorway from side to side, and inside the page.
-        expect(creature.x, sizeName).toBeGreaterThanOrEqual(door.x - 0.5);
-        expect(creature.x + creature.width, sizeName).toBeLessThanOrEqual(
-          door.x + door.width + 0.5,
-        );
-        expect(creature.y, sizeName).toBeGreaterThanOrEqual(door.y - 0.5);
-        expect(creature.y + creature.height, sizeName).toBeLessThanOrEqual(
-          door.y + door.height + 0.5,
-        );
-        expect(creature.x, sizeName).toBeGreaterThanOrEqual(0);
-        expect(creature.x + creature.width, sizeName).toBeLessThanOrEqual(
-          size.width,
-        );
+        // The room keeps a useful size above the words, even on a phone on its side.
+        expect(picture.height, sizeName).toBeGreaterThanOrEqual(160);
+        expect(picture.width, sizeName).toBeGreaterThanOrEqual(size.width - 1);
       }
     }
   });
@@ -366,7 +319,7 @@ test.describe("the replay of missed sounds", () => {
   for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const motion =
       reducedMotion === "reduce" ? "with less motion" : "with every motion";
-    test(`puts the creature and the rings of a sound at the doorway of the side it came from, ${motion}`, async ({
+    test(`puts the creature and the rings of a sound on the side it came from, ${motion}`, async ({
       page,
     }) => {
       await page.emulateMedia({ reducedMotion });
@@ -376,60 +329,25 @@ test.describe("the replay of missed sounds", () => {
         throw new Error("The simulated visit missed nothing.");
       }
       await show(page, replay.started);
-      const pageWidth = page.viewportSize()?.width ?? 0;
-      expect(pageWidth).toBeGreaterThan(0);
 
       for (const side of ["left", "right"] as const) {
         const moment = replay.sounds[firstSoundOn(side)];
         if (moment === undefined) {
           throw new Error("The simulated replay has no such sound.");
         }
+        const ringsBefore = await countOf(page, "rings");
         await giveEvent(page, moment.event);
         await show(page, moment.snapshot);
 
-        const creature = standingIn(page, side);
-        await expect(creature).toHaveCount(1);
-        await expect(standingIn(page, otherSide(side))).toHaveCount(0);
-        // The rings can be seen as they go out. With less motion they stand still and fade.
-        const firstRing = ringsOn(page, side).first();
-        await expect
-          .poll(
-            () =>
-              firstRing.evaluate((ring) =>
-                Number(getComputedStyle(ring).opacity),
-              ),
-            { intervals: [40] },
-          )
-          .toBeGreaterThan(0.3);
-        // Once every fade has ended the creature is there in full and the rings are gone.
-        await settle(page);
-        await expect(creature).toHaveCSS("opacity", "1");
-        await expect(firstRing).toHaveCSS("opacity", "0");
-
-        // The doorway of a side is on that side of the page.
-        const door = await boxOf(doorway(page, side), "doorway");
-        if (side === "left") {
-          expect(door.x + door.width).toBeLessThan(pageWidth / 2);
-        } else {
-          expect(door.x).toBeGreaterThan(pageWidth / 2);
-        }
-        // The creature stands inside it, from one side to the other.
-        const figure = await boxOf(creature, "creature");
-        expect(figure.width).toBeGreaterThan(0);
-        expect(figure.x).toBeGreaterThanOrEqual(door.x - 0.5);
-        expect(figure.x + figure.width).toBeLessThanOrEqual(
-          door.x + door.width + 0.5,
+        // Its creature on its side, and one set of rings from that side, whichever the motion.
+        await expectFeatured(page, moment.sound.room.roomId, side, false);
+        await expectRingsFrom(page, side);
+        expect(await countOf(page, "rings")).toBe(ringsBefore + 1);
+        // The yard moves by itself only with every motion.
+        await expect(scene(page)).toHaveAttribute(
+          "data-motion",
+          reducedMotion === "reduce" ? "still" : "moving",
         );
-        // The rings go out from the middle of that doorway, at a height inside it.
-        for (const ring of await ringsOn(page, side).all()) {
-          const box = await boxOf(ring, "ring");
-          expect(box.width).toBeGreaterThan(0);
-          const centreX = box.x + box.width / 2;
-          const centreY = box.y + box.height / 2;
-          expect(Math.abs(centreX - (door.x + door.width / 2))).toBeLessThan(1);
-          expect(centreY).toBeGreaterThan(door.y);
-          expect(centreY).toBeLessThan(door.y + door.height);
-        }
       }
     });
   }
@@ -443,7 +361,7 @@ test.describe("the replay of missed sounds", () => {
       throw new Error("The simulated visit missed nothing.");
     }
     await show(page, first.snapshot);
-    await expect(standingIn(page, first.sound.ear)).toHaveCount(1);
+    await expectFeatured(page, first.sound.room.roomId, first.sound.ear);
     for (const reason of ["hidden", "interrupted"] as const) {
       await show(page, replay.paused(0, reason));
       await expect(
@@ -454,17 +372,14 @@ test.describe("the replay of missed sounds", () => {
       );
       await expect(panel(page)).toBeHidden();
       // Behind the notice nobody stands in the room.
-      await expect(standingAnywhere(page)).toHaveCount(0);
+      await expectFeatured(page, null);
       await expect(stopButton(page)).toBeVisible();
       await expectNoHorizontalScroll(page);
       await button(page, replayCopy.resumeButton).click();
       // Going on brings the room, the creature of the sound and the sound's words back.
       await show(page, first.snapshot);
       await expect(panel(page)).toBeVisible();
-      await expect(standingIn(page, first.sound.ear)).toHaveAttribute(
-        "data-creature",
-        first.sound.room.roomId,
-      );
+      await expectFeatured(page, first.sound.room.roomId, first.sound.ear);
     }
     await expectNoSeriousAccessibilityProblem(page);
     expect(await requests(page)).toEqual(["resume", "resume"]);
@@ -484,7 +399,7 @@ test.describe("the replay of missed sounds", () => {
       throw new Error("The simulated visit missed nothing.");
     }
     await show(page, last.snapshot);
-    await expect(standingAnywhere(page)).toHaveCount(1);
+    await expectFeatured(page, last.sound.room.roomId, last.sound.ear);
     await show(page, finished);
     await expect(sheet(page)).toBeVisible();
     await expect(panel(page)).toBeHidden();
@@ -503,7 +418,7 @@ test.describe("the replay of missed sounds", () => {
     await expect(stopButton(page)).toBeVisible();
     // The last creature has left the room, which is only just there behind the sheet.
     await expect(page.locator("main")).toHaveAttribute("data-house", "faint");
-    await expect(standingAnywhere(page)).toHaveCount(0);
+    await expectFeatured(page, null);
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
 

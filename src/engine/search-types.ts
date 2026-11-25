@@ -58,6 +58,7 @@ export type TrialRecord =
       readonly outcome: NoSoundOutcome;
     };
 
+/** `trialLimit`: the search was cut off before it settled, by its trial limit or by the room's time. */
 export type UnreliableReason =
   "trialLimit" | "inconsistentCatch" | "falseAlarmRate";
 
@@ -98,4 +99,11 @@ export interface ThresholdSearch {
   current(): SearchStep;
   /** Records the response to the waiting trial and returns the next step. */
   respond(response: VisitorResponse): SearchStep;
+  /**
+   * Ends the room now, because the time for it is over: every ear still searching ends as
+   * `unreliable` with the reason `trialLimit`, the trial that waits is dropped and no closing
+   * trial is made. Returns the result, which is also what `current()` gives from then on. Draws
+   * nothing. Calling it on a room that has finished returns that result unchanged.
+   */
+  cutOff(): Extract<SearchStep, { readonly kind: "finished" }>;
 }

@@ -29,6 +29,7 @@ import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
+import type { RhythmJudgement, RhythmStanding } from "./rhythm-score";
 
 export type {
   ClampLimit,
@@ -40,6 +41,8 @@ export type {
   KeepRefusal,
   NoSoundOutcome,
   PlayRefusal,
+  RhythmJudgement,
+  RhythmStanding,
   SoundOutcome,
   UnreliableReason,
   UnsupportedReason,
@@ -206,7 +209,7 @@ export interface SnapshotBase<Stage extends VisitStage> {
 
 /** The front door. */
 export interface EntrySnapshot extends SnapshotBase<"entry"> {
-  /** The two visits, in this order: quick, then full. */
+  /** The visits on offer. There is one: the full visit. */
   readonly choices: readonly {
     /** The visit type to pass to `chooseVisit`. */
     readonly visitType: VisitType;
@@ -271,11 +274,14 @@ export interface RoomSnapshot extends SnapshotBase<"room"> {
   /** What the room says about its practice and its counting. Always present in the snapshots the flow gives; optional only so that literals written before it still compile. */
   readonly practice?: RoomPractice;
   /**
-   * The visitor's lantern, or null while the room practises. It changes only with the visitor's
-   * own answers, with a caught sound in the moment it is scored, and with time. Always present in
-   * the snapshots the flow gives; optional only so that literals written before it still compile.
+   * How the night stands in the rhythm game (2026-11-18): score, combo and Jack's flame, or null
+   * while the room practises. It changes only in the moment a trial is scored and when a kick
+   * meets nothing. Always present in the snapshots the flow gives; optional only so that literals
+   * written before it still compile.
    */
-  readonly lantern?: RoomLantern | null;
+  readonly rhythm?: RhythmStanding | null;
+  /** The beat the room plays, or null while none plays (before the room's sound runs, in a pause). Optional as `rhythm` is. */
+  readonly beat?: RoomBeat | null;
   /** How the chase of this room stands, or null while the room practises. Optional as `lantern` is. */
   readonly chase?: RoomChase | null;
   /**
@@ -314,11 +320,11 @@ export interface RoomCreature {
 }
 
 /** The visitor's lantern inside a room (`lanternConfig`). */
-export interface RoomLantern {
-  /** The cells of light left. At 0 the lantern is dark: no answer is taken and the room waits. */
-  readonly cells: number;
-  /** The cells of a full lantern. */
-  readonly cellCount: number;
+/** The room's beat on the page clock: beat `k` sounds at `firstBeatAtMs + k × beatMs`. */
+export interface RoomBeat {
+  readonly firstBeatAtMs: number;
+  readonly beatMs: number;
+  readonly beatsPerBar: number;
 }
 
 /**
@@ -444,6 +450,29 @@ export interface TrialScoredEvent {
   readonly trial: ScoredVisitTrial;
   /** What to show now. */
   readonly reaction: TrialReaction;
+  /** How the rhythm game judged the turn. Always given by the flow; optional for older literals. */
+  readonly judgement?: RhythmJudgement;
+  /** How the night stands after it. Always given by the flow; optional for older literals. */
+  readonly standing?: RhythmStanding;
+}
+
+/**
+ * Released for every turn put on the beat, a turn with a sound or without one alike, when the step
+ * that chose it is over: the shadows of both sides start creeping in to arrive at `atMs`. Says
+ * nothing of whether the turn has a sound or of its side (the rhythm game, 2026-11-18).
+ */
+export interface TurnCuedEvent {
+  readonly kind: "turnCued";
+  /** The off-beat of the turn, on the page clock. */
+  readonly atMs: number;
+  readonly beatMs: number;
+}
+
+/** Released for an answer that met no turn: the kick met nothing and the combo broke. */
+export interface KickedAtNothingEvent {
+  readonly kind: "kickedAtNothing";
+  readonly side: Ear;
+  readonly standing: RhythmStanding | null;
 }
 
 /** Released when the last trial of a room has been scored. */
@@ -462,7 +491,9 @@ export type VisitEvent =
   | SwappedTrialScoredEvent
   | PracticeSoundScoredEvent
   | ReminderSoundScoredEvent
-  | CountingStartedEvent;
+  | CountingStartedEvent
+  | TurnCuedEvent
+  | KickedAtNothingEvent;
 
 // ─── The visit log ───────────────────────────────────────────────────────────────────────
 // Every time is in milliseconds on the timer's clock since the visit began (chooseVisit).
@@ -1240,8 +1271,13 @@ export type RoomPracticePhase = "practice" | "notHeard" | "counting";
 /** What the room's screen says about its practice. Every string comes from `src/copy`. */
 export interface RoomPractice {
   readonly phase: RoomPracticePhase;
-  /** True from a practice sound's presentation until it is answered or its window closes. Never says which side. False outside `practice`. */
+  /** True from a practice sound's presentation until it is answered or its window closes. False outside `practice`. */
   readonly soundPlaying: boolean;
+  /**
+   * While `soundPlaying`: the ear the practice sound plays in, so that the screen can show its
+   * creature in the doorway of that side. Null otherwise. Optional as `practising` is.
+   */
+  readonly soundEar?: Ear | null;
   /** The practice heading in `practice` and `notHeard`; null in `counting`. */
   readonly heading: string | null;
   /** In `practice` and `notHeard`: what practice is. In `counting`: the line that says the counting has begun. */
@@ -1258,7 +1294,7 @@ export interface RoomPractice {
   readonly goOnLabel: string;
   /**
    * In `practice`: the room whose sound is practised now, so that the screen can show who is making
-   * it. Never which side. Null in `notHeard` and `counting`. Always present in the snapshots the
+   * it. It never says which side: that is `soundEar`, and only while the sound plays. Null in `notHeard` and `counting`. Always present in the snapshots the
    * flow gives; optional only so that literals written before it still compile (one-room spec).
    */
   readonly practising?: VisitRoom | null;
@@ -1382,6 +1418,8 @@ export interface PracticeSoundScoredEvent {
   readonly reaction: Extract<TrialReaction, "ripple" | "none">;
   /** For `ripple`, the ripple's label; otherwise null. */
   readonly line: string | null;
+  /** How the rhythm game would judge it. Practice scores nothing. Optional for older literals. */
+  readonly judgement?: RhythmJudgement;
 }
 
 /** Released when the practice of a room run ends and its counting begins. Says nothing about any trial. */

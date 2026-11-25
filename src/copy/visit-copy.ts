@@ -15,4 +15,8 @@ export const visitCopy = Object.freeze({
   /** Shown on the headphone check when the hiss could not be played. */
   checkNotPlayedLine: "The hiss could not be played just now. Press again.",
   goOnButton: "Go on",
+  /** The name of the row of steps before the room, for a visitor who cannot see it. */
+  stepsLabel: "Getting ready",
+  /** The steps before the room, in order: the volume, the two sides, the rules, the room. */
+  steps: Object.freeze(["Volume", "Left and right", "The rules", "The room"]),
 });

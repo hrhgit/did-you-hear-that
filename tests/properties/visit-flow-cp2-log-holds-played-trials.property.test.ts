@@ -122,7 +122,8 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               expect(isExactZero(schedule[other])).toBe(true);
             });
 
-            // Nothing is scheduled while a no-sound trial waits for its decision.
+            // Nothing is scheduled while a no-sound trial waits for its decision. The puff for a
+            // press at no sound is scheduled in the call that decides it (2026-11-20).
             const endOf = (trial: VisitTrial): number =>
               trial.status === "scored"
                 ? trial.scoredAtMs
@@ -133,6 +134,7 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               }
               const during = harness.schedules.filter(
                 (schedule) =>
+                  schedule.purpose !== "miss" &&
                   schedule.atMs - startMs >= trial.presentedAtMs &&
                   schedule.atMs - startMs <= endOf(trial),
               );
@@ -217,9 +219,13 @@ describe("visit flow CP2. The log holds exactly the played trials, in order (Uni
               (schedule) => schedule.stage === "room",
             );
             for (const schedule of scheduledInRooms) {
-              expect(["trial", "practice", "reminder", "chime"]).toContain(
-                schedule.purpose,
-              );
+              expect([
+                "trial",
+                "practice",
+                "reminder",
+                "chime",
+                "miss",
+              ]).toContain(schedule.purpose);
             }
 
             // Discarded exactly when a pause (a device change included) came before its decision.

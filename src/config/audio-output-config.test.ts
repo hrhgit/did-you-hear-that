@@ -142,7 +142,7 @@ describe("audioOutputConfig", () => {
   });
 
   describe("playable buffers (D6)", () => {
-    it("gives a Peak_Bound to exactly the six sounds and the chime", () => {
+    it("gives a Peak_Bound to exactly the six sounds, the chime and the puff", () => {
       expect(Object.keys(audioOutputConfig.peakBoundDb)).toEqual([
         ...everySoundId,
       ]);

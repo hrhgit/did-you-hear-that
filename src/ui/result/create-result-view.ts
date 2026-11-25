@@ -32,8 +32,9 @@ import type {
   VisitArchive,
   VisitToSave,
 } from "../../session/result-page-types";
-import { drawCreature } from "../room/creature-art";
+import { drawCreatureSvg } from "../room/creature-svg";
 import { drawResultSection } from "./draw-result-section";
+import { attachResultYard } from "./result-yard";
 import { savePictureAsImage } from "./save-picture";
 import { repeatComparisonBlock } from "./show-repeat-comparison";
 
@@ -185,8 +186,11 @@ export function createResultView(options: ResultViewOptions): ResultView {
   pictureKey.setAttribute("aria-label", pictureKeyCopy.label);
   const savePictureButton = button(resultPageCopy.savePictureButton);
   const pictureStatus = status();
+  // The picture stands in the yard of the room the visit was played in.
+  const frame = make("div", "result-frame", [drawing]);
+  const repaintYard = attachResultYard(doc, frame, drawing);
   const figure = make("div", "result-figure", [
-    make("div", "result-frame", [drawing]),
+    frame,
     pictureKey,
     make("div", "result-figure-controls", [savePictureButton, pictureStatus]),
   ]);
@@ -353,7 +357,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
     className: string,
   ): HTMLElement => {
     const badge = make("span", `result-badge ${className}`, [
-      drawCreature(doc, roomId, "awake"),
+      drawCreatureSvg(doc, roomId, "awake"),
     ]);
     badge.dataset.creature = roomId;
     badge.setAttribute("aria-hidden", "true");
@@ -632,6 +636,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
           entering,
         }),
       );
+      repaintYard();
     }
     const typedSomething = shownSaved === null && nameInput.value.trim() !== "";
     setLine(

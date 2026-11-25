@@ -6,10 +6,11 @@ export type GhostSoundId =
   "cellar" | "corridor" | "nursery" | "stairs" | "attic";
 
 /**
- * "chime" is the soft bell after a caught sound (the game layer, 2026-11-17). It is no ghost: it
- * has no room, no search and no floor.
+ * "chime" is the soft bell after a caught sound (the game layer, 2026-11-17), and "snuff" the
+ * falling puff when a creature gets to Jack (2026-11-20). Neither is a ghost: they have no room,
+ * no search and no floor.
  */
-export type SoundId = ListedSoundId | "chime";
+export type SoundId = ListedSoundId | "chime" | "snuff";
 
 /** The sounds the listening page lists, the range report measures and the render tool renders. */
 export type ListedSoundId = GhostSoundId | "calibration";
@@ -32,8 +33,9 @@ export const soundIds: readonly ListedSoundId[] = Object.freeze([
   "calibration",
 ]);
 
-/** Every sound the output can play: the listed ones, then "chime". */
+/** Every sound the output can play: the listed ones, then "chime" and "snuff". */
 export const everySoundId: readonly SoundId[] = Object.freeze([
   ...soundIds,
   "chime",
+  "snuff",
 ]);

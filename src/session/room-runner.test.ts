@@ -35,7 +35,16 @@ import { roomSearchCapDb } from "./room-search-cap";
 import { turnSeedOf } from "./turn-seed";
 import { createVisitLogRecorder } from "./visit-log-recorder";
 import type { ScoredVisitTrial } from "./visit-flow-types";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 const { responseWindowMs } = hearingMethodConfig;
 const { scheduleLeadMs, calibrationSettingKeepMinDb } = audioOutputConfig;
@@ -47,7 +56,7 @@ const pageAheadMs = 5000;
 const outputDelayMs = 30;
 /** The visit begins when the timer starts. */
 const visitStartMs = pageAheadMs;
-const room = visitRooms("quick")[0]!;
+const room = threeRooms[0]!;
 
 function soundTrial(
   trialNumber: number,
@@ -109,6 +118,9 @@ function scriptedSearch(
       responses.push(response);
       return step();
     },
+    cutOff() {
+      return { kind: "finished", result: scriptedResult } as const;
+    },
   };
 }
 
@@ -168,9 +180,9 @@ function runnerOn(
   overrides: Partial<RoomRunnerOptions> = {},
 ) {
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 1,
-    rooms: visitRooms("quick"),
+    rooms: threeRooms,
     startedAtMs: visitStartMs,
   });
   recorder.attemptStarted({
@@ -780,9 +792,9 @@ function mixedOn(
     readonly overrides?: Partial<MixedRoomRunnerOptions>;
   } = {},
 ) {
-  const rooms = visitRooms("quick");
+  const rooms = threeRooms;
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 1,
     rooms,
     startedAtMs: visitStartMs,
@@ -1235,7 +1247,7 @@ describe("createMixedRoomRunner (one-room, the mixed runner)", () => {
 
   it("runs the real searches of three rooms to their ends in turns, each with one response per decided trial", async () => {
     const shell = await calibratedShell();
-    const rooms = visitRooms("quick");
+    const rooms = threeRooms;
     const engineSeeds = [2026, 2027, 2028];
     const searches = rooms.map((trackRoom, index) =>
       createThresholdSearch({
@@ -1444,6 +1456,54 @@ describe("createMixedRoomRunner, the game layer (2026-11-17)", () => {
     expect(run.log().ignoredAnswers).toHaveLength(1);
   });
 
+  it("puffs on the side of a sound that went by or was answered on the other side, and not for a catch", async () => {
+    const shell = await calibratedShell();
+    const search = scriptedSearch([
+      soundTrial(1, "left", -45, 1500),
+      soundTrial(2, "right", -45, 1500),
+      soundTrial(3, "left", -45, 1500),
+    ]);
+    const run = mixedOn(shell, [search], scriptedTurns([]), {
+      overrides: { game: { ...gameOn().game, missLevelDb: -10 } },
+    });
+    run.runner.start();
+    // Answered on the wrong side.
+    run.advance(1500);
+    run.advance(300);
+    run.runner.answer("right");
+    // Let by.
+    run.advance(1500);
+    run.advanceTo(run.presented[1]!.windowEndMs);
+    // Caught: a chime, no puff.
+    run.advance(1500);
+    run.advance(300);
+    run.runner.answer("left");
+    expect(playsOf(run.plays).map(([soundId, ear]) => [soundId, ear])).toEqual([
+      ["corridor", "left"],
+      ["snuff", "left"],
+      ["corridor", "right"],
+      ["snuff", "right"],
+      ["corridor", "left"],
+      ["chime", "left"],
+    ]);
+    expect(run.plays.filter(({ soundId }) => soundId === "snuff")).toEqual([
+      expect.objectContaining({ levelDb: -10, purpose: "miss" }),
+      expect.objectContaining({ levelDb: -10, purpose: "miss" }),
+    ]);
+  });
+
+  it("puffs for no sound without a level for it", async () => {
+    const shell = await calibratedShell();
+    const search = scriptedSearch([soundTrial(1, "left", -45, 1500)]);
+    const run = mixedOn(shell, [search], scriptedTurns([]), {
+      overrides: { game: gameOn().game },
+    });
+    run.runner.start();
+    run.advance(1500);
+    run.advanceTo(run.presented[0]!.windowEndMs);
+    expect(run.plays.map(({ soundId }) => soundId)).toEqual(["corridor"]);
+  });
+
   it("plays no reminder and no chime without the game layer", async () => {
     const shell = await calibratedShell();
     const search = scriptedSearch([
@@ -1457,5 +1517,180 @@ describe("createMixedRoomRunner, the game layer (2026-11-17)", () => {
     run.runner.answer("left");
     run.advance(5000);
     expect(run.plays.map(({ purpose }) => purpose)).toEqual(["trial", "trial"]);
+  });
+});
+
+describe("createMixedRoomRunner, the time limit of the counting (2026-11-20)", () => {
+  /** A scripted search that counts how often it was cut off. */
+  function cuttableSearch(trials: readonly Trial[]) {
+    const search = scriptedSearch(trials);
+    const cutOffs = { count: 0 };
+    return {
+      search: {
+        ...search,
+        cutOff() {
+          cutOffs.count += 1;
+          return { kind: "finished", result: scriptedResult } as const;
+        },
+      } satisfies ThresholdSearch,
+      cutOffs,
+    };
+  }
+
+  const manyTrials = (gapBeforeMs: number): Trial[] =>
+    Array.from({ length: 20 }, (_, index) =>
+      soundTrial(index + 1, "left", -25, gapBeforeMs),
+    );
+
+  it("ends the run at the limit when it falls in a gap, cuts off every open search and plays nothing more", async () => {
+    const shell = await calibratedShell();
+    const first = cuttableSearch(manyTrials(10_000));
+    const second = cuttableSearch(manyTrials(10_000));
+    const run = mixedOn(
+      shell,
+      [first.search, second.search],
+      scriptedTurns([0, 0, 0]),
+      { overrides: { timeLimitMs: 4000 } },
+    );
+    run.runner.start();
+    run.advance(3999);
+    expect(run.runner.state()).toBe("waitingGap");
+    expect(run.events).toEqual([]);
+    run.advance(1);
+    expect(run.runner.state()).toBe("finished");
+    expect(run.events).toEqual([
+      "trackFinished:corridor",
+      "trackFinished:stairs",
+      "finished",
+    ]);
+    expect(first.cutOffs.count).toBe(1);
+    expect(second.cutOffs.count).toBe(1);
+    expect(run.plays).toHaveLength(0);
+    expect(run.runner.waitingTrack()).toBeNull();
+    run.advance(60_000);
+    expect(run.plays).toHaveLength(0);
+  });
+
+  it("lets a trial in its window be decided first, then ends the run instead of asking for another", async () => {
+    const shell = await calibratedShell();
+    const first = cuttableSearch(manyTrials(1000));
+    const second = cuttableSearch(manyTrials(1000));
+    const run = mixedOn(
+      shell,
+      [first.search, second.search],
+      scriptedTurns([0, 0, 0]),
+      { overrides: { timeLimitMs: 1200 } },
+    );
+    run.runner.start();
+    run.advance(1000);
+    expect(run.runner.state()).toBe("presented");
+    run.advance(200);
+    // The limit has passed, and the window of the trial under way is still open.
+    expect(run.runner.state()).toBe("presented");
+    expect(run.events).toEqual([]);
+    run.advance(100);
+    run.runner.answer("left");
+    expect(run.runner.state()).toBe("finished");
+    expect(run.events).toEqual([
+      "scored:corridor:1",
+      "trackFinished:corridor",
+      "trackFinished:stairs",
+      "finished",
+    ]);
+    // The search that had the trial was given its answer and then cut off; the other was only cut off.
+    expect(first.search.responses).toEqual(["left"]);
+    expect(first.cutOffs.count).toBe(1);
+    expect(second.cutOffs.count).toBe(1);
+    run.advance(60_000);
+    expect(run.plays).toHaveLength(1);
+  });
+
+  it("ends the run when the window of the last trial closes unanswered", async () => {
+    const shell = await calibratedShell();
+    const only = cuttableSearch(manyTrials(1000));
+    const run = mixedOn(shell, [only.search], scriptedTurns([0]), {
+      overrides: { timeLimitMs: 1100 },
+    });
+    run.runner.start();
+    run.advance(1000);
+    expect(run.runner.state()).toBe("presented");
+    run.advance(responseWindowMs + scheduleLeadMs + 500);
+    expect(run.runner.state()).toBe("finished");
+    expect(only.search.responses).toEqual(["none"]);
+    expect(only.cutOffs.count).toBe(1);
+    expect(run.events.at(-1)).toBe("finished");
+  });
+
+  it("does not count a pause: the time left is what the pause found", async () => {
+    const shell = await calibratedShell();
+    const only = cuttableSearch(manyTrials(10_000));
+    const run = mixedOn(shell, [only.search], scriptedTurns([0]), {
+      overrides: { timeLimitMs: 3000 },
+    });
+    run.runner.start();
+    run.advance(2000);
+    run.runner.pause();
+    run.advance(600_000);
+    expect(run.runner.state()).toBe("paused");
+    expect(run.events).toEqual([]);
+    run.runner.resume();
+    run.advance(999);
+    expect(run.runner.state()).toBe("waitingGap");
+    run.advance(1);
+    expect(run.runner.state()).toBe("finished");
+    expect(only.cutOffs.count).toBe(1);
+    expect(run.events).toEqual(["trackFinished:corridor", "finished"]);
+  });
+
+  it("ends the run on resume when the limit passed in a window that the pause discarded", async () => {
+    const shell = await calibratedShell();
+    const only = cuttableSearch(manyTrials(1000));
+    const run = mixedOn(shell, [only.search], scriptedTurns([0]), {
+      overrides: { timeLimitMs: 1500 },
+    });
+    run.runner.start();
+    run.advance(1000);
+    expect(run.runner.state()).toBe("presented");
+    run.advance(400);
+    run.runner.pause();
+    expect(run.runner.state()).toBe("paused");
+    run.advance(1000);
+    run.runner.resume();
+    expect(run.runner.state()).toBe("waitingGap");
+    // 1400 ms of the 1500 have run: the rest of the limit is what the resumed trial's gap meets.
+    run.advance(100);
+    expect(run.runner.state()).toBe("finished");
+    expect(run.events.at(-1)).toBe("finished");
+    expect(only.cutOffs.count).toBe(1);
+  });
+
+  it("stops its clock when the run ends by itself, and does nothing after an abandon", async () => {
+    const shell = await calibratedShell();
+    const only = cuttableSearch(manyTrials(10_000));
+    const run = mixedOn(shell, [only.search], scriptedTurns([0]), {
+      overrides: { timeLimitMs: 3000 },
+    });
+    run.runner.start();
+    run.advance(1000);
+    run.runner.abandon();
+    run.advance(600_000);
+    expect(run.events).toEqual([]);
+    expect(only.cutOffs.count).toBe(0);
+    expect(shell.timer.pendingCount()).toBe(0);
+  });
+
+  it("has no limit when none is given", async () => {
+    const shell = await calibratedShell();
+    const only = cuttableSearch(manyTrials(10_000));
+    const run = mixedOn(shell, [only.search], scriptedTurns([0]));
+    run.runner.start();
+    // Twenty trials of 10 s gaps and a window each: the search runs to its own end.
+    run.advance(300_000);
+    expect(run.events).toHaveLength(22);
+    expect(run.events.slice(-2)).toEqual([
+      "trackFinished:corridor",
+      "finished",
+    ]);
+    expect(only.cutOffs.count).toBe(0);
   });
 });

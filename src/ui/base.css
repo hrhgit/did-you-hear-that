@@ -3,14 +3,37 @@
  * changes brightness after the page appears (audio-safety rule 9).
  */
 :root {
-  /* Cold darks for everything, and one warm colour: the light of a lamp. */
-  --color-night: #080b12;
-  --color-wall: #151a25;
-  --color-graphite: #8a93a6;
-  --color-graphite-faint: #3d4555;
-  --color-moonlight: #e6e1d6;
+  /*
+   * The colours of the yard the game is played in: a plum night, lavender greys, and one warm
+   * colour, the light of Jack's candle (the rhythm game, 2026-11-18). Every screen uses them, so
+   * the doors before the room and the picture after it look like the same night.
+   */
+  --color-night: #0a0812;
+  --color-wall: #1a1428;
+  --color-graphite: #9a90ad;
+  --color-graphite-faint: #463c58;
+  --color-moonlight: #ece4d6;
   --color-lamp: #f3b562;
   --color-lamp-low: #b9803f;
+
+  /* The sky of the yard, from its top down to the hill. */
+  --color-sky-top: #090716;
+  --color-sky-mid: #1b1236;
+  --color-sky-low: #3a1f45;
+
+  /* Jack's candle: the flame bar of the room and every lit control. */
+  --color-ember-deep: #c2410c;
+  --color-ember: #f59e0b;
+  --color-candle: #fde68a;
+  --color-hud: #fff3dc;
+  --color-hud-gold: #ffd27a;
+
+  /* A panel laid over the yard, shaped like the doorways and the cards of the room. */
+  --panel-fill: rgb(18 12 32 / 0.82);
+  --panel-line: rgb(255 214 160 / 0.16);
+  --panel-line-strong: rgb(255 200 130 / 0.42);
+  --panel-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.55);
+  --glow-ember: 0 0 1.1rem rgb(245 140 30 / 0.35);
 
   color-scheme: dark;
   background-color: var(--color-night);

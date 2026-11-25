@@ -13,7 +13,16 @@ import type {
 } from "./visit-flow-types";
 import type { PlayedTrial } from "./visit-log-recorder";
 import { createVisitLogRecorder } from "./visit-log-recorder";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // The rules of "Checking a payload" for a saved visit's swapped repeats (swapped-repeat
 // design.md, "Saved visits", R13.4): records made as the Repeat_Controller makes them, from a
@@ -30,7 +39,7 @@ function found(thresholdDb: number): LoggedEarResult {
   return { ...counts, state: "found", thresholdDb };
 }
 
-const rooms = visitRooms("quick");
+const rooms = threeRooms;
 
 function attempt(
   roomIndex: number,
@@ -61,7 +70,7 @@ function attempt(
 // Floors 0 and 2 offer the repeat; floor 1 does not. Floor 2 ran after a second calibration.
 const visitLog: VisitLog = {
   formatVersion: 1,
-  visitType: "quick",
+  visitType: "full",
   visitSeed: 42,
   rooms,
   calibrations: [],

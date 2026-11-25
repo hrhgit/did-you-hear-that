@@ -144,7 +144,7 @@ export function visitorScriptOf(
       }
     : {};
   return {
-    visitType: "quick",
+    visitType: "full",
     calibrationTargetDb,
     firstHeadphoneCheckAnswer: "left",
     listener: {

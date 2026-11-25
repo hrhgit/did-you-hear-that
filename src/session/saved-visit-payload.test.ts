@@ -14,7 +14,16 @@ import type {
   VisitLog,
 } from "./visit-flow-types";
 import { createVisitLogRecorder } from "./visit-log-recorder";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // Visits made with summarizeVisit from hand-built visit logs, and payloads changed by hand to
 // break one rule of "Checking a payload" at a time.
@@ -59,9 +68,9 @@ function attempt(
 function visitOf(falseAlarmsPerRoom: number, visitLimitFraction?: number) {
   const visitLog: VisitLog = {
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
-    rooms: visitRooms("quick"),
+    rooms: threeRooms,
     calibrations: [],
     headphoneChecks: [],
     roomAttempts: [
@@ -102,9 +111,9 @@ const markedVisit = visitOf(2);
 function repeatOfFloor0(runNumber = 1): SwappedRepeatRun {
   const firstRun = visit.summary.rooms[0]!;
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
-    rooms: visitRooms("quick"),
+    rooms: threeRooms,
     startedAtMs: 0,
   });
   const attemptNumber = recorder.attemptStarted({
@@ -186,7 +195,7 @@ function parsedAfter(
 ) {
   const payload = payloadOf(source);
   change(payload);
-  return parseSavedVisitPayload(JSON.stringify(payload), "quick");
+  return parseSavedVisitPayload(JSON.stringify(payload), "full");
 }
 
 function isDeepFrozen(value: unknown): boolean {
@@ -256,10 +265,7 @@ describe("savedVisitPayloadJson", () => {
 
 describe("parseSavedVisitPayload", () => {
   it("reads back a payload deep-equal to the JSON round trip of its visit", () => {
-    const parsed = parseSavedVisitPayload(
-      savedVisitPayloadJson(visit),
-      "quick",
-    );
+    const parsed = parseSavedVisitPayload(savedVisitPayloadJson(visit), "full");
     expect(parsed).toEqual({
       formatVersion: 1,
       floorDb: hearingMethodConfig.floorDb,
@@ -274,12 +280,12 @@ describe("parseSavedVisitPayload", () => {
   it("reads a visit marked as a whole, and one judged by another limit", () => {
     expect(markedVisit.summary.visitFalseAlarmRateAboveLimit).toBe(true);
     expect(
-      parseSavedVisitPayload(savedVisitPayloadJson(markedVisit), "quick"),
+      parseSavedVisitPayload(savedVisitPayloadJson(markedVisit), "full"),
     ).not.toBeNull();
     const strict = visitOf(1, 0.125);
     expect(strict.summary.visitFalseAlarmRateAboveLimit).toBe(true);
     expect(
-      parseSavedVisitPayload(savedVisitPayloadJson(strict), "quick"),
+      parseSavedVisitPayload(savedVisitPayloadJson(strict), "full"),
     ).not.toBeNull();
   });
 
@@ -305,7 +311,7 @@ describe("parseSavedVisitPayload", () => {
     it("reads a visit with records back deep-equal to their JSON round trip, deeply frozen", () => {
       const parsed = parseSavedVisitPayload(
         savedVisitPayloadJson(repeated),
-        "quick",
+        "full",
       );
       expect(parsed?.swappedRepeats).toEqual(
         JSON.parse(JSON.stringify(repeated.swappedRepeats)),
@@ -320,7 +326,7 @@ describe("parseSavedVisitPayload", () => {
     it("reads a payload without the key with an empty list, and every other field as before", () => {
       const parsed = parseSavedVisitPayload(
         savedVisitPayloadJson(visit),
-        "quick",
+        "full",
       );
       expect(parsed?.swappedRepeats).toEqual([]);
       expect(Object.isFrozen(parsed?.swappedRepeats)).toBe(true);
@@ -375,7 +381,7 @@ describe("parseSavedVisitPayload", () => {
       ["a JSON string", '"payload"'],
       ["the empty string", ""],
     ])("gives null for %s", (_label, text) => {
-      expect(parseSavedVisitPayload(text, "quick")).toBeNull();
+      expect(parseSavedVisitPayload(text, "full")).toBeNull();
     });
 
     it.each<[string, (payload: Json) => void]>([
@@ -432,12 +438,6 @@ describe("parseSavedVisitPayload", () => {
       ["refusedPlays not a list", (p) => (p.visitLog.refusedPlays = {})],
     ])("gives null for %s", (_label, change) => {
       expect(parsedAfter(change)).toBeNull();
-    });
-
-    it("gives null when the log's visit type differs from the envelope's", () => {
-      expect(
-        parseSavedVisitPayload(savedVisitPayloadJson(visit), "full"),
-      ).toBeNull();
     });
   });
 
@@ -781,7 +781,7 @@ describe("parseSavedVisitPayload", () => {
       strings.push(`${text.slice(0, position)}"${text.slice(position)}`);
     }
     for (const candidate of strings) {
-      expect(() => parseSavedVisitPayload(candidate, "quick")).not.toThrow();
+      expect(() => parseSavedVisitPayload(candidate, "full")).not.toThrow();
     }
   });
 });

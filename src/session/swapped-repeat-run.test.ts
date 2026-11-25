@@ -23,7 +23,7 @@ const visitStartMs = 100_000;
 
 /** The repeated floor: room 1 of the quick visit (4 kHz, the stairs). */
 const roomIndex = 1;
-const rooms = visitRooms("quick");
+const rooms = visitRooms("full");
 
 const counts = {
   presentationCount: 10,
@@ -105,7 +105,7 @@ function runLog(
   options: { levelDiffers?: boolean; discardedLevelDiffers?: boolean } = {},
 ): VisitLog {
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 4242,
     rooms,
     startedAtMs: visitStartMs,

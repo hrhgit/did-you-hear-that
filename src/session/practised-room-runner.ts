@@ -26,7 +26,9 @@ import type {
   ScoredPracticeTrial,
   VisitRoom,
 } from "./visit-flow-types";
+import type { BeatSlot, BeatTiming } from "./beat-clock";
 import { soundWindowStartMs } from "./window-start";
+import { rhythmConfig } from "../config/rhythm-config";
 
 /** What the practice reads from the config. */
 export type PracticeSettings = Pick<
@@ -103,6 +105,8 @@ interface PractiseCommonOptions {
   /** The test hook of visit-flow D26. Practice sounds carry `practice: true`. */
   readonly onTrialPresented?: (trial: PresentedTrial) => void;
   readonly settings?: PracticeSettings;
+  /** Puts every practice sound on the room's beat (the rhythm game, 2026-11-18). */
+  readonly beat?: BeatTiming;
 }
 
 export interface PractisedRoomRunnerOptions
@@ -119,10 +123,15 @@ export interface PractisedRoomsRunnerOptions extends PractiseCommonOptions {
   readonly notHeard: (missed: readonly PracticeMiss[]) => void;
 }
 
-/** What the room's screen needs to know of the practice. Never which side a sound is on. */
+/**
+ * What the room's screen needs to know of the practice. The side is given only while a practice
+ * sound plays, as `soundEar`: the screen stands the creature in the doorway of that side then.
+ */
 export interface PracticeState {
   readonly phase: RoomPracticePhase;
   readonly soundPlaying: boolean;
+  /** The ear whose practice sound plays now, or null when none does. */
+  readonly soundEar: Ear | null;
   /** The sides a round left uncaught, each once, in the order they were first missed. */
   readonly notHeardEars: readonly Ear[];
   /** The room whose sound the practice plays or is about to play, or null outside `practice`. */
@@ -228,6 +237,17 @@ export function createPractisedRoomsRunner(
   let pending: Pending | null = null;
   let presented: Presented | null = null;
   let refusalsInARow = 0;
+  const beat = options.beat;
+  /** The off-beat of the sound just put on the beat, told once the step that chose it is over. */
+  let pendingCueMs: number | null = null;
+  const flushCue = (): void => {
+    if (pendingCueMs === null || beat === undefined) {
+      return;
+    }
+    const atMs = pendingCueMs;
+    pendingCueMs = null;
+    beat.cued(atMs);
+  };
 
   const clearTimer = (): void => {
     if (handle !== null) {
@@ -243,10 +263,31 @@ export function createPractisedRoomsRunner(
 
   const waitGap = (sound: Pending): void => {
     phase = "waitingGap";
-    handle = timer.setTimeout(() => {
-      handle = null;
-      present(sound);
-    }, settings.practiceGapMs);
+    const clock = beat?.clock() ?? null;
+    if (beat === undefined || clock === null) {
+      handle = timer.setTimeout(() => {
+        handle = null;
+        present(sound, null);
+      }, settings.practiceGapMs);
+      return;
+    }
+    const slot = clock.slotNotBefore(
+      timer.now() + Math.max(settings.practiceGapMs, beat.cueLeadMs),
+    );
+    pendingCueMs = slot.pageMs;
+    handle = timer.setTimeout(
+      () => {
+        handle = null;
+        present(sound, slot);
+      },
+      Math.max(
+        0,
+        slot.pageMs -
+          settings.scheduleLeadMs -
+          rhythmConfig.presentAheadMs -
+          timer.now(),
+      ),
+    );
   };
 
   const beginCounting = (): void => {
@@ -286,7 +327,7 @@ export function createPractisedRoomsRunner(
     next();
   };
 
-  const present = (sound: Pending): void => {
+  const present = (sound: Pending, slot: BeatSlot | null): void => {
     const { member, ear } = sound.turn;
     const { room, attempt } = member;
     const presentedAtMs = timer.now();
@@ -296,6 +337,7 @@ export function createPractisedRoomsRunner(
       levelDb: sound.levelDb,
       purpose: "practice",
       random: options.soundRandom,
+      ...(slot === null ? {} : { startAtMs: slot.audioMs }),
     });
     if (outcome.kind === "refused") {
       if (outcome.reason === "notRunning") {
@@ -318,6 +360,7 @@ export function createPractisedRoomsRunner(
         return;
       }
       waitGap(sound);
+      flushCue();
       return;
     }
     refusalsInARow = 0;
@@ -406,11 +449,13 @@ export function createPractisedRoomsRunner(
     // The ripple's event comes before a not-heard pause that the next step may begin.
     options.practiceScored(entry);
     next();
+    flushCue();
   };
 
   /** Stops the practice's timer and logs the presented sound, if any, as discarded. */
   const interrupt = (): void => {
     clearTimer();
+    pendingCueMs = null;
     if (presented !== null) {
       recorder.practiceDiscarded(presented.sound, timer.now());
       presented = null;
@@ -426,6 +471,7 @@ export function createPractisedRoomsRunner(
         return;
       }
       beginRound(everyTurn);
+      flushCue();
     },
 
     answer(side, pressedAtMs) {
@@ -478,11 +524,13 @@ export function createPractisedRoomsRunner(
         case "paused":
           if (pending !== null) {
             waitGap(pending);
+            flushCue();
           }
           return;
         case "notHeard":
           round += 1;
           beginRound(missed);
+          flushCue();
           return;
         default:
           return;
@@ -538,9 +586,12 @@ export function createPractisedRoomsRunner(
             ? "counting"
             : "practice";
       const misses = phase === "notHeard" ? missed : [];
+      const playing = presented;
       return Object.freeze({
         phase: practicePhase,
         soundPlaying: phase === "presented",
+        soundEar:
+          phase === "presented" && playing !== null ? playing.turn.ear : null,
         notHeardEars: Object.freeze([...new Set(misses.map(({ ear }) => ear))]),
         practising:
           practicePhase === "practice"

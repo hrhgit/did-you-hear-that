@@ -1,4 +1,3 @@
-import { lanternConfig } from "../../config/lantern-config";
 import { repeatComparisonBlock } from "../result/show-repeat-comparison";
 import type { Sheet, VisitPage } from "./build-visit-page";
 import { leadSentence } from "./lead-sentence";
@@ -47,21 +46,6 @@ function setText(element: HTMLElement, text: string): void {
 function setLine(element: HTMLElement, line: string | null): void {
   setText(element, line ?? "");
   element.hidden = line === null;
-}
-
-/**
- * Sets the count of catches in a row, and makes it grow for a moment each time it changes to a
- * new count (the game layer, 2026-11-17). Two names of one animation take turns, so each change
- * starts it again.
- */
-function setStreakLine(element: HTMLElement, line: string | null): void {
-  const before = element.hidden ? null : element.textContent;
-  setLine(element, line);
-  if (line !== null && line !== before) {
-    element.dataset.bump = element.dataset.bump === "a" ? "b" : "a";
-  } else if (line === null) {
-    delete element.dataset.bump;
-  }
 }
 
 export function createScreenView(options: {
@@ -228,76 +212,16 @@ export function createScreenView(options: {
     // Who is making the practice sound. Never on which side.
     setLine(
       panel.introLine,
-      screen.featured?.place === "centre" ? screen.featured.line : null,
+      screen.featured?.rollCall === true ? screen.featured.line : null,
     );
     setLine(panel.soundLine, practice.soundPlayingLine);
-  };
-
-  /** How many lights the lantern has. A chase says it again. */
-  let lanternCellCount = lanternConfig.cellCount;
-  /** The lights drawn in the lantern, so that it is filled again only when the count changes. */
-  let lanternCellsDrawn = -1;
-  /** How many of them are lit on the page. */
-  let lanternLitShown = -1;
-
-  /**
-   * Lights this many of the lantern's lights. The room's glow follows them. Where more than one
-   * lights at the same time, they light one after another.
-   */
-  const lightLantern = (litCount: number): void => {
-    const lantern = page.chase.lantern;
-    if (lanternCellsDrawn !== lanternCellCount) {
-      lanternCellsDrawn = lanternCellCount;
-      lanternLitShown = -1;
-      lantern.replaceChildren(
-        ...Array.from({ length: lanternCellCount }, () => {
-          const cell = doc.createElement("span");
-          cell.className = "visit-lantern-cell";
-          return cell;
-        }),
-      );
-    }
-    if (litCount === lanternLitShown) {
-      return;
-    }
-    lanternLitShown = litCount;
-    let order = 0;
-    [...lantern.children].forEach((child, index) => {
-      const cell = child as HTMLElement;
-      const lit = index < litCount;
-      if (lit && cell.dataset.lit !== "true") {
-        cell.style.setProperty("--lantern-order", String(order));
-        order += 1;
-      }
-      cell.dataset.lit = lit ? "true" : "false";
-    });
-    scene.setLight(lanternCellCount > 0 ? litCount / lanternCellCount : 0);
-  };
-
-  /**
-   * The lantern's name, for a visitor who cannot see it. It has one only while it counts lights.
-   * At every other time it is part of the picture and says nothing.
-   */
-  const nameLantern = (label: string | null): void => {
-    const lantern = page.chase.lantern;
-    if (label === null) {
-      lantern.removeAttribute("role");
-      lantern.removeAttribute("aria-label");
-      lantern.setAttribute("aria-hidden", "true");
-      return;
-    }
-    lantern.removeAttribute("aria-hidden");
-    lantern.setAttribute("role", "img");
-    if (lantern.getAttribute("aria-label") !== label) {
-      lantern.setAttribute("aria-label", label);
-    }
   };
 
   /** Whether the room was in plain view on the screen before this one. */
   let roomWasInView = false;
 
-  /** Who stood at the centre of the room on the screen before this one, or null for nobody. */
-  let centreShown: string | null = null;
+  /** Who was practising in the room on the screen before this one, or null for nobody. */
+  let practisingShown: string | null = null;
 
   /**
    * The room: who stands in it, the cards along its foot, and the lantern. The picture is laid out
@@ -306,7 +230,6 @@ export function createScreenView(options: {
    */
   const showRoom = (screen: Screen): void => {
     const { chase } = screen;
-    const panel = page.chase;
     // In plain view: no sheet over the room and no rest between two rooms.
     const inView = screen.sheet === null && screen.restLine === null;
     if (inView) {
@@ -315,48 +238,43 @@ export function createScreenView(options: {
         scene.clear();
       }
       page.root.dataset.shelf = screen.creatures.length > 0 ? "shown" : "none";
-      if (screen.featured?.place === "centre") {
+      if (screen.featured?.rollCall === true) {
         page.root.dataset.rollCall = "true";
       } else {
         delete page.root.dataset.rollCall;
       }
       shelf.show(screen.creatures);
       scene.setFeatured(screen.featured);
-      const centre =
-        screen.featured?.place === "centre" ? screen.featured.id : null;
-      if (centre !== null && centreShown !== null && centre !== centreShown) {
+      // Whoever is practising, in the doorway of its sound or in the middle between them.
+      const practising =
+        screen.featured?.rollCall === true ? screen.featured.id : null;
+      if (
+        practising !== null &&
+        practisingShown !== null &&
+        practising !== practisingShown
+      ) {
         // What the house said about the one before must not stand under the next one.
         caption.hurry();
       }
-      centreShown = centre;
-      if (chase === null) {
-        // Nothing counts lights here. Through a practice the lantern waits, unlit. In every
-        // other room it simply burns.
-        nameLantern(null);
-        lightLantern(screen.practice === null ? lanternCellCount : 0);
-        delete page.root.dataset.lantern;
-        setLine(panel.darkLine, null);
-        setLine(panel.caughtLine, null);
-        setLine(panel.streakLine, null);
-      } else {
-        const { lantern } = chase;
-        lanternCellCount = lantern.cellCount;
-        nameLantern(lantern.label);
-        lightLantern(lantern.cells);
-        // A dark lantern dims the room, slowly, as every change of brightness here.
-        if (lantern.darkLine === null) {
-          delete page.root.dataset.lantern;
-        } else {
-          page.root.dataset.lantern = "dark";
-        }
-        setLine(panel.darkLine, lantern.darkLine);
-        setLine(panel.caughtLine, chase.caughtLine);
-        setStreakLine(panel.streakLine, chase.streakLine);
-      }
+      practisingShown = practising;
+      scene.setBeat(screen.beat ?? null);
+      // Nothing counts in a practice: the display says it is a warm-up. Once the room counts it
+      // shows the combo, the score and Jack's flame (the rhythm game, 2026-11-18).
+      scene.setStanding(
+        chase === null
+          ? null
+          : {
+              score: chase.score,
+              combo: chase.combo,
+              flame: chase.flame,
+              label: chase.label,
+              relitLine: chase.relitLine,
+            },
+        chase === null && screen.practice !== null,
+      );
     } else {
       scene.setFeatured(null);
-      centreShown = null;
-      nameLantern(null);
+      practisingShown = null;
       if (screen.restLine !== null) {
         // The rest between two rooms lies over the foot of the room, where the cards are.
         shelf.show([]);
@@ -364,19 +282,12 @@ export function createScreenView(options: {
         // A notice is a pause: the room waits behind it as it was. Every other sheet ends what
         // the room was showing.
         shelf.show([]);
-        delete page.root.dataset.lantern;
-        setLine(panel.darkLine, null);
-        setLine(panel.caughtLine, null);
-        setLine(panel.streakLine, null);
-        if (
-          screen.sheet === "frontDoor" ||
-          screen.sheet === "calibration" ||
-          screen.sheet === "headphoneCheck" ||
-          screen.sheet === "rules"
-        ) {
-          // Before the room, the lantern has not been lit.
-          lightLantern(0);
-        }
+        scene.setBeat(null);
+        scene.setStanding(null, false);
+      } else {
+        // Behind a notice the cards wait as they were, and the display of the game is put away
+        // until the room is in view again.
+        scene.setStanding(null, false);
       }
     }
     roomWasInView = inView;
@@ -576,6 +487,8 @@ export function createScreenView(options: {
 
       // The room behind everything: in full view, or faint under a sheet.
       page.root.dataset.house = screen.sheet === null ? "full" : "faint";
+      // Which sheet is up, so that each can lay out the yard behind it in its own way.
+      page.root.dataset.sheet = screen.sheet ?? "none";
 
       // The bar.
       page.stopButton.hidden = !screen.stopShown;
@@ -662,27 +575,37 @@ export function createScreenView(options: {
           scene.rings(reaction.side);
           return;
         case "ripple":
-          if (shown?.featured?.place === "centre") {
-            // A practice sound, whose creature stands in the middle of the room in plain view:
-            // rings from the side that was answered, and a hop from the one that made it.
+          if (shown?.featured?.rollCall === true) {
+            // A practice sound, whose creature stands in plain view in the doorway of the side it
+            // sounds from: rings from the side that was answered, and a hop from the one that made it.
             scene.rings(reaction.side);
             if (shown.featured.id === reaction.roomId) {
               scene.cheer();
             }
           } else {
-            // The sound was caught: its creature shows in the doorway of its side.
-            scene.caught(reaction.side, reaction.roomId);
+            // The sound was caught: its creature is kicked away from Jack on its side.
+            scene.caught(reaction.side, reaction.roomId, reaction.judgement);
           }
           shelf.flash(reaction.roomId);
           caption.say(reaction.line, "catch");
           return;
         case "slipped":
           // The sound went by. Its time to answer is over, and so is its trial.
-          scene.slipped(reaction.side, reaction.roomId);
+          // It reaches Jack and bites a little of his flame away.
+          scene.slipped(reaction.side, reaction.roomId, reaction.judgement);
           caption.say(reaction.line, "miss");
           return;
         case "say":
+          if (reaction.judgement !== undefined) {
+            scene.passed(reaction.judgement, reaction.side ?? null);
+          }
           caption.say(reaction.line);
+          return;
+        case "cue":
+          scene.cue(reaction.atMs, reaction.beatMs);
+          return;
+        case "whiff":
+          scene.whiff(reaction.side);
           return;
         case "gone":
           // Its card shows it asleep as soon as the screen says so. Here, the line.

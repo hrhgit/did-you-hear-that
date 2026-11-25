@@ -107,10 +107,8 @@ export function otherSideLine(side: AnswerSide): string {
   return `That one was on your ${side}.`;
 }
 
-/** What the visitor reads about the lantern and the chase inside a room that counts. */
+/** What the visitor reads about the chase inside a room that counts. */
 export const chaseCopy = Object.freeze({
-  /** Said while the lantern is dark. The room goes on and every answer counts (the game layer, 2026-11-17). */
-  lanternDarkLine: "Your lantern is out. Catch one to light it again.",
   /** Under each depth scale: the way its mark moves as quieter sounds are caught. */
   depthQuieterLabel: "quieter",
 });
@@ -123,28 +121,10 @@ function requireCount(count: number, what: string): void {
   }
 }
 
-/** The lantern for a visitor who cannot see it: "Lantern: 2 of 3 lights". */
-export function lanternLabel(cells: number, cellCount: number): string {
-  requireCount(cells, "The lights of a lantern");
-  requireCount(cellCount, "The lights of a full lantern");
-  if (cells > cellCount || cellCount === 0) {
-    throw new RangeError(
-      `A lantern holds from 0 lights to its full count, but got ${String(cells)} of ${String(cellCount)}.`,
-    );
-  }
-  return `Lantern: ${String(cells)} of ${String(cellCount)} lights`;
-}
-
 /** The sounds caught in this room: "4 caught". */
 export function caughtCountLine(count: number): string {
   requireCount(count, "The sounds caught");
   return `${String(count)} caught`;
-}
-
-/** The sounds caught one after the other: "3 in a row". */
-export function streakLine(count: number): string {
-  requireCount(count, "The sounds caught in a row");
-  return `${String(count)} in a row`;
 }
 
 /**

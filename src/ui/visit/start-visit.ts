@@ -92,9 +92,6 @@ export function startVisit(
   const press = (button: HTMLButtonElement, action: () => void): void => {
     button.addEventListener("click", action);
   };
-  press(page.frontDoor.choiceButtons.quick, () => {
-    flow.chooseVisit("quick");
-  });
   press(page.frontDoor.choiceButtons.full, () => {
     flow.chooseVisit("full");
   });

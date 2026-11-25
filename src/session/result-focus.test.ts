@@ -16,7 +16,16 @@ import type {
   SwappedRepeatOutcome,
   VisitLog,
 } from "./visit-flow-types";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // Summaries made with summarizeVisit from hand-built visit logs, as in result-picture.test.ts. Only
 // the fields the summary reads carry meaning; the rest are filled with plausible values.
@@ -83,9 +92,9 @@ function attempt(roomIndex: number, plan: RoomPlan): LoggedRoomAttempt {
 function visitOf(plans: readonly [RoomPlan, RoomPlan, RoomPlan]): VisitToSave {
   const visitLog: VisitLog = {
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
-    rooms: visitRooms("quick"),
+    rooms: threeRooms,
     calibrations: [
       {
         calibrationIndex: 0,

@@ -20,7 +20,7 @@ import {
   type SketchPen,
 } from "../house/sketch-pen";
 import { svgElement } from "../house/svg-element";
-import { drawCreature } from "../room/creature-art";
+import { drawCreatureSvg } from "../room/creature-svg";
 import {
   atticTieBeamEnds,
   ceilingYAt,
@@ -155,7 +155,7 @@ function drawWing(
 
   if (depth !== null && depth > 0) {
     // The creature of the room, where the light ends: as far as the visitor followed it here.
-    const art = drawCreature(doc, roomId, "awake");
+    const art = drawCreatureSvg(doc, roomId, "awake");
     art.setAttribute(
       "x",
       String(creatureCentreX(side, depth) - creatureSize / 2),

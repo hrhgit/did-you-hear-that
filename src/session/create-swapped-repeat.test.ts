@@ -60,7 +60,7 @@ const pageAheadMs = 5000;
 const outputDelayMs = 30;
 /** The visit begins when the timer starts. */
 const visitStartMs = pageAheadMs;
-const rooms = visitRooms("quick");
+const rooms = visitRooms("full");
 /** The floor that is repeated: the stairs, 4 kHz, 20 dB quieter on the left. */
 const floorIndex = 1;
 const floor = rooms[floorIndex]!;
@@ -147,7 +147,7 @@ function visitAtResult(
     throw new Error("The shell holds no calibration.");
   }
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 7,
     rooms,
     startedAtMs: visitStartMs,

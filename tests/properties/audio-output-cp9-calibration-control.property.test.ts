@@ -19,7 +19,7 @@ vi.mock("../../src/audio/synth/sound-renderers", async () => {
 const runs = 200;
 
 describe("audio output CP9. The calibration control (Universal; R16.1 to R16.6, R15.1)", () => {
-  it("starts every calibration at the bottom, stays on the grid and in range, rises by at most one step and keeps only what it played", async () => {
+  it("holds the first repeat to the request and the control, stays on the grid and in range, rises by at most one step and keeps only what it played", async () => {
     const {
       calibrationSettingMinDb,
       calibrationSettingStepDb,
@@ -61,7 +61,18 @@ describe("audio output CP9. The calibration control (Universal; R16.1 to R16.6, 
                 }
                 const { settingDb } = outcome;
                 if (lastDb === null) {
-                  expect(settingDb).toBe(calibrationSettingMinDb);
+                  // The first repeat plays the request held to the control and rounded down to the
+                  // grid; NaN counts as the bottom (nextCalibrationSettingDb, R16.1).
+                  const heldDb = Number.isNaN(operation.requestedSettingDb)
+                    ? calibrationSettingMinDb
+                    : Math.max(
+                        calibrationSettingMinDb,
+                        Math.min(operation.requestedSettingDb, topDb),
+                      );
+                  expect(settingDb).toBeLessThanOrEqual(heldDb);
+                  expect(settingDb).toBeGreaterThan(
+                    heldDb - calibrationSettingStepDb - 1e-9,
+                  );
                 } else {
                   expect(settingDb - lastDb).toBeLessThanOrEqual(
                     calibrationRiseMaxDb,

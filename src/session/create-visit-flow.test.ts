@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { audioSafetyConfig } from "../config/audio-safety-config";
+import { rhythmConfig } from "../config/rhythm-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
-import { lanternConfig } from "../config/lantern-config";
 import { missedSoundReplayConfig } from "../config/missed-sound-replay-config";
 import type { ManualTimer } from "../config/manual-timer";
 import { createManualTimer } from "../config/manual-timer";
@@ -129,6 +129,11 @@ function createHarness(
      * cases of the earlier specs are about rooms that run one after another (one-room spec).
      */
     readonly roomsTogetherMaxCount?: number;
+    /**
+     * The time limit of the counting: none unless a case says otherwise, so that the cases of the
+     * earlier specs let every search run to its own end (the time limit, 2026-11-20).
+     */
+    readonly roomTimeLimitMs?: number | null;
   } = {},
 ): Harness {
   const backend = createFakeAudioBackend({
@@ -196,12 +201,19 @@ function createHarness(
     seed: options.seed ?? flowSeed,
     onTrialPresented: (trial) => presented.push(trial),
     roomsTogetherMaxCount: options.roomsTogetherMaxCount ?? 1,
+    roomTimeLimitMs: options.roomTimeLimitMs ?? null,
   });
   flowRef = flow;
   const snapshots: VisitSnapshot[] = [];
   const events: VisitEvent[] = [];
   flow.subscribe((snapshot) => snapshots.push(snapshot));
-  flow.onEvent((event) => events.push(event));
+  // The cue of each turn on the beat is left out: it comes for every turn alike and says nothing
+  // of any trial, and its own tests read it from a listener of their own (the rhythm game).
+  flow.onEvent((event) => {
+    if (event.kind !== "turnCued") {
+      events.push(event);
+    }
+  });
   const advance = (durationMs: number): void => {
     for (let leftMs = durationMs; leftMs > 0; leftMs -= 1) {
       const stepMs = Math.min(1, leftMs);
@@ -248,22 +260,25 @@ function stageOf(harness: Harness): VisitStage {
 /** Chooses a visit and lets sound start. */
 async function toCalibration(
   harness: Harness,
-  visitType: "quick" | "full" = "quick",
+  visitType: "full" = "full",
 ): Promise<void> {
   harness.flow.chooseVisit(visitType);
   await harness.settle();
 }
 
-/** Starts the hiss, presses Louder up to `settingDb`, waits until it is played, and keeps it. */
+/** The middle of the hiss control, rounded down to its grid: where the hiss starts. */
+const hissStartDb = -22;
+/** The middle of the music control, rounded down to its grid: where the music starts. */
+const musicStartDb = -23;
+
+/** Starts the hiss, drags the target to `settingDb`, waits until it is played, and keeps it. */
 async function calibrate(
   harness: Harness,
   settingDb = calibrationSettingKeepMinDb,
 ): Promise<void> {
   harness.flow.startCalibration();
   await harness.settle();
-  for (let press = calibrationSettingMinDb; press < settingDb; press += 1) {
-    harness.flow.louder();
-  }
+  harness.flow.setCalibrationTarget(settingDb);
   for (let wait = 0; wait < 600; wait += 1) {
     const snapshot = harness.flow.snapshot();
     if (
@@ -366,12 +381,11 @@ function practise(harness: Harness): void {
   expect(countingStarts()).toBe(before + 1);
 }
 
-/** Plays every room and the rests between them, up to the missed-sound replay. */
-async function toMissedSoundReplay(
+/** Plays every room run and the rests between them, from the first room up to the missed-sound replay. */
+async function playAllRooms(
   harness: Harness,
   listener: Listener = stepListener(),
 ): Promise<void> {
-  await toRoom(harness);
   for (let room = 0; room < 10; room += 1) {
     playRoom(harness, listener);
     if (stageOf(harness) !== "betweenRooms") {
@@ -381,6 +395,15 @@ async function toMissedSoundReplay(
     await harness.settle();
   }
   expect(stageOf(harness)).toBe("missedSoundReplay");
+}
+
+/** Plays every room and the rests between them, up to the missed-sound replay. */
+async function toMissedSoundReplay(
+  harness: Harness,
+  listener: Listener = stepListener(),
+): Promise<void> {
+  await toRoom(harness);
+  await playAllRooms(harness, listener);
 }
 
 async function toResult(
@@ -441,7 +464,7 @@ type ActionName =
   | "backToFrontDoor";
 
 const actions: Readonly<Record<ActionName, (flow: VisitFlow) => void>> = {
-  chooseVisit: (flow) => flow.chooseVisit("quick"),
+  chooseVisit: (flow) => flow.chooseVisit("full"),
   startCalibration: (flow) => flow.startCalibration(),
   louder: (flow) => flow.louder(),
   quieter: (flow) => flow.quieter(),
@@ -592,10 +615,7 @@ describe("createVisitFlow: creation", () => {
       canProceed: false,
       pause: null,
       activationRefused: false,
-      choices: [
-        { visitType: "quick", roomCount: 3 },
-        { visitType: "full", roomCount: 5 },
-      ],
+      choices: [{ visitType: "full", roomCount: 5 }],
     });
   });
 
@@ -648,7 +668,7 @@ describe("createVisitFlow: creation", () => {
 
   it("ignores a visit type it does not know", () => {
     const harness = createHarness();
-    harness.flow.chooseVisit("long" as "quick");
+    harness.flow.chooseVisit("long" as "full");
     expect(stageOf(harness)).toBe("entry");
     expect(harness.calls).toEqual([]);
   });
@@ -724,8 +744,8 @@ describe("createVisitFlow: calibration", () => {
     await toCalibration(harness);
     expect(harness.flow.snapshot()).toEqual({
       stage: "calibration",
-      visitType: "quick",
-      rooms: visitRooms("quick"),
+      visitType: "full",
+      rooms: visitRooms("full"),
       finishedRoomCount: 0,
       canProceed: false,
       pause: null,
@@ -738,7 +758,7 @@ describe("createVisitFlow: calibration", () => {
       atTop: false,
       line: calibrationCopy.hiss.openLine,
       keepRefusal: null,
-      targetSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb,
       // The harness's fake has no music file: the calibration sound is the hiss.
       calibrationSound: "hiss",
       heading: calibrationCopy.hiss.heading,
@@ -752,19 +772,19 @@ describe("createVisitFlow: calibration", () => {
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
     });
     harness.flow.louder();
     harness.flow.louder();
     harness.advance(3000);
     expect(harness.flow.snapshot()).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb + 2,
+      playedSettingDb: hissStartDb + 2,
     });
     harness.flow.quieter();
     harness.advance(3000);
     expect(harness.flow.snapshot()).toMatchObject({
-      playedSettingDb: calibrationSettingMinDb + 1,
+      playedSettingDb: hissStartDb + 1,
     });
   });
 
@@ -777,7 +797,9 @@ describe("createVisitFlow: calibration", () => {
       keepRefusal: "notCalibrating",
     });
     harness.flow.startCalibration();
-    harness.advance(100);
+    // Keep_Minimum is −27: a setting below it is refused, so drag below it first.
+    harness.flow.setCalibrationTarget(calibrationSettingMinDb);
+    harness.advance(3000);
     harness.flow.keepCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "calibration",
@@ -796,11 +818,7 @@ describe("createVisitFlow: calibration", () => {
       harness.flow.proceed();
       harness.flow.proceed();
       await harness.settle();
-      for (let room = 0; room < 3; room += 1) {
-        playRoom(harness, stepListener());
-        harness.flow.proceed();
-        await harness.settle();
-      }
+      await playAllRooms(harness);
       return harness.flow.snapshot();
     })();
     expect(logOf(result).calibrations).toEqual([
@@ -833,10 +851,10 @@ describe("createVisitFlow: calibration", () => {
       calibrationSettingTopDb(),
     ]) {
       const harness = createHarness();
-      await toCalibration(harness, "quick");
+      await toCalibration(harness, "full");
       await calibrate(harness, settingDb);
       const report = harness.output.rangeReport()!;
-      const rooms = visitRooms("quick");
+      const rooms = visitRooms("full");
       const shortCount = rooms.filter(
         (room) =>
           roomSearchCapDb(
@@ -892,11 +910,11 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
       line: calibrationCopy.openLine,
       controlBottomDb: calibrationSettingMinDb,
       controlTopDb: -5,
-      targetSettingDb: calibrationSettingMinDb,
+      targetSettingDb: musicStartDb,
     });
   });
 
-  it("plays the music from the bottom, follows the target a step at a time, and logs the music as the anchor", async () => {
+  it("plays the music from the middle, follows the target a step at a time, and logs the music as the anchor", async () => {
     const harness = createHarness({
       backend: {
         calibrationMusic: { mode: "resolve", samples: musicSamples() },
@@ -909,7 +927,7 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
     ]);
     expect(harness.flow.snapshot()).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: musicStartDb,
     });
     const targetDb = calibrationSettingKeepMinDb + 1;
     harness.flow.setCalibrationTarget(targetDb);
@@ -946,11 +964,7 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
     harness.flow.proceed();
     harness.flow.proceed();
     await harness.settle();
-    for (let room = 0; room < 3; room += 1) {
-      playRoom(harness, stepListener());
-      harness.flow.proceed();
-      await harness.settle();
-    }
+    await playAllRooms(harness);
     const result = harness.flow.snapshot();
     expect(logOf(result).calibrations).toMatchObject([
       { settingDb: calibrationSettingKeepMinDb, anchor: "music" },
@@ -1003,7 +1017,7 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
     expect(harness.flow.snapshot()).toMatchObject({
       calibrationSound: "hiss",
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
       heading: calibrationCopy.hiss.heading,
       line: calibrationCopy.hiss.openLine,
       controlTopDb: calibrationSettingTopDb(),
@@ -1077,7 +1091,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
     harness.flow.setCalibrationTarget(Number.POSITIVE_INFINITY);
     expect(harness.flow.snapshot()).toMatchObject({
       targetSettingDb: calibrationSettingTopDb(),
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
     });
     const played: number[] = [];
     for (let wait = 0; wait < 600; wait += 1) {
@@ -1093,7 +1107,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
       }
       harness.advance(100);
     }
-    expect(played).toEqual([-40, -4]);
+    expect(played).toEqual([hissStartDb, -4]);
     expect(harness.flow.snapshot()).toMatchObject({
       targetSettingDb: calibrationSettingTopDb(),
       playedSettingDb: calibrationSettingTopDb(),
@@ -1131,25 +1145,25 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
     },
   );
 
-  it("takes a target before the sound has started, shows the bottom meanwhile, and starts at the bottom (R3.5, R3.6, D3)", async () => {
+  it("takes a target before the sound has started, shows the middle meanwhile, and starts there (R3.5, R3.6, D3)", async () => {
     const harness = createHarness();
     await toCalibration(harness);
     harness.flow.setCalibrationTarget(-10);
     expect(harness.flow.snapshot()).toMatchObject({
       playing: false,
       playedSettingDb: null,
-      targetSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb,
     });
     expect(harness.backend.scheduled()).toHaveLength(0);
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
-      targetSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
+      targetSettingDb: hissStartDb,
     });
     harness.advance(3000);
     expect(harness.flow.snapshot()).toMatchObject({
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
     });
   });
 
@@ -1162,7 +1176,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
     expect(paused).toMatchObject({
       stage: "calibration",
       pause: { reason: "hidden" },
-      targetSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb,
     });
     const callCount = harness.calls.length;
     harness.flow.setCalibrationTarget(-20);
@@ -1173,7 +1187,7 @@ describe('createVisitFlow: the calibration target (audible-start design.md, "The
     await harness.settle();
     expect(harness.flow.snapshot()).toMatchObject({
       pause: null,
-      targetSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb,
     });
   });
 });
@@ -1265,7 +1279,7 @@ describe("createVisitFlow: rooms", () => {
       afterVisit.indexOf("beginRoom"),
     );
     const log = logOf(harness.flow.snapshot());
-    const firstRoom = visitRooms("quick")[0]!;
+    const firstRoom = visitRooms("full")[0]!;
     expect(log.roomAttempts[0]).toMatchObject({
       roomIndex: 0,
       attempt: 1,
@@ -1283,7 +1297,7 @@ describe("createVisitFlow: rooms", () => {
   it("hands out roomStarted and roomFinished, and goes to the replay after beginRoom once the last room ends (R6.4, R7.10, R16.1)", async () => {
     const harness = createHarness();
     await toRoom(harness);
-    const rooms = visitRooms("quick");
+    const rooms = visitRooms("full");
     expect(harness.events[0]).toEqual({
       kind: "roomStarted",
       room: rooms[0],
@@ -1371,7 +1385,7 @@ describe("createVisitFlow: rooms", () => {
     } as const;
     for (const event of scored) {
       expect(event.reaction).toBe(expected[event.trial.outcome]);
-      expect(event.room).toEqual(visitRooms("quick")[0]);
+      expect(event.room).toEqual(visitRooms("full")[0]);
     }
     expect(new Set(scored.map((event) => event.trial.outcome))).toEqual(
       new Set(Object.keys(expected)),
@@ -1388,24 +1402,27 @@ describe("createVisitFlow: rooms", () => {
     expect(isDeeplyFrozen(harness.flow.snapshot())).toBe(true);
   }, 60_000);
 
-  it("logs answers outside every window, takes a cell of the lantern for each and releases nothing else about them (R8.1, R8.3, the game layer)", async () => {
+  it("logs answers outside every window, breaks the combo for each and releases nothing else about them (R8.1, R8.3, the rhythm game)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
     const snapshotCount = harness.snapshots.length;
     const eventCount = harness.events.length;
     const before = harness.flow.snapshot();
-    expect(before).toMatchObject({ lantern: { cells: 3, cellCount: 3 } });
+    expect(before).toMatchObject({
+      rhythm: { combo: 0, flame: rhythmConfig.flameMax },
+    });
     harness.advance(500);
     harness.flow.answer("left");
     harness.flow.answer("right", harness.timer.now() - 100);
-    // Each answer cost one cell, and nothing else in the snapshot moved.
-    expect(harness.flow.snapshot()).toEqual({
-      ...before,
-      lantern: { cells: 1, cellCount: 3 },
-    });
-    expect(harness.snapshots).toHaveLength(snapshotCount + 2);
-    expect(harness.events).toHaveLength(eventCount);
+    // Each answer is a kick at nothing, which says its side and nothing of any turn; with no
+    // combo to break, the snapshot does not move.
+    expect(harness.flow.snapshot()).toEqual(before);
+    expect(harness.snapshots).toHaveLength(snapshotCount);
+    expect(harness.events.slice(eventCount)).toMatchObject([
+      { kind: "kickedAtNothing", side: "left" },
+      { kind: "kickedAtNothing", side: "right" },
+    ]);
     await toResultFromRoom(harness);
     const log = logOf(harness.flow.snapshot());
     expect(log.ignoredAnswers.slice(0, 2)).toMatchObject([
@@ -1414,17 +1431,17 @@ describe("createVisitFlow: rooms", () => {
     ]);
   }, 60_000);
 
-  it("lights no lantern while a room practises, and a full one when it counts (the game layer)", async () => {
+  it("keeps no score while a room practises, and a fresh one when it counts (the rhythm game)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "room",
-      lantern: null,
+      rhythm: null,
       chase: null,
     });
     practise(harness);
     expect(harness.flow.snapshot()).toMatchObject({
-      lantern: { cells: 3, cellCount: 3 },
+      rhythm: { score: 0, combo: 0, flame: rhythmConfig.flameMax },
       chase: {
         caughtCount: 0,
         streak: 0,
@@ -1434,11 +1451,11 @@ describe("createVisitFlow: rooms", () => {
     });
   }, 60_000);
 
-  it("keeps the lantern full for a visitor who answers only what is there, and counts the chase (the game layer)", async () => {
+  it("keeps Jack's flame full for a visitor who answers only what is there, and counts the chase (the rhythm game)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
-    // Hears everything, so every answer is a catch and gives its cell back.
+    // Hears everything, so every answer is a catch and no creature reaches Jack.
     const hearsAll: Listener = (trial) =>
       trial.kind === "sound" ? trial.ear : null;
     playRoom(
@@ -1456,7 +1473,7 @@ describe("createVisitFlow: rooms", () => {
     expect(caught.length).toBeGreaterThan(0);
     const snapshot = harness.flow.snapshot();
     expect(snapshot).toMatchObject({
-      lantern: { cells: 3 },
+      rhythm: { flame: rhythmConfig.flameMax },
       chase: {
         caughtCount: caught.length,
         streak: caught.length,
@@ -1478,7 +1495,7 @@ describe("createVisitFlow: rooms", () => {
     }
   }, 60_000);
 
-  it("dims the lantern for answers at nothing, and a dark lantern stops nothing (the game layer, 2026-11-17)", async () => {
+  it("takes every kick at nothing, breaks the combo for it, and stops nothing (the rhythm game, 2026-11-18)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
@@ -1487,21 +1504,18 @@ describe("createVisitFlow: rooms", () => {
     harness.flow.answer("left");
     harness.flow.answer("left");
     harness.flow.answer("right");
-    expect(harness.flow.snapshot()).toMatchObject({ lantern: { cells: 0 } });
+    expect(
+      harness.events.filter((event) => event.kind === "kickedAtNothing"),
+    ).toHaveLength(4);
+    expect(harness.flow.snapshot()).toMatchObject({ rhythm: { combo: 0 } });
     const presentedCount = harness.presented.length;
-    // The room goes on: the next trial comes after its own gap, not after a cell is back.
+    // The room goes on: the next trial comes after its own gap.
     harness.advance(
       hearingMethodConfig.gapBetweenTrialsMaxMs +
         audioOutputConfig.scheduleLeadMs +
-        100,
+        2_000,
     );
     expect(harness.presented.length).toBeGreaterThan(presentedCount);
-    // A cell comes back by itself after its wait.
-    harness.advance(lanternConfig.rechargeMs);
-    expect(
-      (harness.flow.snapshot() as { lantern?: { cells: number } }).lantern
-        ?.cells,
-    ).toBeGreaterThan(0);
     await toResultFromRoom(harness);
     const log = logOf(harness.flow.snapshot());
     // Every answer at nothing is logged, none was refused.
@@ -1512,44 +1526,38 @@ describe("createVisitFlow: rooms", () => {
     expect(log.trials.every((trial) => trial.status === "scored")).toBe(true);
   }, 60_000);
 
-  it("takes an answer with a dark lantern, and a catch lights a cell again (the game layer, 2026-11-17)", async () => {
+  it("judges a catch, and catches in a row build the combo (the rhythm game, 2026-11-18)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
-    harness.flow.answer("left");
-    harness.flow.answer("left");
-    harness.flow.answer("left");
-    expect(harness.flow.snapshot()).toMatchObject({ lantern: { cells: 0 } });
     const hearsAll: Listener = (trial) =>
       trial.kind === "sound" ? trial.ear : null;
-    playRoom(harness, hearsAll, () =>
-      harness.events.some(
+    const catches = () =>
+      harness.events.filter(
         (event) =>
           event.kind === "trialScored" && event.trial.outcome === "caught",
-      ),
-    );
-    const firstCatch = harness.events.find(
-      (event) =>
-        event.kind === "trialScored" && event.trial.outcome === "caught",
-    );
-    expect(firstCatch).toBeDefined();
-    expect(
-      (harness.flow.snapshot() as { lantern?: { cells: number } }).lantern
-        ?.cells,
-    ).toBeGreaterThan(0);
+      );
+    playRoom(harness, hearsAll, () => catches().length >= 2);
+    for (const event of catches()) {
+      expect(event).toMatchObject({
+        judgement: expect.stringMatching(/^(perfect|great|good)$/) as unknown,
+      });
+    }
+    const snapshot = harness.flow.snapshot() as {
+      rhythm?: { combo: number; score: number } | null;
+    };
+    expect(snapshot.rhythm?.combo).toBeGreaterThan(0);
+    expect(snapshot.rhythm?.score).toBeGreaterThan(0);
   }, 60_000);
 
   it("ends the visit with soundRefused after three refused plays of one trial (R21.2)", async () => {
     const harness = createHarness();
     await toRoom(harness);
-    // A long calibration repeat started in the shell makes every trial sound busy.
-    let refusals = 0;
+    // Every sound of the room is refused busy, as if something else were playing.
+    harness.refusePlays(...Array.from({ length: 50 }, () => "busy" as const));
     for (let turn = 0; turn < 600 && stageOf(harness) === "room"; turn += 1) {
-      harness.output.playHeadphoneCheck(createSeededRandom(1));
-      refusals += 1;
       harness.advance(50);
     }
-    expect(refusals).toBeGreaterThan(0);
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "exit",
       reason: "soundRefused",
@@ -1708,7 +1716,7 @@ describe("createVisitFlow: pauses", () => {
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
     });
   });
 
@@ -1774,7 +1782,7 @@ describe("createVisitFlow: pauses", () => {
     await harness.settle();
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "room",
-      room: visitRooms("quick")[0],
+      room: visitRooms("full")[0],
     });
     expect(
       harness.events.filter((event) => event.kind === "roomStarted").at(-1),
@@ -1796,6 +1804,8 @@ describe("createVisitFlow: pauses", () => {
       [0, 2, "finished", 1],
       [1, 1, "finished", 1],
       [2, 1, "finished", 1],
+      [3, 1, "finished", 1],
+      [4, 1, "finished", 1],
     ]);
     expect(log.roomAttempts[0]!.engineSeed).not.toBe(
       log.roomAttempts[1]!.engineSeed,
@@ -2001,7 +2011,7 @@ describe("createVisitFlow: stop and leaving", () => {
     harness.flow.keepCalibration();
     expect(stageOf(harness)).toBe("calibration");
     expect(harness.backend.contextCount()).toBe(1);
-    expect(first.visitLog.visitType).toBe("quick");
+    expect(first.visitLog.visitType).toBe("full");
   }, 60_000);
 });
 
@@ -2011,7 +2021,9 @@ describe("createVisitFlow: the replay, the result and the swapped repeat", () =>
     const result = await toResult(harness, unevenListener);
     expect(result.summary).toEqual(summarizeVisit(result.visitLog));
     expect(result.visitLog.trials.length).toBeGreaterThan(0);
-    expect(result.visitLog.roomAttempts).toHaveLength(3);
+    expect(result.visitLog.roomAttempts).toHaveLength(
+      visitRooms("full").length,
+    );
     expect(result.canProceed).toBe(false);
   }, 60_000);
 
@@ -2854,7 +2866,12 @@ describe("createVisitFlow: notifications", () => {
       order.push(`snapshot ${snapshot.stage}`),
     );
     await toRoom(harness);
-    expect(order.slice(-2)).toEqual(["event roomStarted", "snapshot room"]);
+    // The first turn of the practice is cued on the beat with the room's start.
+    expect(order.slice(-3)).toEqual([
+      "event roomStarted",
+      "event turnCued",
+      "snapshot room",
+    ]);
     playRoom(harness, stepListener());
     expect(order.slice(-3)).toEqual([
       "event trialScored",
@@ -2863,7 +2880,7 @@ describe("createVisitFlow: notifications", () => {
     ]);
   }, 60_000);
 
-  it("notifies only of a change, and inside a room only of the lantern, the chase and the room's own tally (R11.3, R11.4, the game layer, one-room)", async () => {
+  it("notifies only of a change, and inside a room only of the rhythm game, the chase and the room's own tally (R11.3, R11.4, the game layer, one-room)", async () => {
     const harness = createHarness();
     await toRoom(harness);
     practise(harness);
@@ -2881,16 +2898,16 @@ describe("createVisitFlow: notifications", () => {
     for (const snapshot of during) {
       // A notification brings a snapshot that differs from the one before it.
       expect(snapshot).not.toEqual(previous);
-      // And only in the lantern, the chase and the tally of each room's sound, which hold
+      // And only in the rhythm game, the chase and the tally of each room's sound, which hold
       // nothing of a trial not yet scored.
       expect({
         ...snapshot,
-        lantern: null,
+        rhythm: null,
         chase: null,
         creatures: null,
       }).toEqual({
         ...before,
-        lantern: null,
+        rhythm: null,
         chase: null,
         creatures: null,
       });
@@ -2911,9 +2928,7 @@ describe("createVisitFlow: notifications", () => {
       throw new Error("snapshot listener");
     });
     harness.flow.subscribe((snapshot) => heard.push(snapshot.stage));
-    expect(() => harness.flow.chooseVisit("quick")).toThrow(
-      "snapshot listener",
-    );
+    expect(() => harness.flow.chooseVisit("full")).toThrow("snapshot listener");
     expect(heard).toEqual(["calibration"]);
     expect(stageOf(harness)).toBe("calibration");
     endThrowing();
@@ -2935,7 +2950,7 @@ describe("createVisitFlow: notifications", () => {
     });
     harness.flow.subscribe((snapshot) => heard.push(snapshot.stage));
     expect(() => harness.flow.proceed()).toThrow("first");
-    expect(heard).toEqual(["roomStarted", "room"]);
+    expect(heard).toEqual(["roomStarted", "turnCued", "room"]);
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "room",
       pause: null,
@@ -3543,7 +3558,8 @@ describe('createVisitFlow: the missed-sound replay (missed-sound-replay design.m
     }, 60_000);
 
     it("a first sound refused busy because the last trial's sound still plays is asked for again one gap later (R6.3, R12.3)", async () => {
-      const harness = createHarness();
+      // Seed 1: with it the last answer of the visit comes while its sound still plays.
+      const harness = createHarness({ seed: 1 });
       const { snapshot } = await enterReplay(harness, busyCaseListener, false);
       const plan = planMissedSoundReplay(snapshot.visitLog);
       harness.flow.startReplay();
@@ -3825,7 +3841,7 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
   const firstCapDb = (harness: Harness): number => {
     const report = harness.output.rangeReport()!;
     return roomSearchCapDb(
-      report.rooms[visitRooms("quick")[0]!.roomId].topLevelDb,
+      report.rooms[visitRooms("full")[0]!.roomId].topLevelDb,
       hearingMethodConfig,
     );
   };
@@ -3841,6 +3857,7 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
     expect(practiceOf(harness)).toEqual({
       phase: "practice",
       soundPlaying: false,
+      soundEar: null,
       heading: practiceCopy.heading,
       lines: practiceCopy.lines,
       soundPlayingLine: null,
@@ -3848,7 +3865,7 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
       notHeardLines: [],
       tryAgainLabel: practiceCopy.tryAgainLabel,
       goOnLabel: practiceCopy.goOnLabel,
-      // Who is practised, never on which side (one-room spec).
+      // Who is practised; its side only while its sound plays (one-room spec).
       practising: harness.flow.snapshot().rooms[0],
       notHeard: [],
     });
@@ -3893,7 +3910,7 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
     });
     await toResultFromRoom(harness);
     const log = logOf(harness.flow.snapshot());
-    const roomCount = visitRooms("quick").length;
+    const roomCount = visitRooms("full").length;
     expect(log.practice?.trials).toHaveLength(2 * roomCount);
     expect(log.trials.some((trial) => "round" in trial)).toBe(false);
     expect(
@@ -3901,7 +3918,7 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
     ).toHaveLength(log.trials.filter((t) => t.status === "scored").length);
   }, 60_000);
 
-  it("says a sound is playing while a practice sound waits for its answer, never which side", async () => {
+  it("says a sound is playing while a practice sound waits for its answer, and from which side only then", async () => {
     const harness = createHarness();
     await toRoom(harness);
     playRoom(
@@ -3909,13 +3926,13 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
       () => null,
       () => practicePresented(harness).length > 0,
     );
+    // The first practice sound is the left ear's, and its creature stands in that doorway.
     expect(practiceOf(harness)).toMatchObject({
       phase: "practice",
       soundPlaying: true,
+      soundEar: "left",
       soundPlayingLine: practiceCopy.soundPlayingLine,
     });
-    const text = JSON.stringify(practiceOf(harness)).toLowerCase();
-    expect(text).not.toMatch(/left|right/);
   }, 60_000);
 
   it("plays a missed side one step louder, then pauses with practiceNotHeard, and goOnWithoutPractice starts the counting", async () => {
@@ -4033,9 +4050,9 @@ describe("createVisitFlow: practice (audible-start, light plan)", () => {
 });
 
 describe('createVisitFlow: one room in which the creatures take turns (one-room design.md, "The flow")', () => {
-  const rooms = visitRooms("quick");
+  const rooms = visitRooms("full");
   const lastRoom = rooms[rooms.length - 1]!;
-  /** Every room of the quick visit in one room run. */
+  /** Every room of the visit in one room run. */
   const allTogether = { roomsTogetherMaxCount: 5 } as const;
 
   const roomSnapshot = (harness: Harness): RoomSnapshot => {
@@ -4108,7 +4125,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       together: true,
       room: rooms[0],
       finishedRoomCount: 0,
-      lantern: null,
+      rhythm: null,
       chase: null,
     });
     expect(snapshot.creatures).toEqual(
@@ -4124,6 +4141,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(snapshot.practice).toEqual({
       phase: "practice",
       soundPlaying: false,
+      soundEar: null,
       heading: rollCallCopy.heading,
       lines: rollCallCopy.lines,
       soundPlayingLine: null,
@@ -4189,8 +4207,8 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
         })),
       ),
     );
-    // Who makes the sound, and never on which side: the screen while a creature's left sound
-    // plays is the screen while its right one does.
+    // Who makes the sound, and the side only while it plays: the screen while a creature's left
+    // sound plays differs from the screen while its right one does in that side and nothing else.
     expect(whilePlaying).toHaveLength(2 * rooms.length);
     rooms.forEach((room, index) => {
       const duringLeft = whilePlaying[2 * index]!;
@@ -4198,13 +4216,15 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       expect(duringLeft.practice).toMatchObject({
         phase: "practice",
         soundPlaying: true,
+        soundEar: "left",
         soundPlayingLine: practiceCopy.soundPlayingLine,
         practising: room,
       });
-      expect(JSON.stringify(duringLeft.practice).toLowerCase()).not.toMatch(
-        /left|right/,
-      );
-      expect(duringRight).toEqual(duringLeft);
+      expect(duringRight.practice).toMatchObject({ soundEar: "right" });
+      expect({ ...duringRight.practice, soundEar: null }).toEqual({
+        ...duringLeft.practice,
+        soundEar: null,
+      });
     });
     // Every catch is a ripple that names its creature, in the past.
     expect(
@@ -4239,9 +4259,10 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       lines: rollCallCopy.countingLines,
       practising: null,
     });
-    expect(counting.lantern).toEqual({
-      cells: lanternConfig.cellCount,
-      cellCount: lanternConfig.cellCount,
+    expect(counting.rhythm).toMatchObject({
+      score: 0,
+      combo: 0,
+      flame: rhythmConfig.flameMax,
     });
     // One scale for the room run: it holds every level any creature's search may ask for.
     expect(counting.chase).toEqual({
@@ -4338,7 +4359,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(log.trials.map((trial) => trial.roomIndex)).toEqual(drawnOrder);
     // And the turns are mixed: early on, every creature has had one.
     expect(
-      new Set(log.trials.slice(0, 12).map((trial) => trial.roomIndex)).size,
+      new Set(log.trials.slice(0, 24).map((trial) => trial.roomIndex)).size,
     ).toBe(rooms.length);
     harness.flow.proceed();
     const result = harness.flow.snapshot() as ResultSnapshot;
@@ -4346,6 +4367,113 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(result.visitLog).toEqual(log);
     expect(result.summary).toEqual(summarizeVisit(log));
   }, 60_000);
+
+  describe("the time limit of the counting (2026-11-20)", () => {
+    const limitMs = 60_000;
+    /** The longest a trial can run on after the limit: its gap's end, the lead and its window. */
+    const overrunMs =
+      hearingMethodConfig.gapBetweenTrialsMaxMs +
+      audioOutputConfig.scheduleLeadMs +
+      hearingMethodConfig.responseWindowMs +
+      2000;
+
+    /** Plays the practice, then the counting up to the end of the room; returns how long that took. */
+    async function countingTakes(
+      options: Parameters<typeof createHarness>[0],
+    ): Promise<{ harness: Harness; countingMs: number }> {
+      const harness = createHarness(options);
+      await toRoom(harness);
+      playRoom(harness, stepListener(), () => countingStarted(harness));
+      const startedAtMs = harness.timer.now();
+      playRoom(harness, stepListener({ left: -35, right: -35 }));
+      return { harness, countingMs: harness.timer.now() - startedAtMs };
+    }
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      "throws a RangeError for the limit %s",
+      (roomTimeLimitMs) => {
+        expect(() =>
+          createVisitFlow({
+            backend: createFakeAudioBackend(),
+            timer: createManualTimer(),
+            seed: flowSeed,
+            roomTimeLimitMs,
+          }),
+        ).toThrow(RangeError);
+      },
+    );
+
+    it("takes null for no limit", () => {
+      expect(() =>
+        createVisitFlow({
+          backend: createFakeAudioBackend(),
+          timer: createManualTimer(),
+          seed: flowSeed,
+          roomTimeLimitMs: null,
+        }),
+      ).not.toThrow();
+    });
+
+    it("shuts the room when the limit is over, ends every open search as a trial limit, and goes on to the replay", async () => {
+      const unlimited = await countingTakes(allTogether);
+      expect(unlimited.countingMs).toBeGreaterThan(limitMs + overrunMs);
+      const { harness, countingMs } = await countingTakes({
+        ...allTogether,
+        roomTimeLimitMs: limitMs,
+      });
+      expect(stageOf(harness)).toBe("missedSoundReplay");
+      expect(countingMs).toBeGreaterThanOrEqual(limitMs);
+      expect(countingMs).toBeLessThanOrEqual(limitMs + overrunMs);
+      const log = logOf(harness.flow.snapshot());
+      expect(log.roomAttempts).toHaveLength(rooms.length);
+      const cutOff = log.roomAttempts.filter(
+        (attempt) =>
+          attempt.result?.left.state === "unreliable" &&
+          attempt.result.left.reasons.includes("trialLimit"),
+      );
+      expect(cutOff.length).toBeGreaterThan(0);
+      for (const attempt of log.roomAttempts) {
+        expect(attempt.ending).toBe("finished");
+        expect(attempt.result).not.toBeNull();
+      }
+      expect(
+        harness.events.filter((event) => event.kind === "roomFinished"),
+      ).toHaveLength(rooms.length);
+      // The result is made from that log as from any other.
+      harness.flow.proceed();
+      const result = harness.flow.snapshot() as ResultSnapshot;
+      expect(result.stage).toBe("result");
+      expect(result.summary).toEqual(summarizeVisit(log));
+    }, 120_000);
+
+    it("does not count a pause against the limit", async () => {
+      const harness = createHarness({
+        ...allTogether,
+        roomTimeLimitMs: limitMs,
+      });
+      await toRoom(harness);
+      playRoom(harness, stepListener(), () => countingStarted(harness));
+      const startedAtMs = harness.timer.now();
+      playRoom(
+        harness,
+        stepListener({ left: -35, right: -35 }),
+        () => harness.timer.now() - startedAtMs >= limitMs / 2,
+      );
+      expect(stageOf(harness)).toBe("room");
+      harness.flow.pause();
+      harness.advance(10 * limitMs);
+      expect(stageOf(harness)).toBe("room");
+      harness.flow.resume();
+      await harness.settle();
+      expect(stageOf(harness)).toBe("room");
+      playRoom(harness, stepListener({ left: -35, right: -35 }));
+      expect(stageOf(harness)).toBe("missedSoundReplay");
+      // The ten limits of the pause were not counted: only the time the room ran was.
+      const ranMs = harness.timer.now() - startedAtMs - 10 * limitMs;
+      expect(ranMs).toBeGreaterThanOrEqual(limitMs);
+      expect(ranMs).toBeLessThanOrEqual(limitMs + overrunMs + 5000);
+    }, 120_000);
+  });
 
   it("keeps each creature's card to its own scored trials, and the chase to all of them", async () => {
     const harness = createHarness(allTogether);
@@ -4542,7 +4670,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(harness.flow.snapshot().pause).toBeNull();
     expect(roomSnapshot(harness)).toMatchObject({
       practice: { phase: "counting", lines: rollCallCopy.countingLines },
-      lantern: { cells: lanternConfig.cellCount },
+      rhythm: { combo: 0, flame: rhythmConfig.flameMax },
     });
     expect(harness.events.slice(-rooms.length)).toEqual(
       rooms.map((room) => ({ kind: "countingStarted", room })),
@@ -4620,23 +4748,15 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     );
   }, 60_000);
 
-  it("logs an answer at nothing against the creature whose turn waits, with a lit lantern and with a dark one (R8.1)", async () => {
+  it("logs every answer at nothing against the creature whose turn waits (R8.1)", async () => {
     const harness = createHarness(allTogether);
     await toRoom(harness);
     rollCall(harness);
-    // Before the first trial of the counting is presented: three answers put the lantern out,
-    // and a fourth is not taken.
+    // Before the first trial of the counting is presented: every answer is taken.
     const sides = ["left", "right", "left", "right"] as const;
-    for (const side of sides.slice(0, lanternConfig.cellCount)) {
+    for (const side of sides) {
       harness.flow.answer(side);
     }
-    expect(roomSnapshot(harness).lantern).toEqual({
-      cells: 0,
-      cellCount: lanternConfig.cellCount,
-    });
-    const dark = harness.flow.snapshot();
-    harness.flow.answer(sides[lanternConfig.cellCount]!);
-    expect(harness.flow.snapshot()).toBe(dark);
     await toResultFromRoom(harness);
     const log = logOf(harness.flow.snapshot());
     const turns = createSeededRandom(
@@ -4646,14 +4766,14 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       rooms[
         Math.min(rooms.length - 1, Math.floor(turns.next() * rooms.length))
       ]!;
-    // The creature drawn first kept its turn through the dark.
+    // The creature drawn first kept its turn.
     expect(log.trials[0]?.roomIndex).toBe(firstTurn.roomIndex);
     expect(
       log.ignoredAnswers
-        .slice(0, lanternConfig.cellCount + 1)
+        .slice(0, sides.length)
         .map(({ side, roomIndex, attempt }) => ({ side, roomIndex, attempt })),
     ).toEqual(
-      sides.slice(0, lanternConfig.cellCount + 1).map((side) => ({
+      sides.map((side) => ({
         side,
         roomIndex: firstTurn.roomIndex,
         attempt: 1,
@@ -4688,7 +4808,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(harness.timer.pendingCount()).toBe(0);
   }, 60_000);
 
-  it("with two rooms at a time runs the first two together, rests, and runs the last alone (D1)", async () => {
+  it("with two rooms at a time runs the first two together, rests, runs the next two, rests, and runs the last alone (D1)", async () => {
     const harness = createHarness({ roomsTogetherMaxCount: 2 });
     await toRoom(harness);
     expect(roomSnapshot(harness).creatures?.map(({ room }) => room)).toEqual([
@@ -4709,14 +4829,30 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     });
     harness.flow.proceed();
     await harness.settle();
+    expect(roomSnapshot(harness)).toMatchObject({
+      together: true,
+      room: rooms[2],
+    });
+    playRoom(harness, stepListener());
+    expect(harness.flow.snapshot()).toMatchObject({
+      stage: "betweenRooms",
+      finishedRoom: rooms[3],
+      nextRoom: rooms[4],
+      finishedRoomCount: 4,
+      canProceed: true,
+    });
+    harness.flow.proceed();
+    await harness.settle();
     const alone = roomSnapshot(harness);
-    expect(alone).toMatchObject({ together: true, room: rooms[2] });
+    expect(alone).toMatchObject({ together: true, room: rooms[4] });
     expect(
       alone.creatures?.map(({ room, state }) => [room.roomIndex, state]),
     ).toEqual([
       [0, "gone"],
       [1, "gone"],
-      [2, "about"],
+      [2, "gone"],
+      [3, "gone"],
+      [4, "about"],
     ]);
     expect(
       harness.events.filter((event) => event.kind === "roomStarted"),
@@ -4726,19 +4862,28 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(harness.roomSpans).toEqual([
       { riseLimitPer: "sound" },
       { riseLimitPer: "sound" },
+      { riseLimitPer: "sound" },
       undefined,
     ]);
     const log = logOf(harness.flow.snapshot());
-    const [first, second, third] = log.roomAttempts;
+    const [first, second, third, fourth, fifth] = log.roomAttempts;
     expect(first!.startedAtMs).toBe(second!.startedAtMs);
+    expect(third!.startedAtMs).toBe(fourth!.startedAtMs);
     expect(third!.startedAtMs).toBeGreaterThanOrEqual(
       Math.max(first!.endedAtMs, second!.endedAtMs),
     );
-    // Every trial of the last room came after every trial of the two that ran together.
+    expect(fifth!.startedAtMs).toBeGreaterThanOrEqual(
+      Math.max(third!.endedAtMs, fourth!.endedAtMs),
+    );
+    // Every trial of a later run came after every trial of the earlier ones.
     const order = log.trials.map((trial) => trial.roomIndex);
-    const firstOfLast = order.indexOf(2);
-    expect(new Set(order.slice(0, firstOfLast))).toEqual(new Set([0, 1]));
-    expect(new Set(order.slice(firstOfLast))).toEqual(new Set([2]));
+    const firstOfThird = order.findIndex((roomIndex) => roomIndex >= 2);
+    const firstOfLast = order.indexOf(4);
+    expect(new Set(order.slice(0, firstOfThird))).toEqual(new Set([0, 1]));
+    expect(new Set(order.slice(firstOfThird, firstOfLast))).toEqual(
+      new Set([2, 3]),
+    );
+    expect(new Set(order.slice(firstOfLast))).toEqual(new Set([4]));
     // The two that ran together took turns by their own turn seed.
     const turns = createSeededRandom(
       turnSeedOf([first!.engineSeed, second!.engineSeed]),
@@ -4762,7 +4907,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     expect(harness.flow.snapshot()).toMatchObject({
       stage: "room",
       pause: { reason: "deviceChanged" },
-      lantern: null,
+      rhythm: null,
       chase: null,
     });
     expect(harness.output.rangeReport()).toBeNull();
@@ -4783,7 +4928,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       room: others[0],
       finishedRoomCount: 1,
       practice: { phase: "practice", practising: others[0] },
-      lantern: null,
+      rhythm: null,
       chase: null,
     });
     expect(again.creatures).toEqual(

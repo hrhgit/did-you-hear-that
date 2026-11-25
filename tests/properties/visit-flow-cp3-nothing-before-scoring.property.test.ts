@@ -3,7 +3,6 @@ import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
-import { lanternConfig } from "../../src/config/lantern-config";
 import { createSeededRandom } from "../../src/config/seeded-random";
 import type { VisitSnapshot } from "../../src/session/visit-flow-types";
 import { playVisit } from "../listeners/simulated-visitor";
@@ -40,16 +39,16 @@ const probeSpanMs =
   hearingMethodConfig.responseWindowMs;
 
 /**
- * A snapshot without the visitor's lantern. The lantern is the one thing a room shows that moves
- * between two decisions: it follows the visitor's own answers and the clock, and the checks below
- * hold it to exactly that (the game layer, 2026-11-16).
+ * A snapshot without the rhythm game's standing. The standing is the one thing a room shows that
+ * moves without a decision: a kick at nothing breaks the combo, and the checks below hold it to
+ * exactly that (the rhythm game, 2026-11-18).
  */
-const withoutLantern = (snapshot: VisitSnapshot): unknown =>
-  snapshot.stage === "room" ? { ...snapshot, lantern: null } : snapshot;
+const withoutRhythm = (snapshot: VisitSnapshot): unknown =>
+  snapshot.stage === "room" ? { ...snapshot, rhythm: null } : snapshot;
 
-/** The cells of the lantern a snapshot shows, or null where it shows none. */
-const lanternCells = (snapshot: VisitSnapshot): number | null =>
-  snapshot.stage === "room" ? (snapshot.lantern?.cells ?? null) : null;
+/** The combo a snapshot shows, or null where it shows none. */
+const comboOf = (snapshot: VisitSnapshot): number | null =>
+  snapshot.stage === "room" ? (snapshot.rhythm?.combo ?? null) : null;
 
 /** Whether an entry is something the visitor did that may change what is shown. */
 const isVisitorStep = (entry: TimelineEntry): boolean =>
@@ -92,10 +91,7 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               }
               const now = harness.flow.snapshot();
               if (
-                !isDeepStrictEqual(
-                  withoutLantern(now),
-                  withoutLantern(baseline),
-                )
+                !isDeepStrictEqual(withoutRhythm(now), withoutRhythm(baseline))
               ) {
                 differences.push(
                   `${where} at ${String(harness.now())}: ${JSON.stringify(now)} after ${JSON.stringify(baseline)}`,
@@ -103,6 +99,11 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               }
             };
             harness.flow.onEvent((event) => {
+              // The cue of a turn on the beat comes in the same step as what came before it (a
+              // decision, the start or a resume), alike for every turn: it begins no stretch.
+              if (event.kind === "turnCued") {
+                return;
+              }
               // The practice before the counting is not a stretch: what it shows (that a sound is
               // playing, never its side) is counted nowhere (audible-start, light plan). The first
               // stretch of a room run begins when its counting does.
@@ -146,25 +147,8 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
 
             // Within the counting of a room run, the timer hands out only decisions (of a trial or
             // of a reminder sound after a long quiet, the game layer of 2026-11-17), a room's end
-            // with its last decision, and one cell of the lantern at a time. A cell comes back
-            // exactly one wait after an answer or after the cell before it, so the moment follows
-            // the visitor's own answers and no trial. The counting begins after the practice.
-            const waitStartsMs: number[] = [];
-            let lastSnapshot: VisitSnapshot | null = null;
-            const cellCameBack = (snapshot: VisitSnapshot): boolean => {
-              const before =
-                lastSnapshot === null ? null : lanternCells(lastSnapshot);
-              const after = lanternCells(snapshot);
-              return (
-                lastSnapshot !== null &&
-                before !== null &&
-                after === before + 1 &&
-                isDeepStrictEqual(
-                  withoutLantern(snapshot),
-                  withoutLantern(lastSnapshot),
-                )
-              );
-            };
+            // with its last decision, and the cue of the next turn, alike for every turn, with
+            // the decision before it. The counting begins after the practice.
             let inRun = false;
             let aCreatureLeft = false;
             let previous: "scored" | "finished" | "counting" | null = null;
@@ -180,9 +164,6 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                 previousAtMs = entry.atMs;
                 continue;
               }
-              if (entry.kind === "action" && entry.name === "answer") {
-                waitStartsMs.push(entry.atMs);
-              }
               if (
                 inRun &&
                 entry.cause === "timer" &&
@@ -194,28 +175,15 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                     previous === "counting" ||
                     previous === "scored") &&
                   previousAtMs === entry.atMs;
-                const cameBack =
-                  entry.kind === "snapshot" && cellCameBack(entry.snapshot);
-                if (cameBack) {
-                  expect(
-                    waitStartsMs.some(
-                      (startMs) =>
-                        Math.abs(
-                          startMs + lanternConfig.rechargeMs - entry.atMs,
-                        ) < 1e-6,
-                    ),
-                    `a cell came back at ${String(entry.atMs)}, which is not one wait after an answer or after the cell before it`,
-                  ).toBe(true);
-                  waitStartsMs.push(entry.atMs);
-                }
                 const allowed =
                   entry.kind === "event"
                     ? entry.event.kind === "trialScored" ||
                       entry.event.kind === "reminderSoundScored" ||
                       (entry.event.kind === "roomFinished" &&
                         previous === "scored" &&
-                        previousAtMs === entry.atMs)
-                    : withDecision || cameBack;
+                        previousAtMs === entry.atMs) ||
+                      (entry.event.kind === "turnCued" && withDecision)
+                    : withDecision;
                 expect(
                   allowed,
                   `${entry.kind} ${JSON.stringify(entry.kind === "event" ? entry.event.kind : entry.snapshot.stage)} handed out by the timer at ${String(entry.atMs)}`,
@@ -224,8 +192,9 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                   handedOutAfterACreatureLeftCount += 1;
                 }
               }
-              if (entry.kind === "snapshot") {
-                lastSnapshot = entry.snapshot;
+              if (entry.kind === "event" && entry.event.kind === "turnCued") {
+                // The cue rides with the decision before it.
+                continue;
               }
               if (entry.kind === "event" || entry.kind === "snapshot") {
                 previous =
@@ -316,10 +285,10 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
               }
             }
 
-            // An answer that decides nothing hands out no event and changes nothing but the
-            // lantern, which it dims by one cell. An answer that decides a trial or a reminder
-            // lights one cell for a catch and dims one for the wrong side or a sound at nothing.
-            // A pause takes no answer; a dark lantern takes every one (the game layer, 2026-11-17).
+            // An answer that decides nothing hands out only a kick at nothing, and changes nothing
+            // but the combo, which it breaks. An answer that decides a trial or a reminder adds one
+            // to the combo for a catch and breaks it for the wrong side or a sound at nothing. A
+            // pause takes no answer (the rhythm game, 2026-11-18).
             for (const entry of entries) {
               if (entry.kind !== "action" || entry.name !== "answer") {
                 continue;
@@ -333,32 +302,34 @@ describe("visit flow CP3. Nothing about a trial before it is scored (Universal; 
                   ? [inside.event]
                   : [],
               );
-              const cellsBefore = lanternCells(entry.snapshotBefore);
-              const cellsAfter = lanternCells(entry.snapshotAfter);
+              const comboBefore = comboOf(entry.snapshotBefore);
+              const comboAfter = comboOf(entry.snapshotAfter);
               const taken = entry.snapshotBefore.pause === null;
-              const lit = (cells: number): number =>
-                Math.min(lanternConfig.cellCount, cells + 1);
-              const dimmed = (cells: number): number => Math.max(0, cells - 1);
               if (scoredInside.length === 0) {
                 expect(
-                  made.filter((inside) => inside.kind === "event"),
+                  made.flatMap((inside) =>
+                    inside.kind === "event" &&
+                    inside.event.kind !== "kickedAtNothing"
+                      ? [inside.event.kind]
+                      : [],
+                  ),
                 ).toEqual([]);
-                expect(withoutLantern(entry.snapshotAfter)).toEqual(
-                  withoutLantern(entry.snapshotBefore),
+                expect(withoutRhythm(entry.snapshotAfter)).toEqual(
+                  withoutRhythm(entry.snapshotBefore),
                 );
-                if (cellsBefore !== null) {
-                  expect(cellsAfter).toBe(
-                    taken ? dimmed(cellsBefore) : cellsBefore,
-                  );
+                if (comboBefore !== null) {
+                  expect(comboAfter).toBe(taken ? 0 : comboBefore);
                 }
-              } else if (cellsBefore !== null && cellsAfter !== null) {
+              } else if (
+                comboBefore !== null &&
+                comboAfter !== null &&
+                scoredInside.every((event) => event.kind === "trialScored")
+              ) {
                 expect(taken).toBe(true);
                 const caught = scoredInside.some(
                   (event) => event.trial.outcome === "caught",
                 );
-                expect(cellsAfter).toBe(
-                  caught ? lit(cellsBefore) : dimmed(cellsBefore),
-                );
+                expect(comboAfter).toBe(caught ? comboBefore + 1 : 0);
               }
             }
           },

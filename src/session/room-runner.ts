@@ -27,7 +27,9 @@ import type {
   ScoredVisitTrial,
   VisitRoom,
 } from "./visit-flow-types";
+import type { BeatSlot, BeatTiming } from "./beat-clock";
 import { noSoundWindowStartMs, soundWindowStartMs } from "./window-start";
+import { rhythmConfig } from "../config/rhythm-config";
 
 /**
  * What a test listener needs to answer a trial, handed to `onTrialPresented` when the trial's
@@ -106,6 +108,8 @@ interface RunnerCommonOptions {
   /** The test hook of D26. */
   readonly onTrialPresented?: (trial: PresentedTrial) => void;
   readonly settings?: RoomRunnerSettings;
+  /** Puts every turn on the room's beat (the rhythm game, 2026-11-18). Absent: no beat. */
+  readonly beat?: BeatTiming;
 }
 
 export interface RoomRunnerOptions extends RunnerCommonOptions, RoomTrack {
@@ -131,13 +135,18 @@ export interface RoomGameOptions {
   readonly chimeAboveCaughtDb: number;
   /** The loudest the chime plays. */
   readonly chimeMaxLevelDb: number;
+  /**
+   * The level of the puff when a creature gets to Jack: a sound that went by, one answered on the
+   * wrong side, or a press at a turn with no sound. Absent: no puff.
+   */
+  readonly missLevelDb?: number;
   /** Called with a decided reminder's log entry and the track it was played for. */
   readonly reminderScored: (
     entry: ScoredReminderSound,
     track: RoomTrack,
   ) => void;
   /** Called after an answer that decided nothing has been logged. */
-  readonly answerIgnored: () => void;
+  readonly answerIgnored: (side: Ear, atMs: number) => void;
 }
 
 /** What the runner of several rooms together takes (one-room design.md, "The mixed runner"). */
@@ -157,6 +166,13 @@ export interface MixedRoomRunnerOptions extends RunnerCommonOptions {
   readonly finished: () => void;
   /** The game layer. Absent: no reminder, no chime. */
   readonly game?: RoomGameOptions;
+  /**
+   * How long the Counting may last, in time the room is running: a pause does not count. When it
+   * is up, a trial in its gap is dropped and a trial in its window is decided first; then every
+   * search that is still open is cut off (`ThresholdSearch.cutOff`), told through `trackFinished`,
+   * and the run is over. Absent: no limit.
+   */
+  readonly timeLimitMs?: number;
 }
 
 export type RoomRunnerState =
@@ -275,11 +291,84 @@ export function createMixedRoomRunner(
   const lastCaughtDb = new Map<RoomTrack, Partial<Record<Ear, number>>>();
   /** The ear of the last reminder for a trial with no sound, so they take turns. */
   let lastSilentReminderEar: Ear = "right";
+  /** The off-beat of the turn just put on the beat, told once the step that chose it is over. */
+  let pendingCueMs: number | null = null;
+  const beat = options.beat;
+  const timeLimitMs = options.timeLimitMs;
+  /** The time the room has run before the stretch under way, and when that stretch began. */
+  let usedMs = 0;
+  let runningSinceMs = 0;
+  let deadline: TimerHandle | null = null;
+  /** True once the time limit has passed: the run ends at the next Decision. */
+  let timeUp = false;
+
+  /** Tells the cue of the turn put on the beat, if any. Called at the end of every step. */
+  const flushCue = (): void => {
+    if (pendingCueMs === null || beat === undefined) {
+      return;
+    }
+    const atMs = pendingCueMs;
+    pendingCueMs = null;
+    beat.cued(atMs);
+  };
 
   const clearTimer = (): void => {
     if (handle !== null) {
       timer.clearTimeout(handle);
       handle = null;
+    }
+  };
+
+  /** Starts a stretch of running time, with the deadline for what is left of the limit. */
+  const startClock = (): void => {
+    runningSinceMs = timer.now();
+    if (timeLimitMs === undefined || deadline !== null) {
+      return;
+    }
+    deadline = timer.setTimeout(
+      () => {
+        deadline = null;
+        timeIsUp();
+      },
+      Math.max(0, timeLimitMs - usedMs),
+    );
+  };
+
+  /** Ends the stretch of running time, for a pause or the end of the run. */
+  const stopClock = (): void => {
+    usedMs += timer.now() - runningSinceMs;
+    if (deadline !== null) {
+      timer.clearTimeout(deadline);
+      deadline = null;
+    }
+  };
+
+  /** Cuts off every search still open, and tells each one's end. */
+  const cutOffOpenTracks = (): void => {
+    for (const track of tracks) {
+      if (!finishedTracks.has(track)) {
+        finishedTracks.add(track);
+        options.trackFinished(track, track.search.cutOff().result);
+      }
+    }
+  };
+
+  /** Ends the run at once, because its time is up and no trial is presented. */
+  const endForTime = (): void => {
+    clearTimer();
+    stopClock();
+    pendingCueMs = null;
+    state = "finished";
+    turn = null;
+    cutOffOpenTracks();
+    options.finished();
+  };
+
+  /** The time limit has passed. A trial in its window is decided first; any other wait ends. */
+  const timeIsUp = (): void => {
+    timeUp = true;
+    if (state === "waitingGap") {
+      endForTime();
     }
   };
 
@@ -305,16 +394,41 @@ export function createMixedRoomRunner(
 
   const waitGap = (track: RoomTrack, trial: Trial): void => {
     state = "waitingGap";
-    handle = timer.setTimeout(() => {
-      handle = null;
-      present(track, trial);
-    }, trial.gapBeforeMs);
+    const clock = beat?.clock() ?? null;
+    if (beat === undefined || clock === null) {
+      handle = timer.setTimeout(() => {
+        handle = null;
+        present(track, trial, null);
+      }, trial.gapBeforeMs);
+      return;
+    }
+    // The gap, at least the cue's lead, and then the next off-beat. The same for every kind of
+    // turn, so the cue says when a turn comes and never whether it makes a sound or where.
+    const slot = clock.slotNotBefore(
+      timer.now() + Math.max(trial.gapBeforeMs, beat.cueLeadMs),
+    );
+    pendingCueMs = slot.pageMs;
+    handle = timer.setTimeout(
+      () => {
+        handle = null;
+        present(track, trial, slot);
+      },
+      Math.max(
+        0,
+        slot.pageMs -
+          settings.scheduleLeadMs -
+          rhythmConfig.presentAheadMs -
+          timer.now(),
+      ),
+    );
   };
 
   /** Waits the trial's gap, with a reminder first when the room has been quiet too long. */
   const waitNext = (track: RoomTrack, trial: Trial): void => {
+    // On the beat every turn is cued, so the room is never silent long enough to need a reminder.
     if (
       game === undefined ||
+      beat !== undefined ||
       timer.now() - quietSinceMs < game.reminderAfterQuietMs
     ) {
       waitGap(track, trial);
@@ -341,6 +455,21 @@ export function createMixedRoomRunner(
         game.chimeMaxLevelDb,
       ),
       purpose: "chime",
+      random: soundRandom,
+    });
+  };
+
+  /** Plays the puff when a creature gets to Jack, on the side it came from. */
+  const miss = (ear: Ear): void => {
+    if (game?.missLevelDb === undefined) {
+      return;
+    }
+    output.fadeOutSound();
+    output.play({
+      soundId: "snuff",
+      ear,
+      levelDb: game.missLevelDb,
+      purpose: "miss",
       random: soundRandom,
     });
   };
@@ -384,6 +513,7 @@ export function createMixedRoomRunner(
       }
       // A reminder the output would not play is skipped: the trial waits its own gap.
       waitGap(track, trial);
+      flushCue();
       return;
     }
     const windowStartMs = soundWindowStartMs(
@@ -459,12 +589,26 @@ export function createMixedRoomRunner(
       quietSinceMs = timer.now();
       chime(played.ear, played.playedLevelDb);
     }
+    if (timeUp) {
+      stopClock();
+      state = "finished";
+      turn = null;
+      game?.reminderScored(entry, track);
+      cutOffOpenTracks();
+      options.finished();
+      return;
+    }
     // The trial behind it waits its own gap before anything is told: a callback may pause.
     waitGap(track, trial);
     game?.reminderScored(entry, track);
+    flushCue();
   };
 
-  const present = (track: RoomTrack, trial: Trial): void => {
+  const present = (
+    track: RoomTrack,
+    trial: Trial,
+    slot: BeatSlot | null,
+  ): void => {
     const { room, attempt } = track;
     const presentedAtMs = timer.now();
     let played: PlayedTrial;
@@ -476,6 +620,7 @@ export function createMixedRoomRunner(
         levelDb: trial.levelDb,
         purpose: "trial",
         random: soundRandom,
+        ...(slot === null ? {} : { startAtMs: slot.audioMs }),
       });
       if (outcome.kind === "refused") {
         if (outcome.reason === "notRunning") {
@@ -498,6 +643,7 @@ export function createMixedRoomRunner(
           return;
         }
         waitGap(track, trial);
+        flushCue();
         return;
       }
       refusalsInARow = 0;
@@ -525,10 +671,14 @@ export function createMixedRoomRunner(
         clampLimit: outcome.clampLimit,
       };
     } else {
-      windowStartMs = noSoundWindowStartMs(
-        { presentedAtMs, latestOffsetMs: latestOffset.latestOffsetMs },
-        settings,
-      );
+      // On the beat a turn with no sound opens its window on its off-beat, as a sound would.
+      windowStartMs =
+        slot === null
+          ? noSoundWindowStartMs(
+              { presentedAtMs, latestOffsetMs: latestOffset.latestOffsetMs },
+              settings,
+            )
+          : Math.max(presentedAtMs, slot.pageMs);
       played = {
         kind: "noSound",
         roomIndex: room.roomIndex,
@@ -605,6 +755,13 @@ export function createMixedRoomRunner(
         [played.ear]: played.playedLevelDb,
       });
       chime(played.ear, played.playedLevelDb);
+    } else if (
+      played.kind === "sound" &&
+      (outcome === "missed" || outcome === "wrongSide")
+    ) {
+      miss(played.ear);
+    } else if (played.kind !== "sound" && outcome === "falseAlarm") {
+      miss(response === "left" || response === "right" ? response : "left");
     }
     if (step.kind === "finished") {
       finishedTracks.add(track);
@@ -612,24 +769,37 @@ export function createMixedRoomRunner(
     // The next turn is drawn, and its gap begun, before anything is told: a callback may pause.
     turn = drawTurn();
     const next = turn === null ? null : waitingTrial(turn);
+    // With the time over, a search that is still open ends here instead of presenting again.
+    const timeIsOver = timeUp && turn !== null && next !== null;
     if (turn === null || next === null) {
+      turn = null;
+      state = "finished";
+    } else if (timeIsOver) {
       turn = null;
       state = "finished";
     } else {
       waitNext(turn, next);
     }
+    if (state === "finished") {
+      stopClock();
+    }
     options.scored(entry, track);
     if (step.kind === "finished") {
       options.trackFinished(track, step.result);
     }
+    if (timeIsOver) {
+      cutOffOpenTracks();
+    }
     if (finishedTracks.size === tracks.length) {
       options.finished();
     }
+    flushCue();
   };
 
   /** Stops the run's timer and logs the presented trial, if any, as discarded (R12.3, R12.4). */
   const interrupt = (): void => {
     clearTimer();
+    pendingCueMs = null;
     if (presentation !== null) {
       if (presentation.kind === "reminder") {
         recorder.reminderDiscarded(presentation.played, timer.now());
@@ -658,7 +828,9 @@ export function createMixedRoomRunner(
         );
       }
       quietSinceMs = timer.now();
+      startClock();
       waitGap(turn, trial);
+      flushCue();
     },
 
     answer(side, pressedAtMs) {
@@ -689,7 +861,7 @@ export function createMixedRoomRunner(
         roomIndex: turn.room.roomIndex,
         attempt: turn.attempt,
       });
-      game?.answerIgnored();
+      game?.answerIgnored(side, atMs);
     },
 
     pause() {
@@ -697,6 +869,7 @@ export function createMixedRoomRunner(
         return;
       }
       interrupt();
+      stopClock();
       state = "paused";
     },
 
@@ -710,7 +883,14 @@ export function createMixedRoomRunner(
         return;
       }
       quietSinceMs = timer.now();
+      if (timeUp) {
+        // The limit passed in the window that the pause discarded.
+        endForTime();
+        return;
+      }
+      startClock();
       waitGap(turn, trial);
+      flushCue();
     },
 
     abandon() {
@@ -718,6 +898,7 @@ export function createMixedRoomRunner(
         return;
       }
       interrupt();
+      stopClock();
       state = "finished";
     },
 

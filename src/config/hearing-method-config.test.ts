@@ -20,7 +20,6 @@ describe("hearingMethodConfig", () => {
       trialLimitPerEarPerRoomCount: 20,
       swappedRepeatDifferenceDb: 15,
       roomFrequenciesHz: {
-        quick: [1000, 4000, 8000],
         full: [500, 1000, 2000, 4000, 8000],
       },
       noSoundTrialProbabilityFraction: 0.2,
@@ -113,19 +112,12 @@ describe("hearingMethodConfig", () => {
         }
       }
     });
-
-    it("makes every quick visit room a full visit room", () => {
-      for (const roomHz of config.roomFrequenciesHz.quick) {
-        expect(config.roomFrequenciesHz.full).toContain(roomHz);
-      }
-    });
   });
 
   describe("freezing", () => {
     it("freezes the object, the room lists object and every room list", () => {
       expect(Object.isFrozen(config)).toBe(true);
       expect(Object.isFrozen(config.roomFrequenciesHz)).toBe(true);
-      expect(Object.isFrozen(config.roomFrequenciesHz.quick)).toBe(true);
       expect(Object.isFrozen(config.roomFrequenciesHz.full)).toBe(true);
     });
 
@@ -138,11 +130,13 @@ describe("hearingMethodConfig", () => {
     });
 
     it("throws a TypeError when a room list is replaced and keeps its value", () => {
-      const writable = config.roomFrequenciesHz as { quick: readonly number[] };
+      const writable = config.roomFrequenciesHz as { full: readonly number[] };
       expect(() => {
-        writable.quick = [250];
+        writable.full = [250];
       }).toThrow(TypeError);
-      expect(config.roomFrequenciesHz.quick).toEqual([1000, 4000, 8000]);
+      expect(config.roomFrequenciesHz.full).toEqual([
+        500, 1000, 2000, 4000, 8000,
+      ]);
     });
 
     it("throws a TypeError when an element of a room list is assigned and keeps its value", () => {

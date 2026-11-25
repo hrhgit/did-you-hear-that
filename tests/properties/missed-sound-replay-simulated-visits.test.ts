@@ -44,7 +44,6 @@ const attentiveListener: PsychometricListenerParameters = Object.freeze({
 });
 
 const flowSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261211,
   full: 20261212,
 });
 
@@ -108,7 +107,7 @@ const replayPlaysOf = (harness: VisitHarness) =>
   );
 
 describe("missed-sound replay: simulated visits (R17.6)", () => {
-  for (const visitType of ["quick", "full"] as const) {
+  for (const visitType of ["full"] as const) {
     it(
       `a ${visitType} visit plays its whole plan with the Purpose replay, watched to the end, and reaches the result with the same log`,
       async () => {
@@ -181,7 +180,7 @@ describe("missed-sound replay: simulated visits (R17.6)", () => {
     async () => {
       const { harness, entered, result } = await playToResult(
         scriptFor(
-          "quick",
+          "full",
           {
             kind: "function",
             respond: (trial) => (trial.kind === "sound" ? trial.ear : "none"),

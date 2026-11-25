@@ -11,7 +11,7 @@ import { leavingCopy } from "../../copy/leaving-copy";
 import { outputStateCopy } from "../../copy/output-state-copy";
 import { notHeardLines, practiceCopy } from "../../copy/practice-copy";
 import { replayCopy } from "../../copy/replay-copy";
-import { chaseCopy, roomCopy } from "../../copy/room-copy";
+import { roomCopy } from "../../copy/room-copy";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
@@ -48,6 +48,26 @@ import {
   type SwappedRepeatViewInput,
 } from "../../session/swapped-repeat-view";
 import type { RoomSummary } from "../../session/visit-flow-types";
+import type { RhythmStanding } from "../../session/rhythm-score";
+
+const standingOf = (changes: Partial<RhythmStanding> = {}): RhythmStanding => ({
+  score: 4200,
+  combo: 12,
+  maxCombo: 15,
+  flame: 70,
+  flameMax: 100,
+  relights: 0,
+  counts: {
+    perfect: 0,
+    great: 0,
+    good: 0,
+    miss: 0,
+    wrong: 0,
+    trick: 0,
+    steady: 0,
+  },
+  ...changes,
+});
 
 const quickRooms: readonly VisitRoom[] = [
   { roomIndex: 0, roomId: "corridor", frequencyHz: 1000 },
@@ -61,7 +81,7 @@ function base<Stage extends VisitStage>(
 ): SnapshotBase<Stage> {
   return {
     stage,
-    visitType: "quick",
+    visitType: "full",
     rooms: quickRooms,
     finishedRoomCount,
     canProceed: false,
@@ -148,7 +168,7 @@ const entry: VisitSnapshot = {
   visitType: null,
   rooms: [],
   choices: [
-    { visitType: "quick", roomCount: 3 },
+    { visitType: "full", roomCount: 3 },
     { visitType: "full", roomCount: 5 },
   ],
 };
@@ -471,7 +491,7 @@ describe("screenOfSnapshot", () => {
       });
     });
 
-    describe("with the lantern and the chase of a room that counts (game layer)", () => {
+    describe("with the rhythm game of a room that counts", () => {
       const chase = {
         caughtCount: 4,
         streak: 3,
@@ -480,53 +500,38 @@ describe("screenOfSnapshot", () => {
         topLevelDb: -10,
         floorLevelDb: -70,
       };
-      const counting = (cells: number) =>
+      const counting = (changes: Partial<RhythmStanding> = {}) =>
         screenOfSnapshot({
           ...base("room", 2),
           room: stairs,
           practice: practice("counting", false),
-          lantern: { cells, cellCount: 3 },
+          rhythm: standingOf(changes),
           chase,
         });
 
-      it("shows the lantern, the count and the row", () => {
-        expect(counting(2).chase).toEqual({
-          lantern: {
-            cells: 2,
-            cellCount: 3,
-            label: "Lantern: 2 of 3 lights",
-            darkLine: null,
-          },
+      it("shows the score, the combo, Jack's flame and the count", () => {
+        expect(counting().chase).toEqual({
+          score: 4200,
+          combo: 12,
+          maxCombo: 15,
+          flame: 0.7,
+          label: "4200 points, combo 12. Jack's flame: 70 of 100",
+          relitLine: null,
           caughtLine: "4 caught",
-          streakLine: "3 in a row",
         });
       });
 
-      it("says the lantern is out only while it is dark", () => {
-        expect(counting(0).chase?.lantern.darkLine).toBe(
-          chaseCopy.lanternDarkLine,
-        );
-        expect(counting(1).chase?.lantern.darkLine).toBeNull();
+      it("says Jack was lit again only once his candle has gone out", () => {
+        expect(counting({ relights: 2 }).chase?.relitLine).toMatch(/2 times/);
+        expect(counting().chase?.relitLine).toBeNull();
       });
 
-      it("changes nothing but the lantern when only the lantern changes", () => {
-        const withoutLantern = (cells: number) => {
-          const screen = counting(cells);
-          return { ...screen, chase: { ...screen.chase, lantern: null } };
-        };
-        expect(withoutLantern(0)).toEqual(withoutLantern(3));
-      });
-
-      it("says no row below two caught sounds", () => {
-        const screen = screenOfSnapshot({
-          ...base("room", 2),
-          room: stairs,
-          practice: practice("counting", false),
-          lantern: { cells: 3, cellCount: 3 },
-          chase: { ...chase, streak: 1 },
+      it("changes nothing but the chase when only the standing changes", () => {
+        const withoutChase = (changes: Partial<RhythmStanding>) => ({
+          ...counting(changes),
+          chase: null,
         });
-        expect(screen.chase?.streakLine).toBeNull();
-        expect(screen.chase?.caughtLine).toBe("4 caught");
+        expect(withoutChase({ combo: 0, flame: 10 })).toEqual(withoutChase({}));
       });
 
       it("has no chase in the practice or while paused", () => {
@@ -535,7 +540,7 @@ describe("screenOfSnapshot", () => {
             ...base("room", 2),
             room: stairs,
             practice: practice("practice", false),
-            lantern: null,
+            rhythm: null,
             chase: null,
           }).chase,
         ).toBeNull();
@@ -545,7 +550,7 @@ describe("screenOfSnapshot", () => {
             room: stairs,
             pause: { reason: "visitor" },
             practice: practice("counting", false),
-            lantern: { cells: 1, cellCount: 3 },
+            rhythm: standingOf(),
             chase,
           }).chase,
         ).toBeNull();
@@ -584,6 +589,7 @@ describe("screenOfSnapshot", () => {
     ): RoomPractice => ({
       phase,
       soundPlaying: false,
+      soundEar: null,
       heading: phase === "counting" ? null : rollCallCopy.heading,
       lines:
         phase === "counting" ? rollCallCopy.countingLines : rollCallCopy.lines,
@@ -599,12 +605,17 @@ describe("screenOfSnapshot", () => {
     const rollCallOf = (
       practising: VisitRoom,
       soundPlaying: boolean,
+      soundEar: "left" | "right" = "left",
     ): RoomSnapshot => ({
       ...base("room", 0),
       room: practising,
       together: true,
-      practice: practiceOf("practice", { practising, soundPlaying }),
-      lantern: null,
+      practice: practiceOf("practice", {
+        practising,
+        soundPlaying,
+        soundEar: soundPlaying ? soundEar : null,
+      }),
+      rhythm: null,
       chase: null,
       creatures: allAbout,
     });
@@ -624,14 +635,14 @@ describe("screenOfSnapshot", () => {
       room: nursery,
       together: true,
       practice: practiceOf("counting"),
-      lantern: { cells: 3, cellCount: 3 },
+      rhythm: standingOf({ score: 0, combo: 0, maxCombo: 0, flame: 100 }),
       chase,
       creatures,
       ...changes,
     });
 
-    it("shows who is making the practice sound in the middle of the room, and never a side", () => {
-      const screen = screenOfSnapshot(rollCallOf(nursery, true));
+    it("shows who is making the practice sound in the doorway of the side it plays from", () => {
+      const screen = screenOfSnapshot(rollCallOf(nursery, true, "left"));
       expect(screen.sheet).toBeNull();
       expect(screen.answersShown).toBe(true);
       expect(screen.pauseShown).toBe(true);
@@ -640,19 +651,20 @@ describe("screenOfSnapshot", () => {
       expect(screen.chase).toBeNull();
       expect(screen.featured).toEqual({
         id: "nursery",
-        place: "centre",
-        line: "Tink, the tin toy from the nursery. Four small notes.",
+        place: "left",
+        line: "Tink, the black cat from the nursery. Four small notes of her bell.",
         sounding: true,
+        rollCall: true,
       });
       expect(screen.practice).toEqual({
         heading: "Meet them",
         lines: rollCallCopy.lines,
         soundPlayingLine: practiceCopy.soundPlayingLine,
       });
-      // Nothing that is said or shown names a side. (The cards' two bars are empty.)
+      // Nothing that is said names a side, and the creature is in the doorway it sounds from.
+      // (The cards' two bars are empty.)
       expect(
         JSON.stringify([
-          screen.featured,
           screen.practice,
           screen.creatures.map(({ name, state, statusLine, label }) => [
             name,
@@ -662,6 +674,16 @@ describe("screenOfSnapshot", () => {
           ]),
         ]),
       ).not.toMatch(/left|right/i);
+    });
+
+    it("stands the creature in the doorway of the right side for a sound from the right", () => {
+      const screen = screenOfSnapshot(rollCallOf(nursery, true, "right"));
+      expect(screen.featured).toMatchObject({
+        id: "nursery",
+        place: "right",
+        sounding: true,
+        rollCall: true,
+      });
     });
 
     it("marks the card of the one that is calling, and introduces each creature on its card", () => {
@@ -681,7 +703,8 @@ describe("screenOfSnapshot", () => {
           state: "calling",
           statusLine: null,
           depth: { left: null, right: null },
-          label: "Tink, the tin toy from the nursery. Four small notes.",
+          label:
+            "Tink, the black cat from the nursery. Four small notes of her bell.",
         },
         {
           id: "stairs",
@@ -689,7 +712,7 @@ describe("screenOfSnapshot", () => {
           state: "about",
           statusLine: null,
           depth: { left: null, right: null },
-          label: "Scritch, the beetle from the stairs. A dry scrape.",
+          label: "Scritch, the spider from the stairs. A dry scrape.",
         },
       ]);
     });
@@ -699,8 +722,9 @@ describe("screenOfSnapshot", () => {
       expect(screen.featured).toEqual({
         id: "nursery",
         place: "centre",
-        line: "Tink, the tin toy from the nursery. Four small notes.",
+        line: "Tink, the black cat from the nursery. Four small notes of her bell.",
         sounding: false,
+        rollCall: true,
       });
       expect(screen.practice?.soundPlayingLine).toBeNull();
       expect(screen.creatures[1]?.state).toBe("calling");
@@ -731,14 +755,13 @@ describe("screenOfSnapshot", () => {
         soundPlayingLine: null,
       });
       expect(screen.chase).toEqual({
-        lantern: {
-          cells: 3,
-          cellCount: 3,
-          label: "Lantern: 3 of 3 lights",
-          darkLine: null,
-        },
+        score: 0,
+        combo: 0,
+        maxCombo: 0,
+        flame: 1,
+        label: "0 points, combo 0. Jack's flame: 100 of 100",
+        relitLine: null,
         caughtLine: "13 caught",
-        streakLine: null,
       });
     });
 
@@ -774,7 +797,7 @@ describe("screenOfSnapshot", () => {
           statusLine: "4 caught",
           depth: { left: 0.5, right: null },
           label:
-            "Tink, the tin toy from the nursery. 4 caught. Quietest catch on your left: 40 dB quieter than your calibration. Nothing caught on your right yet.",
+            "Tink, the black cat from the nursery. 4 caught. Quietest catch on your left: 40 dB quieter than your calibration. Nothing caught on your right yet.",
         },
         {
           id: "stairs",
@@ -783,7 +806,7 @@ describe("screenOfSnapshot", () => {
           statusLine: "0 caught",
           depth: { left: null, right: null },
           label:
-            "Scritch, the beetle from the stairs. 0 caught. Nothing caught on your left yet. Nothing caught on your right yet.",
+            "Scritch, the spider from the stairs. 0 caught. Nothing caught on your left yet. Nothing caught on your right yet.",
         },
       ]);
     });
@@ -834,19 +857,14 @@ describe("screenOfSnapshot", () => {
       ]);
     });
 
-    it("changes nothing but the lantern when only the lantern changes", () => {
-      const withoutLantern = (cells: number) => {
-        const screen = screenOfSnapshot(
-          countingOf(allAbout, { lantern: { cells, cellCount: 3 } }),
-        );
-        return { ...screen, chase: { ...screen.chase, lantern: null } };
-      };
-      expect(withoutLantern(0)).toEqual(withoutLantern(3));
-      expect(
-        screenOfSnapshot(
-          countingOf(allAbout, { lantern: { cells: 0, cellCount: 3 } }),
-        ).chase?.lantern.darkLine,
-      ).toBe(chaseCopy.lanternDarkLine);
+    it("changes nothing but the chase when only the standing changes", () => {
+      const withoutChase = (flame: number) => ({
+        ...screenOfSnapshot(
+          countingOf(allAbout, { rhythm: standingOf({ flame }) }),
+        ),
+        chase: null,
+      });
+      expect(withoutChase(0)).toEqual(withoutChase(100));
     });
 
     it("says who was not caught at the roll call, and offers to try again or to go on", () => {
@@ -957,6 +975,7 @@ describe("screenOfSnapshot", () => {
         place: "right",
         line: null,
         sounding: false,
+        rollCall: false,
       });
       expect(screen.creatures).toEqual([]);
       expect(screen.chase).toBeNull();

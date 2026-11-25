@@ -21,7 +21,7 @@ import { seedArbitrary } from "./sound-arbitraries";
 // sample bound, the fixture's peak × the level gain × the fade gain, is at most the ceiling at
 // every moment; over any two moments of the recorded automation the level rises by at most
 // `calibrationRiseMaxDb × (t2 − t1) / calibrationMusicRisePeriodMs`; every start begins at the
-// bottom of the control and fades in from exact zero over at least the shortest fade, and every
+// middle of the control and fades in from exact zero over at least the shortest fade, and every
 // stop fades out to exact zero over at least the shortest fade; the music stops at keep, close
 // and every stop; both channels are equal; no other sound is scheduled while it plays; the
 // Played_Setting never exceeds the Control_Top; a fixture whose Music_Top would be below the
@@ -134,6 +134,27 @@ function expectedControlTopDb(fixture: Fixture): number {
   return topDb;
 }
 
+/**
+ * Where a calibration sound starts on a control with this top: the middle, rounded down to the grid
+ * (calibrationStartSettingDb in the session, the owner's request of 2026-11-18).
+ */
+function startDbOf(topDb: number): number {
+  const middleDb = bottomDb + (topDb - bottomDb) / 2;
+  return bottomDb + Math.floor((middleDb - bottomDb) / stepDb + 1e-9) * stepDb;
+}
+
+/**
+ * Where the first hiss repeat plays for a request: the request held to the hiss control and rounded
+ * down to the grid, and the bottom for NaN (nextCalibrationSettingDb, R16.1).
+ */
+function heldFirstHissDb(requestedDb: number): number {
+  if (Number.isNaN(requestedDb)) {
+    return bottomDb;
+  }
+  const heldDb = Math.min(Math.max(requestedDb, bottomDb), hissTopDb);
+  return bottomDb + Math.floor((heldDb - bottomDb) / stepDb + 1e-9) * stepDb;
+}
+
 /** Moves the clocks forward by `durationMs`, chunk by chunk. */
 function runClocks(
   shell: ShellUnderTest,
@@ -149,7 +170,7 @@ function runClocks(
 
 /**
  * Rebuilds the music's gain over time from the recorded loop calls and checks it: the ceiling,
- * the rise, the start at the bottom with its fade in, the stops with their fade out, equal
+ * the rise, the start at the middle with its fade in, the stops with their fade out, equal
  * channels, ramps that never overlap and never begin before their loop, and a level never above
  * the Control_Top. Gives the intervals in which the music sounded, to its last fade's end.
  */
@@ -157,6 +178,7 @@ function checkAutomation(
   timeline: readonly FakeLoopTimelineEntry[],
   fixture: Fixture,
   controlTopDb: number,
+  startDb: number,
 ): { startMs: number; endMs: number }[] {
   const intervals: { startMs: number; endMs: number }[] = [];
   let loop: {
@@ -174,9 +196,9 @@ function checkAutomation(
         expect(entry.startMs).toBeGreaterThanOrEqual(entry.atMs);
         expect(entry.left).toBe(fixture.samples);
         expect(entry.right).toEqual(entry.left);
-        expect(entry.levelGain).toBeCloseTo(levelGainAt(fixture, bottomDb), 15);
+        expect(entry.levelGain).toBeCloseTo(levelGainAt(fixture, startDb), 15);
         expect(
-          gainToDecibels(entry.levelGain / levelGainAt(fixture, bottomDb)),
+          gainToDecibels(entry.levelGain / levelGainAt(fixture, startDb)),
         ).toBeLessThanOrEqual(riseToleranceDb);
         expect(fixture.peakFraction * entry.levelGain).toBeLessThanOrEqual(
           ceilingFraction,
@@ -239,7 +261,7 @@ function checkAutomation(
 }
 
 describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)", () => {
-  it("stays within the ceiling, rises by at most the configured rise from the bottom, fades in and out, stops on every stop and plays alone; the hiss where it cannot be used", async () => {
+  it("stays within the ceiling, rises by at most the configured rise from where it starts, fades in and out, stops on every stop and plays alone; the hiss where it cannot be used", async () => {
     await fc.assert(
       fc.asyncProperty(
         seedArbitrary,
@@ -287,6 +309,9 @@ describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)
           expect(output.calibrationControlTopDb()).toBe(
             usable ? controlTopDb : hissTopDb,
           );
+          // The session starts each sound in the middle of its control.
+          const startDb = startDbOf(controlTopDb);
+          const hissStartDb = startDbOf(hissTopDb);
 
           // The hiss repeats, as audio-output CP9 says.
           let previousRepeatDb: number | null = null;
@@ -304,9 +329,9 @@ describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)
                 output.beginCalibration();
                 previousRepeatDb = null;
                 if (usable) {
-                  const started = output.startCalibrationMusic();
+                  const started = output.startCalibrationMusic(startDb);
                   if (started.kind === "started") {
-                    expect(started.settingDb).toBe(bottomDb);
+                    expect(started.settingDb).toBe(startDb);
                   }
                 } else {
                   expect(output.startCalibrationMusic().kind).toBe("refused");
@@ -397,14 +422,22 @@ describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)
                 }).kind,
               ).toBe("refused");
             } else if (!usable && step.kind !== "keep") {
+              // The session asks for the start at the start and for the target otherwise.
+              const requestedSettingDb =
+                step.kind === "target"
+                  ? step.settingDb
+                  : step.kind === "start"
+                    ? hissStartDb
+                    : hissTopDb;
               const repeat = output.playCalibrationRepeat({
-                requestedSettingDb:
-                  step.kind === "target" ? step.settingDb : hissTopDb,
+                requestedSettingDb,
                 random: shell.random,
               });
               if (repeat.kind === "scheduled") {
                 if (previousRepeatDb === null) {
-                  expect(repeat.settingDb).toBe(bottomDb);
+                  expect(repeat.settingDb).toBe(
+                    heldFirstHissDb(requestedSettingDb),
+                  );
                 } else {
                   expect(repeat.settingDb).toBeLessThanOrEqual(
                     previousRepeatDb + calibrationRiseMaxDb,
@@ -432,6 +465,7 @@ describe("audible-start CP6. The music is safe (Universal; R5, brief property 6)
             backend.loopTimeline(),
             fixture,
             controlTopDb,
+            startDb,
           );
           if (!usable) {
             expect(intervals).toEqual([]);

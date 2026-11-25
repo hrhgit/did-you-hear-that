@@ -1,8 +1,9 @@
 /**
- * The two visits that walk through rooms: the visit of about 7 minutes and the visit of about 12
- * minutes.
+ * The visit that walks through the rooms: five creatures, one for each pitch, in a room whose
+ * counting lasts at most `visitFlowConfig.roomTimeLimitMs`. There used to be a second, shorter
+ * visit of three; the owner dropped it on 2026-11-20 and fixed the length of the room instead.
  */
-export type VisitType = "quick" | "full";
+export type VisitType = "full";
 
 /**
  * The initial values of the threshold search, from the "Initial values" table in
@@ -93,9 +94,7 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   // "Left and right difference that triggers the swapped repeat | 15 dB"
   swappedRepeatDifferenceDb: 15,
   roomFrequenciesHz: {
-    // "Rooms, quick visit | 1 kHz, 4 kHz, 8 kHz"
-    quick: [1000, 4000, 8000],
-    // "Rooms, full visit | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz"
+    // "Rooms | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz"
     full: [500, 1000, 2000, 4000, 8000],
   },
   // Not in the steering table. threshold-search design.md, D8: the middle of the no-sound share range

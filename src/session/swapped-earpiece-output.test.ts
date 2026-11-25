@@ -27,6 +27,8 @@ function scriptedOutput(script: readonly PlayOutcome[]) {
     playHeadphoneCheck: unused,
     beginRoom: () => undefined,
     fadeOutSound: () => undefined,
+    startBeat: unused,
+    stopBeat: () => undefined,
     play(request: PlayRequest): PlayOutcome {
       const outcome = script[requests.length];
       requests.push(request);

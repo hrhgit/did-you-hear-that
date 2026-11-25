@@ -33,7 +33,7 @@ const room: VisitRoom = { roomIndex: 0, roomId: "corridor", frequencyHz: 1000 };
 function base<Stage extends VisitStage>(stage: Stage): SnapshotBase<Stage> {
   return {
     stage,
-    visitType: "quick",
+    visitType: "full",
     rooms: [room],
     finishedRoomCount: 0,
     canProceed: false,

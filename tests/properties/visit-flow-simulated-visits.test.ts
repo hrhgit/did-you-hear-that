@@ -65,10 +65,9 @@ const listeners: readonly {
   })),
 ];
 
-const visitTypes: readonly VisitType[] = ["quick", "full"];
+const visitTypes: readonly VisitType[] = ["full"];
 
 const flowSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261206,
   full: 20261207,
 });
 

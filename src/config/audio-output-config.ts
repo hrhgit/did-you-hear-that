@@ -90,6 +90,8 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
     calibration: 15.5,
     // The game layer, 2026-11-17: the chime always renders the same, with a peak of 14.5 dB
     chime: 15,
+    // The game layer, 2026-11-20: the puff always renders the same.
+    snuff: 15,
   },
   // D6: eight stairs renders in a row above the bound happen about once in 10^10
   renderAttemptsMaxCount: 8,

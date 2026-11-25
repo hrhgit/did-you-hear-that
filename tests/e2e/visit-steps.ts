@@ -25,7 +25,7 @@ export const button = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true });
 // The name of a way in is its words and its note, so it is found by its words alone.
 export const quickVisit = (page: Page) =>
-  page.getByRole("button", { name: frontDoorCopy.choices.quick.button });
+  page.getByRole("button", { name: frontDoorCopy.choices.full.button });
 
 const escaped = (text: string): string =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

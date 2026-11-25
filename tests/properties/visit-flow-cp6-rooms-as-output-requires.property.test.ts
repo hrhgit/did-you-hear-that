@@ -122,15 +122,21 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
                 expect(call.stage).toBe("room");
                 // A reminder after a long quiet plays a creature's sound, and a chime after a
                 // catch is the house's bell (the game layer, 2026-11-17).
-                expect(["trial", "practice", "reminder", "chime"]).toContain(
-                  call.request.purpose,
-                );
+                expect([
+                  "trial",
+                  "practice",
+                  "reminder",
+                  "chime",
+                  "miss",
+                ]).toContain(call.request.purpose);
                 expect(
                   kept && checked,
                   `a trial sound at ${String(call.atMs)}`,
                 ).toBe(true);
                 if (call.request.purpose === "chime") {
                   expect(call.request.soundId).toBe("chime");
+                } else if (call.request.purpose === "miss") {
+                  expect(call.request.soundId).toBe("snuff");
                 } else if (together) {
                   // The sound of a creature that is about. Whose trial it is, is checked below.
                   expect(

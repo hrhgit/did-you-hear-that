@@ -13,7 +13,7 @@ export type EarChoice = Ear | "both";
 /**
  * Why a sound is played. Only calibration repeats have the Purpose `calibration`. A `practice`
  * sound is held to every limit of a `trial` sound (audible-start). A `reminder` is a ghost sound
- * played after a long quiet that counts for nothing, and a `chime` the soft bell after a catch;
+ * played after a long quiet that counts for nothing, a `chime` the soft bell after a catch, and a `miss` the puff when a creature gets to Jack;
  * both are held to the same limits (the game layer, 2026-11-17).
  */
 export type Purpose =
@@ -24,7 +24,8 @@ export type Purpose =
   | "headphoneCheck"
   | "calibration"
   | "reminder"
-  | "chime";
+  | "chime"
+  | "miss";
 
 /**
  * The limit that set the played level of a clamped sound. Only the ceiling is left: the anchor cap

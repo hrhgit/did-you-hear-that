@@ -45,6 +45,19 @@ export type FakeBackendCall =
       readonly startMs: number;
     }
   | { readonly kind: "fadeToSilence"; readonly durationMs: number }
+  | {
+      readonly kind: "startBeat";
+      readonly sampleCount: number;
+      readonly startMs: number;
+      readonly levelGain: number;
+    }
+  | {
+      readonly kind: "duckBeat";
+      readonly fromMs: number;
+      readonly toMs: number;
+      readonly duckGain: number;
+    }
+  | { readonly kind: "stopBeat"; readonly fadeOutMs: number }
   | { readonly kind: "suspend" }
   | { readonly kind: "close" }
   | FakeLoopCall;
@@ -338,6 +351,22 @@ export function createFakeAudioBackend(
       recordLoopCall(
         Object.freeze({ kind: "stopLoop", fadeOutMs, atMs: clockMs }),
       );
+    },
+    startBeat(channels: ScheduledChannels, startMs, levelGain) {
+      calls.push(
+        Object.freeze({
+          kind: "startBeat",
+          sampleCount: channels.left.length,
+          startMs,
+          levelGain,
+        }),
+      );
+    },
+    duckBeat(fromMs, toMs, duckGain) {
+      calls.push(Object.freeze({ kind: "duckBeat", fromMs, toMs, duckGain }));
+    },
+    stopBeat(fadeOutMs) {
+      calls.push(Object.freeze({ kind: "stopBeat", fadeOutMs }));
     },
     suspend() {
       calls.push(Object.freeze({ kind: "suspend" }));

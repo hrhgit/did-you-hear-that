@@ -118,9 +118,9 @@ function noSound(order: number, roomIndex: number): VisitTrial {
 function makeLog(trials: readonly VisitTrial[]): VisitLog {
   return deepFreeze({
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
-    rooms: visitRooms("quick"),
+    rooms: visitRooms("full"),
     calibrations: [
       {
         calibrationIndex: 0,

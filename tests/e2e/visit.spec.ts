@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { audioOutputConfig } from "../../src/config/audio-output-config";
-import { lanternConfig } from "../../src/config/lantern-config";
+import { rhythmConfig } from "../../src/config/rhythm-config";
 import { calibrationCopy } from "../../src/copy/calibration-copy";
 import {
   creatureCardLabel,
@@ -15,11 +15,8 @@ import {
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { practiceCopy } from "../../src/copy/practice-copy";
-import {
-  caughtCountLine,
-  lanternLabel,
-  roomCopy,
-} from "../../src/copy/room-copy";
+import { roomCopy } from "../../src/copy/room-copy";
+import { rhythmCopy, rhythmHudLabel } from "../../src/copy/rhythm-copy";
 import { rulesCopy } from "../../src/copy/rules-copy";
 import { siteTitle } from "../../src/copy/site-title";
 import { visitCopy } from "../../src/copy/visit-copy";
@@ -30,6 +27,7 @@ import {
   openPage,
 } from "./page-checks";
 import { previewServers } from "./preview-servers";
+import { expectDrawn, expectFeatured, scene } from "./scene-record";
 import {
   answerRollCall,
   answerSide,
@@ -65,21 +63,15 @@ const address = `http://localhost:${String(server.port)}${server.basePath}`;
 const answerButton = (page: Page, side: "left" | "right") =>
   page.locator(`.visit-answer-${side}`);
 
-/** The creatures of the short visit, in visit order. */
-const creatures = visitRooms("quick").map((room) => room.roomId);
+/** The creatures of the visit, in visit order. */
+const creatures = visitRooms("full").map((room) => room.roomId);
 const firstCreature = creatures[0];
 const lastCreature = creatures[creatures.length - 1];
 if (firstCreature === undefined || lastCreature === undefined) {
-  throw new Error("The short visit has no creature.");
+  throw new Error("The visit has no creature.");
 }
 
-/** Whoever stands in the room in plain view: a creature that is leaving is still in the page. */
-const standing = (page: Page, place: string) =>
-  page.locator(`${place} .room-figure:not([data-leaving="true"])`);
-const rings = (page: Page, side: "left" | "right") =>
-  page.locator(`.room-rings-${side} .room-ring`);
-const litLanternCells = (page: Page) =>
-  page.locator(".visit-lantern-cell[data-lit='true']");
+const score = (page: Page) => page.locator(".rhythm-score");
 
 test.describe(`a visit at ${address}`, () => {
   test.describe.configure({ timeout: 120_000 });
@@ -114,8 +106,7 @@ test.describe(`a visit at ${address}`, () => {
     await expectNoSeriousAccessibilityProblem(page);
 
     // The one room, with every creature of the visit in it. It opens with the roll call: the
-    // first creature stands in the middle of the room, which tells no side, and nobody stands in
-    // a doorway.
+    // first creature stands in plain view, and nothing has been drawn for a turn.
     await button(page, rulesCopy.enterButton).click();
     await expect(roomPicture(page)).toBeVisible();
     await expect(rollCallHeading(page)).toHaveText(rollCallCopy.heading);
@@ -125,15 +116,9 @@ test.describe(`a visit at ${address}`, () => {
     await expect(page.locator(".room-intro")).toHaveText(
       creatureIntroLine(firstCreature),
     );
-    await expect(standing(page, ".room-stage-centre")).toHaveCount(1);
-    await expect(standing(page, ".room-stage-centre")).toHaveAttribute(
-      "data-creature",
-      firstCreature,
-    );
-    await expect(
-      page.locator(".room-door .room-figure, .room-door .room-sighting"),
-    ).toHaveCount(0);
-    await expect(page.locator(".room-ring")).toHaveCount(0);
+    await expectFeatured(page, firstCreature);
+    await expectDrawn(page, "none");
+    await expect(scene(page)).toHaveAttribute("data-rings", "0");
 
     // Each creature has a card along the foot of the room, which says who it is.
     const cards = creatureCards(page);
@@ -152,13 +137,12 @@ test.describe(`a visit at ${address}`, () => {
       );
     }
 
-    // No order of rooms is shown, and the lantern waits unlit until it counts.
+    // No order of rooms is shown, and nothing is scored until it counts: a warm-up.
     await expect(page.locator(".visit-room")).toBeHidden();
-    await expect(page.locator(".visit-lantern-cell")).toHaveCount(
-      lanternConfig.cellCount,
+    await expect(score(page)).toBeHidden();
+    await expect(page.locator(".rhythm-warm-up")).toHaveText(
+      rhythmCopy.warmUpWord,
     );
-    await expect(litLanternCells(page)).toHaveCount(0);
-    await expect(page.locator(".visit-chase-caught")).toBeHidden();
     await expect(answerButton(page, "left")).toBeVisible();
     await expect(answerButton(page, "right")).toBeVisible();
     await expect(page.getByRole("heading")).toHaveCount(0);
@@ -185,11 +169,13 @@ test.describe(`a visit at ${address}`, () => {
     // the other side only makes the sound come once more.
     const caption = page.locator(".visit-caption");
     await expect(caption).toHaveText("");
-    await expect(page.locator(".room-ring")).toHaveCount(0);
+    await expect(scene(page)).toHaveAttribute("data-rings", "0");
     for (const side of ["left", "right"] as const) {
       await expect(async () => {
         await answerSide(page, side, isMobile);
-        await expect(rings(page, side)).toHaveCount(3, { timeout: 350 });
+        await expect(scene(page)).toHaveAttribute("data-rings-side", side, {
+          timeout: 350,
+        });
       }).toPass({ timeout: 60_000, intervals: [50] });
 
       // The house says who it was, its card is marked, and the rings go out from the side that
@@ -204,16 +190,13 @@ test.describe(`a visit at ${address}`, () => {
         ),
       ).toHaveCount(1);
       if (side === "left") {
-        await expect(rings(page, "right")).toHaveCount(0);
+        await expect(scene(page)).toHaveAttribute("data-rings", "1");
         // The one that made the sound hops where it stands, in the middle of the room.
-        await expect(
-          page.locator(".room-stage-centre .room-figure-cheer"),
-        ).toHaveCount(1);
+        await expect(scene(page)).toHaveAttribute("data-cheers", "1");
       }
     }
-    // Nothing of the roll call counts: the lantern is still unlit and nothing has been counted.
-    await expect(litLanternCells(page)).toHaveCount(0);
-    await expect(page.locator(".visit-chase-caught")).toBeHidden();
+    // Nothing of the roll call counts: nothing is scored yet.
+    await expect(score(page)).toBeHidden();
     expect(record.pageErrors).toEqual([]);
   });
 
@@ -228,10 +211,7 @@ test.describe(`a visit at ${address}`, () => {
     // Every creature is answered on both sides, except the last one on its right side.
     const turns = rollCallTurns(creatures);
     await answerRollCall(page, turns.slice(0, -1), isMobile);
-    await expect(standing(page, ".room-stage-centre")).toHaveAttribute(
-      "data-creature",
-      lastCreature,
-    );
+    await expectFeatured(page, lastCreature);
 
     // That sound comes once more, a little louder, and is still not caught. The house then
     // says who was not caught and on which side, and nothing more plays until the visitor chooses.
@@ -257,10 +237,7 @@ test.describe(`a visit at ${address}`, () => {
     await expect(page.locator(".room-intro")).toHaveText(
       creatureIntroLine(lastCreature),
     );
-    await expect(standing(page, ".room-stage-centre")).toHaveAttribute(
-      "data-creature",
-      lastCreature,
-    );
+    await expectFeatured(page, lastCreature);
     await expect(notice).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText(lines[0] ?? "", { exact: true })).toBeVisible();
 
@@ -274,17 +251,17 @@ test.describe(`a visit at ${address}`, () => {
     ]);
     await expect(page.locator(".room-intro")).toBeHidden();
     await expect(page.locator(".visit-practice-sound")).toBeHidden();
-    await expect(standing(page, ".room-scene")).toHaveCount(0);
+    await expectFeatured(page, null);
 
-    // With the counting comes the lantern, full, and the count of the chase (game layer).
-    const { cellCount } = lanternConfig;
+    // With the counting comes the score, from nothing, and Jack's flame, full (the rhythm game).
+    const { flameMax } = rhythmConfig;
     await expect(
-      page.getByRole("img", { name: lanternLabel(cellCount, cellCount) }),
+      page.getByRole("group", {
+        name: rhythmHudLabel(0, 0, flameMax, flameMax),
+      }),
     ).toBeVisible();
-    await expect(litLanternCells(page)).toHaveCount(cellCount);
-    await expect(page.locator(".visit-chase-caught")).toHaveText(
-      caughtCountLine(0),
-    );
+    await expect(page.locator(".rhythm-warm-up")).toBeHidden();
+    await expect(page.locator(".rhythm-combo-count")).toHaveText("0");
     // The bar says how many are still about, and each card what was caught of its creature.
     await expect(page.locator(".visit-room-name")).toHaveText(
       stillAboutLine(creatures.length),
@@ -375,6 +352,8 @@ test.describe(`a visit at ${address}`, () => {
     );
     const { calibrationSettingMinDb, calibrationSettingStepDb } =
       audioOutputConfig;
+    // The control starts in the middle of its range, rounded down to its grid: −22 dB for the hiss
+    // and −23 dB for the music, whichever sound this browser could play.
     await openPage(page, address);
     await quickVisit(page).click();
     await button(page, calibrationCopy.startButton).click();
@@ -382,25 +361,26 @@ test.describe(`a visit at ${address}`, () => {
     // The control takes the focus once the sound starts, and the keys line appears under it.
     await expect(slider).toBeFocused();
     await expect(page.getByText(calibrationCopy.keysLine)).toBeVisible();
-    await expect(slider).toHaveValue(String(calibrationSettingMinDb));
+    const startDb = Number(await slider.inputValue());
+    expect([-22, -23]).toContain(startDb);
 
     await page.keyboard.press("ArrowRight");
     await expect(slider).toHaveValue(
-      String(calibrationSettingMinDb + calibrationSettingStepDb),
+      String(startDb + calibrationSettingStepDb),
     );
     await page.keyboard.press("Shift+ArrowRight");
     await expect(slider).toHaveValue(
-      String(calibrationSettingMinDb + 6 * calibrationSettingStepDb),
+      String(startDb + 6 * calibrationSettingStepDb),
     );
     await page.keyboard.press("PageDown");
     await expect(slider).toHaveValue(
-      String(calibrationSettingMinDb + calibrationSettingStepDb),
+      String(startDb + calibrationSettingStepDb),
     );
     // The keys work with the focus on a button too.
     await button(page, calibrationCopy.quieterButton).focus();
     await page.keyboard.press("ArrowRight");
     await expect(slider).toHaveValue(
-      String(calibrationSettingMinDb + 2 * calibrationSettingStepDb),
+      String(startDb + 2 * calibrationSettingStepDb),
     );
     await page.keyboard.press("Home");
     await expect(slider).toHaveValue(String(calibrationSettingMinDb));

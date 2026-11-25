@@ -8,10 +8,11 @@ import { renderCellarKnock } from "./cellar-knock";
 import { renderCorridorHum } from "./corridor-hum";
 import { renderNurseryMusicBox } from "./nursery-music-box";
 import { soundRenderers } from "./sound-renderers";
+import { renderSnuff } from "./snuff";
 import { renderStairsScrape } from "./stairs-scrape";
 
 describe("soundRenderers", () => {
-  it("has exactly the six listed sound ids and the chime", () => {
+  it("has exactly the six listed sound ids, the chime and the puff", () => {
     expect(Object.keys(soundRenderers)).toEqual([...everySoundId]);
   });
 
@@ -28,6 +29,7 @@ describe("soundRenderers", () => {
       attic: renderAtticWhine,
       calibration: renderCalibrationHiss,
       chime: renderCatchChime,
+      snuff: renderSnuff,
     });
     expect(soundRenderers.cellar).toBe(renderCellarKnock);
     expect(soundRenderers.calibration).toBe(renderCalibrationHiss);

@@ -44,7 +44,7 @@ const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
 
 const picture: ResultPicture = {
   kind: "live",
-  visitType: "quick",
+  visitType: "full",
   heading: "The heading",
   dateLabel: "20 November 2026",
   visitTypeLabel: "Short visit, 3 rooms",

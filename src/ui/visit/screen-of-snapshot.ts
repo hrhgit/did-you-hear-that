@@ -14,20 +14,19 @@ import { outputStateCopy } from "../../copy/output-state-copy";
 import {
   betweenRoomsLine,
   caughtCountLine,
-  chaseCopy,
-  lanternLabel,
   roomCopy,
   roomNames,
   roomProgressLine,
-  streakLine,
 } from "../../copy/room-copy";
+import { relitLine, rhythmHudLabel } from "../../copy/rhythm-copy";
 import { visitCopy } from "../../copy/visit-copy";
 import type {
   HeadphoneCheckAnswer,
   MissedSoundReplaySnapshot,
   RoomChase,
+  RoomBeat,
   RoomCreature,
-  RoomLantern,
+  RhythmStanding,
   RoomSnapshot,
   SwappedRepeatComparison,
   SwappedRepeatSnapshot,
@@ -131,9 +130,10 @@ export type CreatureScreen = ShelfCreature;
 
 /**
  * Who stands in the room in plain view. At the roll call it is the one whose practice sound plays
- * or is about to play, in the middle of the room, which tells no side. While missed sounds are
- * played again it is the creature of the playing sound, in the doorway of its side: by then every
- * answer has been given. Nobody stands in plain view while the room counts.
+ * or is about to play: in the middle of the room between its sounds, and in the doorway of the side
+ * its sound plays from while that sound plays (changed on 2026-11-18). While missed
+ * sounds are played again it is the creature of the playing sound, in the doorway of its side: by
+ * then every answer has been given. Nobody stands in plain view while the room counts.
  */
 export interface FeaturedScreen {
   readonly id: GhostSoundId;
@@ -142,26 +142,26 @@ export interface FeaturedScreen {
   readonly line: string | null;
   /** Whether its practice sound is playing now. */
   readonly sounding: boolean;
+  /** Whether it is the roll call's creature, which is introduced and keeps the cards down. */
+  readonly rollCall: boolean;
 }
 
 /**
- * The lantern and the count of a room that counts (the game layer of 2026-11-16). The lantern
- * changes with the visitor's own answers, with a catch in the moment it is scored, and with the
- * clock. Everything else here changes only when a trial is scored. So none of it says anything
+ * The score, the combo and Jack's flame of a room that counts (the rhythm game, 2026-11-18). They
+ * change only when a trial is scored and when a kick meets no turn, so none of it says anything
  * about a trial that is still open or still to come.
  */
 export interface ChaseScreen {
-  readonly lantern: {
-    readonly cells: number;
-    readonly cellCount: number;
-    /** The lantern in words, for a visitor who cannot see it. */
-    readonly label: string;
-    /** Said while the lantern is dark, or null. */
-    readonly darkLine: string | null;
-  };
+  readonly score: number;
+  readonly combo: number;
+  readonly maxCombo: number;
+  /** Jack's flame, from 0 to 1. */
+  readonly flame: number;
+  /** All of it in words, for a visitor who cannot see it. */
+  readonly label: string;
+  /** Said once Jack's candle has gone out and been lit again, or null. */
+  readonly relitLine: string | null;
   readonly caughtLine: string;
-  /** Said from two caught sounds in a row, or null. */
-  readonly streakLine: string | null;
 }
 
 /**
@@ -286,8 +286,10 @@ export interface Screen {
   readonly swap: SwapScreen | null;
   /** The words of the practice and the counting in a room, or null. */
   readonly practice: PracticeScreen | null;
-  /** The lantern and the count of a room that counts, or null. */
+  /** The score, the combo and Jack's flame of a room that counts, or null. */
   readonly chase: ChaseScreen | null;
+  /** The beat the room plays, or null. Optional: only a room has one. */
+  readonly beat?: RoomBeat | null;
   /** Said when the browser did not let the sound start, or null. */
   readonly soundNotStartedLine: string | null;
 }
@@ -361,23 +363,23 @@ function creatureScreenOf(
   };
 }
 
-/** The lantern and the chase as the page shows them, or null while a room does not count. */
+/** The rhythm game as the page shows it, or null while a room does not count. */
 function chaseScreenOf(
-  lantern: RoomLantern | null,
+  rhythm: RhythmStanding | null,
   chase: RoomChase | null,
 ): ChaseScreen | null {
-  if (lantern === null || chase === null) {
+  if (rhythm === null || chase === null) {
     return null;
   }
+  const flame = Math.round(rhythm.flame);
   return {
-    lantern: {
-      cells: lantern.cells,
-      cellCount: lantern.cellCount,
-      label: lanternLabel(lantern.cells, lantern.cellCount),
-      darkLine: lantern.cells === 0 ? chaseCopy.lanternDarkLine : null,
-    },
+    score: rhythm.score,
+    combo: rhythm.combo,
+    maxCombo: rhythm.maxCombo,
+    flame: rhythm.flameMax > 0 ? flame / rhythm.flameMax : 0,
+    label: rhythmHudLabel(rhythm.score, rhythm.combo, flame, rhythm.flameMax),
+    relitLine: relitLine(rhythm.relights),
     caughtLine: caughtCountLine(chase.caughtCount),
-    streakLine: chase.streak >= 2 ? streakLine(chase.streak) : null,
   };
 }
 
@@ -701,11 +703,18 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
             ? null
             : {
                 id: practising.roomId,
-                place: "centre",
+                // While its sound plays it stands in the doorway of the side the sound is in;
+                // between its sounds, in the middle.
+                place:
+                  practice.soundPlaying && practice.soundEar
+                    ? practice.soundEar
+                    : "centre",
                 line: creatureIntroLine(practising.roomId),
                 sounding: practice.soundPlaying,
+                rollCall: true,
               },
-        chase: chaseScreenOf(snapshot.lantern ?? null, snapshot.chase ?? null),
+        chase: chaseScreenOf(snapshot.rhythm ?? null, snapshot.chase ?? null),
+        beat: snapshot.beat ?? null,
         practice:
           practice === undefined
             ? null
@@ -755,6 +764,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
                 place: current.ear,
                 line: null,
                 sounding: false,
+                rollCall: false,
               },
       };
     }

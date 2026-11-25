@@ -40,7 +40,6 @@ const performanceOffsetMs = 654_321;
 const archiveSeed = 20261209;
 
 const flowSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261206,
   full: 20261207,
 });
 
@@ -84,7 +83,7 @@ describe("result page: simulated visits saved and read back", () => {
   it(
     "saves a quick and a full visit, lists them back as they were given, exports their logs and draws both kinds of picture",
     async () => {
-      const quick = await playToResult("quick");
+      const quick = await playToResult("full");
       const full = await playToResult("full");
 
       const area = createFakeStorageArea();

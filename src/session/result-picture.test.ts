@@ -22,7 +22,16 @@ import type {
   VisitTrial,
 } from "./visit-flow-types";
 import { createVisitLogRecorder } from "./visit-log-recorder";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // Summaries made with summarizeVisit from hand-built visit logs. Only the fields the summary reads
 // carry meaning; the rest are filled with plausible values.
@@ -128,7 +137,7 @@ function calibrationOf(anchor: "music" | "hiss" | "hands"): LoggedCalibration {
 }
 
 function makeLog(
-  visitType: "quick" | "full",
+  visitType: "full",
   plans: readonly RoomPlan[],
   trials: readonly VisitTrial[] = [],
   anchor: "music" | "hiss" | "hands" = "music",
@@ -137,7 +146,7 @@ function makeLog(
     formatVersion: 1,
     visitType,
     visitSeed: 42,
-    rooms: visitRooms(visitType),
+    rooms: plans.length === 3 ? threeRooms : visitRooms(visitType),
     calibrations: [calibrationOf(anchor)],
     headphoneChecks: [],
     roomAttempts: plans.map((plan, roomIndex) => attempt(roomIndex, plan)),
@@ -149,7 +158,7 @@ function makeLog(
 }
 
 function visitOf(
-  visitType: "quick" | "full",
+  visitType: "full",
   plans: readonly RoomPlan[],
   options: {
     readonly trials?: readonly VisitTrial[];
@@ -217,10 +226,8 @@ const mixedQuick: readonly RoomPlan[] = [
 describe("resultPicture", () => {
   describe("floors and closed rooms", () => {
     it("gives a quick visit three floors in visit order and the cellar and nursery closed", () => {
-      const picture = live(visitOf("quick", mixedQuick));
-      expect(picture.floors.map((floor) => floor.room)).toEqual(
-        visitRooms("quick"),
-      );
+      const picture = live(visitOf("full", mixedQuick));
+      expect(picture.floors.map((floor) => floor.room)).toEqual(threeRooms);
       expect(picture.floors.map((floor) => floor.roomName)).toEqual([
         "Corridor",
         "Stairs",
@@ -249,7 +256,7 @@ describe("resultPicture", () => {
 
     it("keeps the order of the house whatever the results", () => {
       const reversed = live(
-        visitOf("quick", [
+        visitOf("full", [
           { left: found(10), right: found(10) },
           { left: found(-30), right: found(-30) },
           { left: found(-65), right: found(-65) },
@@ -262,7 +269,7 @@ describe("resultPicture", () => {
   });
 
   describe("wings", () => {
-    const picture = live(visitOf("quick", mixedQuick));
+    const picture = live(visitOf("full", mixedQuick));
     const [first, second, third] = picture.floors;
 
     it("gives a found wing its level relative to the calibration and its depth on the floor's scale", () => {
@@ -326,7 +333,7 @@ describe("resultPicture", () => {
 
     it("gives levelNotAsAsked its reason line", () => {
       const clamped = live(
-        visitOf("quick", mixedQuick, { trials: [clampedTrial(1)] }),
+        visitOf("full", mixedQuick, { trials: [clampedTrial(1)] }),
       );
       expect(clamped.floors[1]?.left.state).toBe("unreliable");
       expect(clamped.floors[1]?.left.reasonLine).toBe(
@@ -336,7 +343,7 @@ describe("resultPicture", () => {
 
     it("draws each floor on its own loudest level", () => {
       const capped = live(
-        visitOf("quick", [
+        visitOf("full", [
           { left: found(-25), right: found(-25), searchCapDb: 0 },
           { left: found(-25), right: found(-25) },
           { left: found(-25), right: found(-25) },
@@ -362,7 +369,7 @@ describe("resultPicture", () => {
   describe("left and right", () => {
     function floorWith(left: number, right: number) {
       return live(
-        visitOf("quick", [
+        visitOf("full", [
           { left: found(left), right: found(right) },
           { left: worseThanCap, right: found(-20) },
           { left: found(-20), right: found(-20) },
@@ -408,7 +415,7 @@ describe("resultPicture", () => {
   });
 
   describe("the swapped repeat", () => {
-    const visit = visitOf("quick", mixedQuick);
+    const visit = visitOf("full", mixedQuick);
 
     it("is offered on a live picture where the summary offers it, with the room index, its line and its button", () => {
       expect(
@@ -461,7 +468,7 @@ describe("resultPicture", () => {
       { left: found(-30), right: found(-30) },
       { left: found(-20), right: found(-45) },
     ];
-    const visit = visitOf("quick", twoOffered);
+    const visit = visitOf("full", twoOffered);
 
     /** A finished repeat of one floor whose ears gave these results, made as the controller makes it. */
     function recordOf(
@@ -628,7 +635,7 @@ describe("resultPicture", () => {
   describe("above the picture", () => {
     it("gives the pooled false alarm line", () => {
       const picture = live(
-        visitOf("quick", [
+        visitOf("full", [
           { ...mixedQuick[0], noSoundTrialCount: 3, falseAlarmCount: 1 },
           { ...mixedQuick[1], noSoundTrialCount: 3, falseAlarmCount: 0 },
           { ...mixedQuick[2], noSoundTrialCount: 3, falseAlarmCount: 1 },
@@ -640,7 +647,7 @@ describe("resultPicture", () => {
     });
 
     it("gives no notice when the visit is not marked", () => {
-      const visit = visitOf("quick", mixedQuick);
+      const visit = visitOf("full", mixedQuick);
       expect(visit.summary.visitFalseAlarmRateAboveLimit).toBe(false);
       expect(live(visit).visitNotice).toBeNull();
     });
@@ -651,7 +658,7 @@ describe("resultPicture", () => {
         noSoundTrialCount: 7,
         falseAlarmCount: 2,
       }));
-      const visit = visitOf("quick", guessed);
+      const visit = visitOf("full", guessed);
       expect(visit.summary.visitFalseAlarmRateAboveLimit).toBe(true);
       const picture = live(visit);
       expect(picture.visitNotice).toEqual({
@@ -679,22 +686,22 @@ describe("resultPicture", () => {
         noSoundTrialCount: 7,
         falseAlarmCount: 1,
       }));
-      const visit = visitOf("quick", guessed, { visitLimitFraction: 0.125 });
+      const visit = visitOf("full", guessed, { visitLimitFraction: 0.125 });
       expect(visit.summary.visitFalseAlarmRateAboveLimit).toBe(true);
       expect(live(visit).visitNotice?.line).toContain("more than 12.5 percent");
     });
 
     it("holds the limits statement constant itself", () => {
-      expect(live(visitOf("quick", mixedQuick)).limitsStatement).toBe(
+      expect(live(visitOf("full", mixedQuick)).limitsStatement).toBe(
         limitsStatement,
       );
       expect(
-        saved(savedVisitOf(visitOf("quick", mixedQuick))).limitsStatement,
+        saved(savedVisitOf(visitOf("full", mixedQuick))).limitsStatement,
       ).toBe(limitsStatement);
     });
 
     it("has no comparison until the comparison tasks are built", () => {
-      const picture = live(visitOf("quick", mixedQuick));
+      const picture = live(visitOf("full", mixedQuick));
       expect(picture.comparison).toBeNull();
       expect(
         picture.floors.every(
@@ -706,7 +713,7 @@ describe("resultPicture", () => {
   });
 
   describe("the quietest level", () => {
-    const visit = visitOf("quick", mixedQuick);
+    const visit = visitOf("full", mixedQuick);
 
     it("comes from the config for a live picture", () => {
       expect(live(visit).floors[0]?.left.lightDepthFraction).toBeCloseTo(
@@ -734,7 +741,7 @@ describe("resultPicture", () => {
       right: LoggedEarResult,
       searchFloorDb?: number,
     ): VisitToSave => {
-      const visit = visitOf("quick", [
+      const visit = visitOf("full", [
         { left, right },
         { left: found(-40), right: found(-40) },
         { left: found(-40), right: found(-40) },
@@ -779,7 +786,7 @@ describe("resultPicture", () => {
         "as quiet as the house can play",
       );
       expect(
-        live(visitOf("quick", mixedQuick)).floors[0]?.playableFloorLine,
+        live(visitOf("full", mixedQuick)).floors[0]?.playableFloorLine,
       ).toBeNull();
     });
 
@@ -801,14 +808,14 @@ describe("resultPicture", () => {
 
   describe("labels", () => {
     it("labels a live picture with the date it is given", () => {
-      const picture = live(visitOf("quick", mixedQuick), "2026-11-20");
+      const picture = live(visitOf("full", mixedQuick), "2026-11-20");
       expect(picture.kind).toBe("live");
-      expect(picture.visitType).toBe("quick");
+      expect(picture.visitType).toBe("full");
       expect(picture.heading).toBe("The quietest sounds you caught");
       expect(picture.dateLabel).toBe("20 November 2026");
-      expect(picture.visitTypeLabel).toBe("Short visit, 3 rooms");
+      expect(picture.visitTypeLabel).toBe("Full visit, 3 rooms");
       expect(picture.imageCaption).toBe(
-        "Did You Hear That? A first listen on 20 November 2026. Short visit, 3 rooms.",
+        "Did You Hear That? A first listen on 20 November 2026. Full visit, 3 rooms.",
       );
       expect(picture.imageFileBaseName).toBe("did-you-hear-that-2026-11-20");
     });
@@ -823,9 +830,9 @@ describe("resultPicture", () => {
       expect(picture.kind).toBe("saved");
       expect(picture.visitType).toBe("full");
       expect(picture.dateLabel).toBe("1 January 2026");
-      expect(picture.visitTypeLabel).toBe("Long visit, 5 rooms");
+      expect(picture.visitTypeLabel).toBe("Full visit, 5 rooms");
       expect(picture.imageCaption).toBe(
-        "Did You Hear That? A first listen on 1 January 2026. Long visit, 5 rooms.",
+        "Did You Hear That? A first listen on 1 January 2026. Full visit, 5 rooms.",
       );
       expect(picture.imageFileBaseName).toBe("did-you-hear-that-2026-01-01");
     });
@@ -867,7 +874,7 @@ describe("resultPicture", () => {
 
     it("gives outlines on the floors whose room the earlier visit also entered, and only there", () => {
       const earlier = savedVisitOf(
-        visitOf("quick", [
+        visitOf("full", [
           { left: found(-30), right: found(-30) },
           { left: found(-30), right: found(-30) },
           { left: found(-30), right: found(-30) },
@@ -898,7 +905,7 @@ describe("resultPicture", () => {
     });
 
     it("matches floors by room, not by their place in the visit", () => {
-      const quickShown = visitOf("quick", [
+      const quickShown = visitOf("full", [
         { left: found(-20), right: found(-20) },
         { left: found(-20), right: found(-20) },
         { left: found(-20), right: found(-20) },
@@ -1109,8 +1116,8 @@ describe("resultPicture", () => {
     });
 
     it("changes nothing but the outlines and the comparison", () => {
-      const earlier = savedVisitOf(visitOf("quick", mixedQuick));
-      for (const shown of [shownFull, visitOf("quick", mixedQuick)]) {
+      const earlier = savedVisitOf(visitOf("full", mixedQuick));
+      for (const shown of [shownFull, visitOf("full", mixedQuick)]) {
         expect(withoutComparison(withEarlier(shown, earlier))).toEqual(
           withEarlier(shown, null),
         );
@@ -1129,8 +1136,8 @@ describe("resultPicture", () => {
     it("gives, without an earlier visit, every outline and the comparison null", () => {
       for (const picture of [
         withEarlier(shownFull, null),
-        live(visitOf("quick", mixedQuick)),
-        saved(savedVisitOf(visitOf("quick", mixedQuick))),
+        live(visitOf("full", mixedQuick)),
+        saved(savedVisitOf(visitOf("full", mixedQuick))),
       ]) {
         expect(picture.comparison).toBeNull();
         for (const floor of picture.floors) {
@@ -1143,7 +1150,7 @@ describe("resultPicture", () => {
 
     it("gives a deeply frozen picture and neither changes nor freezes the earlier visit", () => {
       const earlier: SavedVisit = JSON.parse(
-        JSON.stringify(savedVisitOf(visitOf("quick", mixedQuick))),
+        JSON.stringify(savedVisitOf(visitOf("full", mixedQuick))),
       );
       const before = JSON.stringify(earlier);
       const picture = withEarlier(shownFull, earlier);
@@ -1156,22 +1163,22 @@ describe("resultPicture", () => {
 
   describe("a pure function", () => {
     it("gives a deeply frozen picture", () => {
-      expect(isDeepFrozen(live(visitOf("quick", mixedQuick)))).toBe(true);
+      expect(isDeepFrozen(live(visitOf("full", mixedQuick)))).toBe(true);
       expect(
-        isDeepFrozen(saved(savedVisitOf(visitOf("quick", mixedQuick)))),
+        isDeepFrozen(saved(savedVisitOf(visitOf("full", mixedQuick)))),
       ).toBe(true);
     });
 
     it("gives equal pictures for equal inputs", () => {
-      expect(live(visitOf("quick", mixedQuick))).toEqual(
-        live(visitOf("quick", mixedQuick)),
+      expect(live(visitOf("full", mixedQuick))).toEqual(
+        live(visitOf("full", mixedQuick)),
       );
-      const visit = visitOf("quick", mixedQuick);
+      const visit = visitOf("full", mixedQuick);
       expect(saved(savedVisitOf(visit))).toEqual(saved(savedVisitOf(visit)));
     });
 
     it("neither changes nor freezes its input", () => {
-      const visit = visitOf("quick", mixedQuick);
+      const visit = visitOf("full", mixedQuick);
       const thawed: VisitToSave = JSON.parse(JSON.stringify(visit));
       const before = JSON.stringify(thawed);
       live(thawed);
@@ -1182,7 +1189,7 @@ describe("resultPicture", () => {
     });
 
     it("gives a floor of its own rather than the summary's room", () => {
-      const visit = visitOf("quick", mixedQuick);
+      const visit = visitOf("full", mixedQuick);
       const picture = live(visit);
       expect(picture.floors[0]?.room).toEqual(visit.summary.rooms[0]?.room);
       expect(picture.floors[0]?.room).not.toBe(visit.summary.rooms[0]?.room);

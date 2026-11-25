@@ -44,6 +44,15 @@ export interface VisitFlowConfig {
   readonly chimeAboveCaughtDb: number;
   /** The loudest the chime ever plays, relative to the anchor. */
   readonly chimeMaxLevelDb: number;
+  /** The level of the puff when a creature gets to Jack, relative to the anchor (2026-11-20). */
+  readonly missLevelDb: number;
+  /**
+   * How long the counting of the room may last, from the end of the practice, with pauses left
+   * out (2026-11-20). When it is up, a creature whose search is not over goes home with a result
+   * of `unreliable` for that ear, and the room ends. A creature may go home sooner: its search
+   * ends when it has found the quietest sound caught, as before.
+   */
+  readonly roomTimeLimitMs: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -74,7 +83,14 @@ export const visitFlowConfig: VisitFlowConfig = deepFreeze({
   // to answer made the visitor lose patience.
   reminderAfterQuietMs: 12000,
   reminderAboveCaughtDb: 10,
-  // The owner chose "follow the caught sound": 10 dB above it, never above 20 dB below the anchor.
-  chimeAboveCaughtDb: 10,
-  chimeMaxLevelDb: -20,
+  // The owner chose "follow the caught sound" and, on 2026-11-20, a louder chime: under the
+  // beat, at -20 dB, it could hardly be heard. Now 30 dB above the caught sound, never above 6 dB
+  // below the anchor, so that a catch is plainly heard over the beat.
+  chimeAboveCaughtDb: 30,
+  chimeMaxLevelDb: -6,
+  missLevelDb: -10,
+  // The owner, after playing on 2026-11-20: the game grows dull when it runs as long as the
+  // searches need, so its length is fixed instead of the work to be done. Five minutes to begin
+  // with; the owner may change it after more playing.
+  roomTimeLimitMs: 5 * 60 * 1000,
 });

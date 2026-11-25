@@ -48,23 +48,23 @@ A share of trials play nothing. A response on such a trial is a false alarm.
 - The false alarm rate is reported with the result.
 - Above the limit set in `src/config`, the result for that visit is marked unreliable and the visitor is invited to repeat it.
 
-## The lantern
+## The rhythm game
 
-The rooms are played as a chase (the game layer, decided by the owner on 2026-11-16). It changes what an answer costs, not how a trial is scored.
+The rooms are played as a rhythm game (decided by the owner on 2026-11-18, replacing the lantern of 2026-11-16). It changes when a trial is presented, never how it is scored or what the search sees.
 
-- The visitor carries a lantern of `lanternConfig.cellCount` lights (3). One lantern serves every pitch of the room. Every answer in a room that counts spends one light, whoever's trial it was, whether it scores a trial or not. A caught sound gives its light back at once. A spent light comes back by itself `lanternConfig.rechargeMs` (8000 ms) after it was spent or after the light before it came back; an answer does not start that wait again.
-- With no light left, an answer is not taken: it is logged as an answer that scored nothing, and the room holds its trials, as a pause does, until a light is back. A trial under way when the last light goes is discarded and comes again, as in a pause.
-- A visitor who answers only what they hear never runs short: every catch is free. A visitor who answers blindly gets at most three answers and then one per wait, which is slower than the room presents trials. The wait must stay well above a room's mean trial time (about 4.75 s); do not set it below 6000 ms without the owner.
-- The practice and the swapped repeat have no lantern. A pause fills it.
+- A soft beat with a small plucked tune (`rhythmConfig`, 100 BPM, every note below 500 Hz) plays in both ears while a room runs, and stops on every pause and stop. Every trial, sound or silence, is presented on an off-beat, half way between two beats, after its usual gap. The search's trials, levels, windows and decisions are the same as without the beat.
+- Each turn is cued alike on both sides before its off-beat, whether it has a sound or not, and never says its side.
+- A scored turn is judged: a catch Perfect, Great or Good by its time to answer, a miss, the wrong side, a kick at a turn with no sound (trick) or a silent turn left alone (steady). Catches and steady turns build a combo; anything else breaks it, as does an answer between turns. Points and Jack's flame follow the judgements; a flame that goes out is lit again and the room goes on. Nothing of the game ever reaches a search.
+- The practice and the swapped repeat keep no score.
 
 ## When a search cannot finish honestly
 
-A search must always end within the trial limit. It ends in one of these states:
+A search must always end within the trial limit and within the room's time limit. It ends in one of these states:
 
 - **found**: a threshold that meets the 2 of 3 rule
 - **better than floor**: the visitor still caught the quietest sound the product will play in that room with that calibration, its playable floor. Report "quieter than this house can whisper" and no number, and say that this is as quiet as the house can play through these headphones at this volume
 - **worse than cap**: the visitor did not catch the loudest sound the product is allowed to play. Report that plainly and no number
-- **unreliable**: the trial limit was reached, or responses were inconsistent, or the false alarm rate was too high
+- **unreliable**: the trial limit or the room's time limit was reached, or responses were inconsistent, or the false alarm rate was too high
 
 An estimate is only presented as a threshold in the first state.
 
@@ -108,6 +108,6 @@ Every number below lives in `src/config` and is expected to change after listeni
 | False alarm rate that marks a visit unreliable, applied to each room | above 30 percent |
 | False alarm rate over a whole visit that marks the visit unreliable | above 20 percent |
 | Trial limit per ear per room | 20 |
+| Time limit of the counting in the room | 5 minutes, from the first counted trial. Practice, rests and pauses are not counted. When it is over the room closes: the trial in flight is scored, and every search still open ends as unreliable with the trial limit's reason. Added on 2026-11-20 by the owner: a long game gets boring, so the length of the visit no longer depends on how much is left to find |
 | Left and right difference that triggers the swapped repeat | 15 dB |
-| Rooms, full visit | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz |
-| Rooms, quick visit | 1 kHz, 4 kHz, 8 kHz |
+| Rooms | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz (one visit only; the shorter visit of three rooms was dropped on 2026-11-20) |

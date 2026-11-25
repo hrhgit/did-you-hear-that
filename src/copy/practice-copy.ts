@@ -14,7 +14,7 @@ export const practiceCopy = Object.freeze({
   soundPlayingLine: "Listen. It is making its sound now.",
   countingLines: Object.freeze([
     "Now it counts. The sounds get quieter, and some turns make no sound at all.",
-    "Each answer costs your lantern a light. A catch gives it back.",
+    "Keep to the beat. Every creature that gets past you dims Jack's flame.",
   ]),
   /** The label of the ripple of a caught practice sound. */
   caughtLine: "That's it. You heard it.",

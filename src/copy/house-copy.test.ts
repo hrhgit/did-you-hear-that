@@ -8,7 +8,6 @@ import * as frontDoor from "./front-door-copy";
 import { frontDoorCopy } from "./front-door-copy";
 import * as leaving from "./leaving-copy";
 import * as room from "./room-copy";
-import { lanternConfig } from "../config/lantern-config";
 import {
   longestRowLine,
   roomCaughtLine,
@@ -18,10 +17,8 @@ import {
   betweenRoomsLine,
   caughtCountLine,
   deepestCatchLabel,
-  lanternLabel,
   otherSideLine,
   slippedLine,
-  streakLine,
   caughtLine,
   pitchLabel,
   relativeLevelLabel,
@@ -106,16 +103,12 @@ describe("the house interface's copy", () => {
     );
   });
 
-  it("offers the three ways in", () => {
-    expect(Object.keys(frontDoorCopy.choices)).toEqual([
-      "quick",
-      "full",
-      "replay",
-    ]);
+  it("offers the full visit and the replay", () => {
+    expect(Object.keys(frontDoorCopy.choices)).toEqual(["full", "replay"]);
   });
 
   it("gives the rules as four sentences and explains both ways to answer", () => {
-    // The fourth, about the lantern, came with the game layer of 2026-11-16.
+    // The fourth, about the beat and Jack, came with the rhythm game of 2026-11-18.
     expect(rulesCopy.sentences).toHaveLength(4);
     for (const sentence of rulesCopy.sentences) {
       expect(sentence.match(/[.!?]/g)).toHaveLength(1);
@@ -235,37 +228,18 @@ describe("the lines of the chase (game layer)", () => {
     );
   });
 
-  it("counts the lantern, the catches and the row in whole numbers", () => {
-    expect(lanternLabel(2, 3)).toBe("Lantern: 2 of 3 lights");
+  it("counts the catches in whole numbers", () => {
     expect(caughtCountLine(0)).toBe("0 caught");
-    expect(streakLine(3)).toBe("3 in a row");
     fc.assert(
-      fc.property(
-        fc.integer({ min: 1, max: 9 }),
-        fc.integer({ min: 0, max: 9 }),
-        fc.nat(500),
-        (cellCount, cells, count) => {
-          fc.pre(cells <= cellCount);
-          for (const line of [
-            lanternLabel(cells, cellCount),
-            caughtCountLine(count),
-            streakLine(count),
-          ]) {
-            expect(findBannedTerms(line, bannedTerms)).toEqual([]);
-          }
-        },
-      ),
+      fc.property(fc.nat(500), (count) => {
+        expect(findBannedTerms(caughtCountLine(count), bannedTerms)).toEqual(
+          [],
+        );
+      }),
     );
-  });
-
-  it("refuses counts that are not whole numbers from 0 up, and a lantern overfull", () => {
     for (const bad of [-1, 1.5, Number.NaN]) {
       expect(() => caughtCountLine(bad)).toThrow(RangeError);
-      expect(() => streakLine(bad)).toThrow(RangeError);
-      expect(() => lanternLabel(bad, 3)).toThrow(RangeError);
     }
-    expect(() => lanternLabel(4, 3)).toThrow(RangeError);
-    expect(() => lanternLabel(0, 0)).toThrow(RangeError);
   });
 
   it("labels the quietest catch on a side against the visitor's calibration", () => {
@@ -282,11 +256,11 @@ describe("the lines of the chase (game layer)", () => {
     );
   });
 
-  it("gives the lantern in the rules as many lights as the lantern has", () => {
-    const words = ["", "one", "two", "three", "four", "five", "six"];
-    expect(rulesCopy.sentences.join(" ")).toContain(
-      `a lantern of ${words[lanternConfig.cellCount] ?? ""} lights`,
-    );
+  it("names the beat and Jack in the rules", () => {
+    const rules = rulesCopy.sentences.join(" ");
+    expect(rules).toMatch(/beat/);
+    expect(rules).toMatch(/Jack/);
+    expect(rules).not.toMatch(/lantern of/);
   });
 });
 

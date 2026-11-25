@@ -71,6 +71,26 @@ export interface OutputGraph {
    * fade, and stops its source at the end. Does nothing without a loop.
    */
   stopLoop(durationS: number): void;
+  /**
+   * Starts the room's beat (the rhythm game, 2026-11-18): one stereo buffer looping from `startS`
+   * at `levelGain`, on a path of its own straight to the destination. `fadeToSilence` does not
+   * touch it, so cutting a caught sound short leaves the beat going; `stopBeat` ends it. A beat
+   * already playing is stopped at once first.
+   */
+  startBeat(
+    left: Float32Array,
+    right: Float32Array,
+    sampleRateHz: number,
+    startS: number,
+    levelGain: number,
+  ): void;
+  /**
+   * Lets the beat sink to `duckGain` times its level from just before `fromS` until `toS`, and rise
+   * again after (the sound of a creature has the room to itself). Does nothing without a beat.
+   */
+  duckBeat(fromS: number, toS: number, duckGain: number): void;
+  /** Fades the beat to exact zero over `durationS` and stops it. Does nothing without a beat. */
+  stopBeat(durationS: number): void;
   /** How many sources are scheduled or playing. 0 between sounds (R6.6). */
   liveSourceCount(): number;
 }
@@ -138,6 +158,14 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
   /** Faded stop gains that still have a source that has not ended. */
   const retiredStages = new Set<Stage>();
   let loop: Loop | null = null;
+  /** How fast the beat sinks under a creature's sound, and how fast it comes back. */
+  const duckSinkS = 0.04;
+  const duckRiseS = 0.2;
+  let beat: {
+    source: AudioBufferSourceNode;
+    gain: GainNode;
+    levelGain: number;
+  } | null = null;
 
   const checkChannels = (
     left: Float32Array,
@@ -320,6 +348,61 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
         // Its source is one of the stage's and stops with them; no further ramp is wanted.
         loop.stopping = true;
       }
+    },
+
+    startBeat(left, right, sampleRateHz, startS, levelGain) {
+      checkChannels(left, right, sampleRateHz);
+      if (!(Number.isFinite(levelGain) && levelGain > 0)) {
+        throw new RangeError(
+          `A beat's level gain must be a finite number above 0, but got ${String(levelGain)}.`,
+        );
+      }
+      if (beat !== null) {
+        beat.source.stop();
+        beat = null;
+      }
+      const source = context.createBufferSource();
+      source.buffer = stereoBuffer(left, right);
+      source.loop = true;
+      const gain = stereoGain(levelGain);
+      source.connect(gain);
+      gain.connect(destination);
+      const started = { source, gain, levelGain };
+      beat = started;
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+        if (beat === started) {
+          beat = null;
+        }
+      };
+      source.start(startS);
+    },
+
+    duckBeat(fromS, toS, duckGain) {
+      if (beat === null) {
+        return;
+      }
+      const param = beat.gain.gain;
+      const downS = Math.max(context.currentTime, fromS - duckSinkS);
+      const upS = Math.max(downS + duckSinkS, toS);
+      const low = beat.levelGain * duckGain;
+      param.setValueAtTime(beat.levelGain, downS);
+      param.linearRampToValueAtTime(low, downS + duckSinkS);
+      param.setValueAtTime(low, upS);
+      param.linearRampToValueAtTime(beat.levelGain, upS + duckRiseS);
+    },
+
+    stopBeat(durationS) {
+      if (beat === null) {
+        return;
+      }
+      const nowS = context.currentTime;
+      const stopping = beat;
+      beat = null;
+      stopping.gain.gain.cancelScheduledValues(nowS);
+      stopping.gain.gain.setValueCurveAtTime(stopCurve, nowS, durationS);
+      stopping.source.stop(nowS + durationS);
     },
 
     liveSourceCount() {

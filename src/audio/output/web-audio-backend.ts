@@ -241,6 +241,24 @@ export function createWebAudioBackend(
       graph?.stopLoop(fadeOutMs / 1000);
     },
 
+    startBeat(channels: ScheduledChannels, startMs, levelGain) {
+      graph?.startBeat(
+        channels.left,
+        channels.right,
+        channels.sampleRateHz,
+        startMs / 1000,
+        levelGain,
+      );
+    },
+
+    duckBeat(fromMs, toMs, duckGain) {
+      graph?.duckBeat(fromMs / 1000, toMs / 1000, duckGain);
+    },
+
+    stopBeat(fadeOutMs) {
+      graph?.stopBeat(fadeOutMs / 1000);
+    },
+
     suspend() {
       if (context === null) {
         return;

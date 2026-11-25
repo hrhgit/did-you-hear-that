@@ -35,7 +35,7 @@ interface ReplayRecord {
 }
 type RecordWindow = Window & { __replayRecord: ReplayRecord };
 
-test("walks a short visit that nobody answers, through the replay of every missed sound, to the picture", async ({
+test("walks a visit that nobody answers, through the replay of every missed sound, to the picture", async ({
   page,
 }) => {
   test.setTimeout(15 * 60_000);

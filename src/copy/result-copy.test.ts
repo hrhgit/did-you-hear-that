@@ -102,7 +102,7 @@ const deleteRefusals: readonly DeleteRefusalName[] = [
   "refused",
   "notFound",
 ];
-const visitTypes: readonly VisitType[] = ["quick", "full"];
+const visitTypes: readonly VisitType[] = ["full"];
 const differences = [-40, -15, -0.4, 0, 0.4, 15, 40];
 const thresholds = [-70, -35, -12.6, -0.4, 0, 0.4, 5, 15];
 const counts = [0, 1, 2, 3, 9, 21];
@@ -566,8 +566,8 @@ describe("visitDateLabel, imageFileBaseName and imageCaption", () => {
     expect(imageFileBaseName("2026-11-20")).toBe(
       "did-you-hear-that-2026-11-20",
     );
-    expect(imageCaption("2026-11-20", "quick", 3)).toBe(
-      "Did You Hear That? A first listen on 20 November 2026. Short visit, 3 rooms.",
+    expect(imageCaption("2026-11-20", "full", 3)).toBe(
+      "Did You Hear That? A first listen on 20 November 2026. Full visit, 3 rooms.",
     );
   });
 
@@ -596,31 +596,27 @@ describe("visitDateLabel, imageFileBaseName and imageCaption", () => {
 
 describe("visitTypeLabel and deleteVisitLabel", () => {
   it("name the visit by its number of rooms", () => {
-    expect(visitTypeLabel("quick", 3)).toBe("Short visit, 3 rooms");
-    expect(visitTypeLabel("full", 5)).toBe("Long visit, 5 rooms");
-    expect(visitTypeLabel("quick", 1)).toBe("Short visit, 1 room");
-    expect(visitTypeLabel("full", 1)).toBe("Long visit, 1 room");
-    expect(visitTypeLabel("full", 3)).toBe("Long visit, 3 rooms");
+    expect(visitTypeLabel("full", 3)).toBe("Full visit, 3 rooms");
+    expect(visitTypeLabel("full", 5)).toBe("Full visit, 5 rooms");
+    expect(visitTypeLabel("full", 1)).toBe("Full visit, 1 room");
   });
 
   it("names the delete control of one visit", () => {
     expect(deleteVisitLabel("2026-11-20", "full", 5)).toBe(
-      "Delete the visit of 20 November 2026, long visit, 5 rooms",
+      "Delete the visit of 20 November 2026, full visit, 5 rooms",
     );
-    expect(deleteVisitLabel("2026-11-20", "quick", 3)).toBe(
-      "Delete the visit of 20 November 2026, short visit, 3 rooms",
+    expect(deleteVisitLabel("2026-11-20", "full", 3)).toBe(
+      "Delete the visit of 20 November 2026, full visit, 3 rooms",
     );
   });
 
   it("refuse a room count below 1 or not whole, and an unknown visit type", () => {
     for (const bad of [0, -1, 2.5, Number.NaN]) {
-      expect(() => visitTypeLabel("quick", bad), String(bad)).toThrow(
+      expect(() => visitTypeLabel("full", bad), String(bad)).toThrow(
         RangeError,
       );
-      expect(() => imageCaption("2026-11-20", "quick", bad)).toThrow(
-        RangeError,
-      );
-      expect(() => deleteVisitLabel("2026-11-20", "quick", bad)).toThrow(
+      expect(() => imageCaption("2026-11-20", "full", bad)).toThrow(RangeError);
+      expect(() => deleteVisitLabel("2026-11-20", "full", bad)).toThrow(
         RangeError,
       );
     }

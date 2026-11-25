@@ -30,6 +30,14 @@ import { createVisitLogRecorder } from "./visit-log-recorder";
 import type { PracticeMiss, VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
 
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
+
 const { upwardStepDb } = hearingMethodConfig;
 const { calibrationSettingKeepMinDb } = audioOutputConfig;
 const {
@@ -44,7 +52,7 @@ const pageAheadMs = 5000;
 /** The output delay the fake backend's timestamp pair reports. */
 const outputDelayMs = 30;
 const visitStartMs = pageAheadMs;
-const rooms = visitRooms("quick");
+const rooms = threeRooms;
 const [corridor, stairs, attic] = rooms as [VisitRoom, VisitRoom, VisitRoom];
 
 /** One step louder than the practice starts. */
@@ -152,7 +160,7 @@ function practiceOn(
   } = {},
 ) {
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 1,
     rooms,
     startedAtMs: visitStartMs,
@@ -367,6 +375,7 @@ describe("createPractisedRoomsRunner (one-room, the roll call)", () => {
     expect(run.runner.practice()).toEqual({
       phase: "counting",
       soundPlaying: false,
+      soundEar: null,
       notHeardEars: [],
       practising: null,
       notHeard: [],
@@ -475,6 +484,7 @@ describe("createPractisedRoomsRunner (one-room, the roll call)", () => {
     expect(run.runner.practice()).toEqual({
       phase: "notHeard",
       soundPlaying: false,
+      soundEar: null,
       notHeardEars: ["right", "left"],
       practising: null,
       notHeard: missed,
@@ -572,27 +582,34 @@ describe("createPractisedRoomsRunner (one-room, the roll call)", () => {
     });
   });
 
-  it("says which room it practises and whether a sound is playing, and never a side", async () => {
+  it("says which room it practises, and which side only while its sound plays", async () => {
     const shell = await calibratedShell();
     const run = practiceOn(shell, [member(corridor), member(stairs)]);
     expect(run.runner.waitingTrack()).toBeNull();
     expect(run.runner.practice()).toMatchObject({
       phase: "practice",
       soundPlaying: false,
+      soundEar: null,
       practising: corridor,
     });
     run.runner.start();
     expect(run.runner.waitingTrack()).toEqual({ room: corridor, attempt: 1 });
-    expect(run.runner.practice().soundPlaying).toBe(false);
+    expect(run.runner.practice()).toMatchObject({
+      soundPlaying: false,
+      soundEar: null,
+    });
     run.advance(practiceGapMs);
+    // Its first sound plays from the left, and the creature stands in that doorway.
     expect(run.runner.practice()).toMatchObject({
       soundPlaying: true,
+      soundEar: "left",
       practising: corridor,
     });
     run.hear("catch");
-    // The corridor's other side is next.
+    // The corridor's other side is next, and no side is given while its sound waits.
     expect(run.runner.practice()).toMatchObject({
       soundPlaying: false,
+      soundEar: null,
       practising: corridor,
     });
     run.hear("catch");
@@ -606,9 +623,15 @@ describe("createPractisedRoomsRunner (one-room, the roll call)", () => {
       "notHeardEars",
       "phase",
       "practising",
+      "soundEar",
       "soundPlaying",
     ]);
-    expect(JSON.stringify(state)).not.toMatch(/left|right/);
+    expect(state).toMatchObject({ soundPlaying: true, soundEar: "left" });
+    run.hear("catch");
+    expect(run.runner.practice()).toMatchObject({
+      soundPlaying: false,
+      soundEar: null,
+    });
   });
 
   it("logs an answer that decides nothing against the room being practised", async () => {
@@ -820,7 +843,7 @@ describe("createPractisedRoomRunner", () => {
   it("practises its one room as the roll call practises each, and says which ears were not caught", async () => {
     const shell = await calibratedShell();
     const recorder = createVisitLogRecorder({
-      visitType: "quick",
+      visitType: "full",
       visitSeed: 1,
       rooms,
       startedAtMs: visitStartMs,
