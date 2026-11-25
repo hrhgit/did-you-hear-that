@@ -1417,12 +1417,16 @@ export function createVisitFlow(
           missLevelDb: visitFlowConfig.missLevelDb,
           reminderScored: (entry, { room }) => {
             const caught = entry.outcome === "caught";
-            if (caught && entry.responseTimeMs !== null) {
-              if (entry.easy === true) {
-                current.loudNetAnswersMs.push(
-                  entry.responseTimeMs - (entry.timingOffsetMs ?? 0),
-                );
-              }
+            // Only an easy turn is plainly audible; a reminder after a quiet may be near the edge
+            // of hearing, where answers grow slow (headphone-traits design.md "The estimate").
+            if (
+              caught &&
+              entry.easy === true &&
+              entry.responseTimeMs !== null
+            ) {
+              current.loudNetAnswersMs.push(
+                entry.responseTimeMs - (entry.timingOffsetMs ?? 0),
+              );
               current.timingOffset.noteHeard(entry.responseTimeMs);
             }
             // An easy turn is a turn of the game: it counts in the combo and the points (R2.4).

@@ -6,6 +6,20 @@
 export type VisitType = "full";
 
 /**
+ * The visit type each saved name is read as. A visit saved as the dropped shorter visit,
+ * `"quick"`, is still read, as a visit of its own rooms, so a returning visitor keeps it.
+ */
+export const savedVisitTypes: Readonly<Record<string, VisitType>> =
+  Object.freeze({ full: "full", quick: "full" });
+
+/** The visit type a saved name is read as, or null for a name no visit was ever saved under. */
+export function visitTypeOfSaved(name: unknown): VisitType | null {
+  return typeof name === "string" && Object.hasOwn(savedVisitTypes, name)
+    ? (savedVisitTypes[name] ?? null)
+    : null;
+}
+
+/**
  * The initial values of the threshold search, from the "Initial values" table in
  * `.kiro/steering/hearing-method.md`, and the threshold search rule values settled in the
  * Decisions section of `.kiro/specs/threshold-search/design.md`. Every field name ends in its

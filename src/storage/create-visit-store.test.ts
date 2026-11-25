@@ -406,6 +406,19 @@ describe("createVisitStore", () => {
       },
     );
 
+    it("reads an entry saved as the dropped quick visit as a full visit, by its stored checksum", () => {
+      const stored = {
+        ...first,
+        visitType: "quick",
+      } as unknown as StoreEntryFields;
+      const { store } = storeOver(valueText([entry(stored), entry(second)]));
+      expect(store.read()).toEqual({
+        status: "ready",
+        entries: [first, second],
+        unreadableCount: 0,
+      });
+    });
+
     it("reads the first of two entries with the same id and counts the later one as unreadable", () => {
       const twin = fields(first.savedVisitId, { headphoneName: "Twin" });
       const { store } = storeOver(valueText([entry(first), entry(twin)]));

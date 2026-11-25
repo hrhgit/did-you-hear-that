@@ -57,6 +57,7 @@ export function delayEvidenceOf(
     if (
       reminder.status === "scored" &&
       reminder.outcome === "caught" &&
+      reminder.easy === true &&
       reminder.responseTimeMs !== null
     ) {
       heardMs.push(reminder.responseTimeMs);

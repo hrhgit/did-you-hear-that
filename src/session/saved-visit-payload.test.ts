@@ -188,7 +188,7 @@ function payloadOf(source: VisitToSave = visit): Json {
   return JSON.parse(savedVisitPayloadJson(source));
 }
 
-/** The payload of `source` with one change, read back for a quick visit. */
+/** The payload of `source` with one change, read back for a full visit. */
 function parsedAfter(
   change: (payload: Json) => void,
   source: VisitToSave = visit,
@@ -458,6 +458,12 @@ describe("parseSavedVisitPayload", () => {
   });
 
   describe("rule 2: the log", () => {
+    it("reads a log saved as the dropped quick visit as a full visit", () => {
+      const parsed = parsedAfter((p) => (p.visitLog.visitType = "quick"));
+      expect(parsed?.visitLog.visitType).toBe("full");
+      expect(parsed?.summary).toEqual(payloadOf().summary);
+    });
+
     it.each<[string, (payload: Json) => void]>([
       ["log format version 2", (p) => (p.visitLog.formatVersion = 2)],
       ["another visit type", (p) => (p.visitLog.visitType = "medium")],

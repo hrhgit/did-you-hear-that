@@ -87,6 +87,26 @@ describe("headphoneTraitsOf", () => {
     });
   });
 
+  it("counts a caught easy turn as heard, and not a reminder after a quiet", () => {
+    const reminder = (easy: boolean) => ({
+      status: "scored",
+      outcome: "caught",
+      responseTimeMs: 2000,
+      ...(easy ? { easy: true } : {}),
+    });
+    const log = (easy: boolean) =>
+      ({
+        ...logOf(() => -35),
+        reminders: [reminder(easy), reminder(easy)],
+      }) as unknown as VisitLog;
+    expect(headphoneTraitsOf(log(true)).delay).toMatchObject({
+      heardCount: 22,
+    });
+    expect(headphoneTraitsOf(log(false)).delay).toEqual(
+      headphoneTraitsOf(logOf(() => -35)).delay,
+    );
+  });
+
   it("finds a quiet cut when every pitch stops at the same level", () => {
     const { quietCut } = headphoneTraitsOf(logOf(() => -35));
     expect(quietCut?.levelDb).toBeCloseTo(-37.5);

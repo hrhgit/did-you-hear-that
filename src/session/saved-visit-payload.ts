@@ -2,7 +2,10 @@ import type {
   HearingMethodConfig,
   VisitType,
 } from "../config/hearing-method-config";
-import { hearingMethodConfig } from "../config/hearing-method-config";
+import {
+  hearingMethodConfig,
+  visitTypeOfSaved,
+} from "../config/hearing-method-config";
 import { ghostSoundIds } from "../config/sound-id";
 import { judgeVisitFalseAlarms } from "./judge-visit-false-alarms";
 import type { VisitToSave } from "./result-page-types";
@@ -60,10 +63,6 @@ const earStates: readonly string[] = Object.freeze([
   "worseThanCap",
   "unreliable",
 ]);
-
-const visitTypeNames: Readonly<Record<VisitType, true>> = Object.freeze({
-  full: true,
-});
 
 /** The lists every visit log has. */
 const logListFields: readonly string[] = Object.freeze([
@@ -217,9 +216,7 @@ function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
     (log.searchMethod !== undefined &&
       log.searchMethod !== "quick" &&
       log.searchMethod !== "adaptive") ||
-    typeof log.visitType !== "string" ||
-    !Object.hasOwn(visitTypeNames, log.visitType) ||
-    log.visitType !== envelopeVisitType ||
+    visitTypeOfSaved(log.visitType) !== envelopeVisitType ||
     !isCount(log.visitSeed) ||
     log.visitSeed > largestSeed ||
     !Array.isArray(log.rooms) ||
@@ -452,7 +449,11 @@ export function parseSavedVisitPayload(
     return null;
   }
   const summary = payload.summary as unknown as VisitSummary;
-  const visitLog = payload.visitLog as unknown as VisitLog;
+  // A visit saved as a dropped visit type is read as the type it stands for now.
+  const visitLog = {
+    ...(payload.visitLog as unknown as VisitLog),
+    visitType: envelopeVisitType,
+  };
   const swappedRepeats: unknown = Object.hasOwn(payload, "swappedRepeats")
     ? payload.swappedRepeats
     : [];

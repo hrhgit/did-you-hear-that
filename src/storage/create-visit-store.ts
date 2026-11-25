@@ -1,4 +1,4 @@
-import type { VisitType } from "../config/hearing-method-config";
+import { visitTypeOfSaved } from "../config/hearing-method-config";
 import { entryChecksum } from "./entry-checksum";
 import { savedVisitsFormatVersion, savedVisitsKey } from "./saved-visits-key";
 import type { StorageArea } from "./storage-area";
@@ -40,10 +40,6 @@ const knownValueFields: readonly string[] = Object.freeze([
   "formatVersion",
   "visits",
 ]);
-
-const visitTypeNames: Readonly<Record<VisitType, true>> = Object.freeze({
-  full: true,
-});
 
 const savedVisitIdPattern = /^[0-9a-f]{8}$/;
 const localDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -124,23 +120,29 @@ function readableFields(
     savedAtEpochMs < 0 ||
     typeof savedOnLocalDate !== "string" ||
     !isCalendarDate(savedOnLocalDate) ||
-    typeof visitType !== "string" ||
-    !Object.hasOwn(visitTypeNames, visitType) ||
+    visitTypeOfSaved(visitType) === null ||
     (headphoneName !== null && typeof headphoneName !== "string") ||
     typeof payloadJson !== "string" ||
     typeof checksum !== "string"
   ) {
     return null;
   }
-  const fields: StoreEntryFields = Object.freeze({
+  const stored: StoreEntryFields = {
     savedVisitId,
     savedAtEpochMs,
     savedOnLocalDate,
-    visitType: visitType as VisitType,
+    // The checksum covers the name as it was stored, a dropped visit type included.
+    visitType: visitType as StoreEntryFields["visitType"],
     headphoneName,
     payloadJson,
+  };
+  if (entryChecksum(stored) !== checksum) {
+    return null;
+  }
+  return Object.freeze({
+    ...stored,
+    visitType: visitTypeOfSaved(visitType) ?? "full",
   });
-  return entryChecksum(fields) === checksum ? fields : null;
 }
 
 /** A stored entry: the fields in their stored order, then the checksum. */
