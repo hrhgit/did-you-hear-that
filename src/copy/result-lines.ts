@@ -228,11 +228,11 @@ export function differenceLine(rightMinusLeftDb: number | null): string {
   }
   const whole = wholeDifference(rightMinusLeftDb);
   if (whole === 0) {
-    return "On this floor you caught the same level on your left and on your right.";
+    return "At this pitch you caught the same level on your left and on your right.";
   }
   return whole > 0
-    ? `On this floor you caught a sound ${String(whole)} dB quieter on your left than on your right.`
-    : `On this floor you caught a sound ${String(-whole)} dB quieter on your right than on your left.`;
+    ? `At this pitch you caught a sound ${String(whole)} dB quieter on your left than on your right.`
+    : `At this pitch you caught a sound ${String(-whole)} dB quieter on your right than on your left.`;
 }
 
 /** The offer of the swapped repeat on a floor whose left and right are this far apart. */

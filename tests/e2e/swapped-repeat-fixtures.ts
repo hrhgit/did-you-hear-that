@@ -24,7 +24,7 @@ const stairs = rooms[2] as VisitRoom;
 
 const viewBase = {
   heading: swappedRepeatCopy.heading,
-  roomName: "Stairs",
+  roomName: "Scritch",
   pitchLabel: "4 kHz",
   firstDifferenceLabel: "20 dB quieter on the left",
   stopLabel: swappedRepeatCopy.stopButton,
@@ -105,7 +105,7 @@ export const followsEarComparison: SwappedRepeatComparison = {
     "That points at the ear and not at the headphones. This house is not a hearing test. If the difference worries you, see a hearing professional.",
   ],
   description:
-    "Stairs, 4 kHz, both ways round. Headphones as marked: left ear 40 dB below your setting, right ear 20 dB below. Headphones swapped: left ear 40 dB below, right ear 25 dB below. The difference stayed with your ears.",
+    "Scritch, 4 kHz, both ways round. Headphones as marked: left ear 40 dB below your setting, right ear 20 dB below. Headphones swapped: left ear 40 dB below, right ear 25 dB below. The difference stayed with your ears.",
 };
 
 /** The same earpiece needed the louder sound both times. */
@@ -129,7 +129,7 @@ export const followsEarpieceComparison: SwappedRepeatComparison = {
     "That points at the headphones and not at your ears.",
   ],
   description:
-    "Stairs, 4 kHz, both ways round. The difference moved with the headphones.",
+    "Scritch, 4 kHz, both ways round. The difference moved with the headphones.",
 };
 
 /** An ear of the repeat has no level. */
@@ -153,7 +153,7 @@ export const unclearComparison: SwappedRepeatComparison = {
     "The second time the house found no level for one ear, so the two runs cannot be set against each other.",
   ],
   description:
-    "Stairs, 4 kHz, both ways round. The second run has no level for the right ear. Not clear.",
+    "Scritch, 4 kHz, both ways round. The second run has no level for the right ear. Not clear.",
 };
 
 const checkBase = {

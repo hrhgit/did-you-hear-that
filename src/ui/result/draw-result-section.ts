@@ -5,100 +5,84 @@ import type {
   PictureWing,
   ResultPicture,
 } from "../../session/result-page-types";
-import {
-  cutShapes,
-  drawLamp,
-  drawLevelNote,
-  earthMarks,
-  pathData,
-  shellLines,
-} from "../house/draw-house-section";
-import { houseWalls, roomGeometry } from "../house/house-geometry";
-import {
-  createSketchPen,
-  type Point,
-  type SketchPen,
-} from "../house/sketch-pen";
+import { createSketchPen, type SketchPen } from "../house/sketch-pen";
 import { svgElement } from "../house/svg-element";
-import { drawCreatureSvg } from "../room/creature-svg";
 import {
-  atticTieBeamEnds,
-  ceilingYAt,
-  houseCentreX,
-  resultLampOf,
+  paintedCreature,
+  paintedJack,
+  type PaintedImage,
+} from "./painted-images";
+import {
+  jackFoot,
+  jackSize,
+  laneBox,
   resultViewBox,
-  wingBox,
   wingEdgeX,
   wingLabelY,
   wingLightBox,
+  wingWidth,
+  yardCentreX,
 } from "./result-geometry";
 
 /** What the drawing needs besides the picture. */
 export interface ResultSectionOptions {
   /**
-   * The seed of the pencil. The shell of the house is drawn from it alone, so it looks the same
-   * whatever the picture holds.
+   * The seed of the pencil. The yard is drawn from it alone, so it looks the same whatever the
+   * picture holds.
    */
   readonly seed: number;
-  /** The words under the two wings. */
+  /** The words beside Jack, under the two halves of the lanes. */
   readonly wingLabels: { readonly left: string; readonly right: string };
-  /** Whether the light spreads from the lamps as the drawing appears, or is simply there. */
+  /** Whether the light spreads from the candles as the drawing appears, or is simply there. */
   readonly entering: boolean;
 }
 
-/** How far the earlier visit's outline keeps from the floor and the ceiling of its room. */
-const outlineInset = 7;
+/** How far the earlier visit's outline keeps from the edges of its lane. */
+const outlineInset = 6;
 
 /** The side of the square a creature is drawn in, in the units of the drawing. */
-const creatureSize = 54;
+const creatureSize = 74;
 
-/** How far down its square a creature's feet are: its drawings stand at 104 of 120. */
-const creatureFeetFraction = 104 / 120;
+/** How far above the bottom of its lane a creature stands. */
+const creatureFootLift = 3;
 
-/** The clear space a creature keeps from the lamp's cord in the middle of the room. */
-const creatureLampGap = 6;
+/** The clear space a creature keeps from the candle in the middle of the lane. */
+const creatureCandleGap = 12;
 
-/** The clear space a creature keeps from a wall. */
-const creatureWallGap = 2;
+/** The clear space a creature keeps from the end of its lane. */
+const creatureEndGap = 2;
 
 /** How far inside the light a creature stands, as a part of its own width. */
 const creatureInsideLightFraction = 0.32;
 
+/** The corner radius of a lane. */
+const laneRadius = 18;
+
 /**
- * The half width and half height of the glow around a lamp's bulb. It stays close to the bulb, so
- * that a dark wing never looks a little lit, and its top stays under the ceiling, so that no
- * floor's shapes reach into the floor above (a test measures their boxes).
+ * The half width and half height of the glow around a lane's candle. It stays close to the
+ * flame, so that a dark half never looks a little lit.
  */
-const haloRadii = { x: 22, y: 30 } as const;
-
-/** The height of the pool of light on a lit wing's floor. It rises from the floor, never below. */
-const poolHeight = 18;
-
-/** Where the bulb of a room's lamp is on the result: as `drawLamp` places it. */
-function bulbOf(roomId: GhostSoundId): Point {
-  const lamp = resultLampOf(roomId);
-  return [houseCentreX, lamp.anchor[1] + lamp.cordLength + 14];
-}
+const haloRadii = { x: 16, y: 24 } as const;
 
 /**
- * Where a lit wing's creature stands: just inside the end of its light, on the floor, kept clear
- * of the lamp in the middle and of the wall. The x is its middle.
+ * Where a lit half's creature stands: just inside the end of its light, kept clear of the candle
+ * in the middle and of the end of the lane. The x is its middle.
  */
 export function creatureCentreX(side: "left" | "right", depth: number): number {
-  const toWall = side === "left" ? -1 : 1;
-  const nearest = houseCentreX + toWall * (creatureSize / 2 + creatureLampGap);
+  const outward = side === "left" ? -1 : 1;
+  const nearest =
+    yardCentreX + outward * (creatureSize / 2 + creatureCandleGap);
   const furthest =
-    (side === "left" ? houseWalls.innerLeft : houseWalls.innerRight) -
-    toWall * (creatureSize / 2 + creatureWallGap);
+    yardCentreX + outward * (wingWidth - creatureSize / 2 - creatureEndGap);
   const inside =
     wingEdgeX(side, depth) -
-    toWall * creatureSize * creatureInsideLightFraction;
+    outward * creatureSize * creatureInsideLightFraction;
   return side === "left"
     ? Math.max(furthest, Math.min(nearest, inside))
     : Math.min(furthest, Math.max(nearest, inside));
 }
 
-/** One wing: its light, its hatching, its end line and the outline of an earlier visit. */
+/** One half of a lane: its light, its hatching, its end line and the outline of an earlier visit. */
 function drawWing(
   doc: Document,
   pen: SketchPen,
@@ -106,13 +90,13 @@ function drawWing(
   side: "left" | "right",
   wing: PictureWing,
 ): SVGElement[] {
-  const room = roomGeometry[roomId];
+  const lane = laneBox(roomId);
   const parts: SVGElement[] = [];
   const depth = wing.lightDepthFraction;
 
   if (depth === null) {
-    // No level can be drawn here: the whole wing is hatched and stays unlit.
-    const whole = wingBox(roomId, side);
+    // No level can be drawn here: the whole half is hatched and stays unlit.
+    const whole = wingLightBox(roomId, side, 1);
     parts.push(
       svgElement(doc, "rect", {
         class: "result-doubt",
@@ -132,69 +116,60 @@ function drawWing(
         y: light.top,
         width: light.right - light.left,
         height: light.bottom - light.top,
-        fill: `url(#result-light-${side})`,
-      }),
-      // The pool the light leaves on the floor, as wide as the light: half an ellipse on the floor.
-      svgElement(doc, "path", {
-        class: "result-pool",
-        d: `M${String(light.left)} ${String(room.bottom)}A${String((light.right - light.left) / 2)} ${String(poolHeight)} 0 0 1 ${String(light.right)} ${String(room.bottom)}Z`,
-        fill: "url(#result-pool)",
+        fill: `url(#result-light-${roomId}-${side})`,
       }),
     );
     if (depth < 1) {
-      // Where the light ends: one pencil line from the ceiling to the floor.
+      // Where the light ends: one pencil line across the lane.
       const x = wingEdgeX(side, depth);
       parts.push(
         svgElement(doc, "path", {
           class: "result-reach",
-          d: pen.line([x, ceilingYAt(roomId, x)], [x, room.bottom]),
+          d: pen.line([x, lane.top + 4], [x, lane.bottom - 4]),
         }),
       );
     }
   }
 
   if (depth !== null && depth > 0) {
-    // The creature of the room, where the light ends: as far as the visitor followed it here.
-    const art = drawCreatureSvg(doc, roomId, "awake");
-    art.setAttribute(
-      "x",
-      String(creatureCentreX(side, depth) - creatureSize / 2),
+    // The lane's creature, where the light ends: as far as the visitor followed it here.
+    const art = placedImage(
+      doc,
+      paintedCreature(doc, roomId),
+      [creatureCentreX(side, depth), lane.bottom - creatureFootLift],
+      creatureSize,
     );
-    art.setAttribute(
-      "y",
-      String(room.bottom - creatureSize * creatureFeetFraction),
+    // Facing the candle from either side. The flip sits on a group of its own, under the one
+    // that moves as it arrives, so the arrival never undoes it.
+    const centre = creatureCentreX(side, depth);
+    const facing = svgElement(
+      doc,
+      "g",
+      side === "left"
+        ? { transform: `translate(${String(2 * centre)} 0) scale(-1 1)` }
+        : {},
+      [art],
     );
-    // In the units of the drawing. Chrome sizes an inner drawing by its attributes alone; the
-    // inline style keeps a browser that reads the size from styles from taking the page's 100%.
-    art.setAttribute("width", String(creatureSize));
-    art.setAttribute("height", String(creatureSize));
-    art.style.width = `${String(creatureSize)}px`;
-    art.style.height = `${String(creatureSize)}px`;
-    // In a group of its own, which can move as it arrives: an inner drawing cannot.
     parts.push(
       svgElement(
         doc,
         "g",
         { class: "result-creature", "data-creature": roomId },
-        [art],
+        [facing],
       ),
     );
   }
 
   const outlineDepth = wing.earlier?.outlineDepthFraction ?? null;
   if (outlineDepth !== null && outlineDepth > 0) {
-    // An earlier visit: three ruled, dashed sides, open towards the lamp.
+    // An earlier visit: three ruled, dashed sides, open towards the candle.
     const x = wingEdgeX(side, outlineDepth);
-    const points: Point[] = [
-      [houseCentreX, ceilingYAt(roomId, houseCentreX) + outlineInset],
-      [x, ceilingYAt(roomId, x) + outlineInset],
-      [x, room.bottom - outlineInset],
-      [houseCentreX, room.bottom - outlineInset],
-    ];
+    const top = lane.top + outlineInset;
+    const bottom = lane.bottom - outlineInset;
     parts.push(
       svgElement(doc, "path", {
         class: "result-earlier",
-        d: pathData(points, false),
+        d: `M${String(yardCentreX)} ${String(top)}L${String(x)} ${String(top)}L${String(x)} ${String(bottom)}L${String(yardCentreX)} ${String(bottom)}`,
       }),
     );
   }
@@ -206,170 +181,251 @@ function drawWing(
   });
 }
 
-/** A room the visit entered: both wings, the line between them and the lamp in the middle. */
+/** A small candle in the middle of a lane: where both halves of its light start. */
+function drawCandle(doc: Document, roomId: GhostSoundId): SVGElement {
+  const lane = laneBox(roomId);
+  const x = yardCentreX;
+  const base = lane.bottom - 10;
+  const wickY = base - 18;
+  return svgElement(doc, "g", { class: "result-candle" }, [
+    svgElement(doc, "ellipse", {
+      class: "result-halo",
+      cx: x,
+      cy: wickY - 4,
+      rx: haloRadii.x,
+      ry: haloRadii.y,
+      fill: "url(#result-halo)",
+    }),
+    svgElement(doc, "rect", {
+      class: "result-candle-wax",
+      x: x - 4,
+      y: wickY,
+      width: 8,
+      height: base - wickY,
+      rx: 2,
+    }),
+    svgElement(doc, "path", {
+      class: "result-candle-flame",
+      d: `M${String(x)} ${String(wickY - 13)}C${String(x + 5)} ${String(wickY - 6)} ${String(x + 4)} ${String(wickY - 1)} ${String(x)} ${String(wickY - 1)}C${String(x - 4)} ${String(wickY - 1)} ${String(x - 5)} ${String(wickY - 6)} ${String(x)} ${String(wickY - 13)}Z`,
+    }),
+  ]);
+}
+
+/** The bed of a lane, drawn for every pitch, entered or not. */
+function drawLaneBed(
+  doc: Document,
+  roomId: GhostSoundId,
+  entered: boolean,
+): SVGElement {
+  const lane = laneBox(roomId);
+  return svgElement(doc, "rect", {
+    class: "result-lane",
+    "data-room": roomId,
+    "data-state": entered ? "lit" : "closed",
+    x: lane.left,
+    y: lane.top,
+    width: lane.right - lane.left,
+    height: lane.bottom - lane.top,
+    rx: laneRadius,
+  });
+}
+
+/** The pitch of a lane, above its middle. */
+function drawPitchLabel(
+  doc: Document,
+  roomId: GhostSoundId,
+  label: string,
+  entered: boolean,
+): SVGElement {
+  const text = svgElement(doc, "text", {
+    class: "result-pitch",
+    "data-state": entered ? "lit" : "closed",
+    x: yardCentreX,
+    y: laneBox(roomId).top - 8,
+    "text-anchor": "middle",
+  });
+  text.textContent = label;
+  return text;
+}
+
+/**
+ * The light of one half of a lane, in the colour of the lane's creature warmed by candlelight. It
+ * lives inside the lane's group, so it takes the creature's colour from there.
+ */
+function lightGradient(
+  doc: Document,
+  roomId: GhostSoundId,
+  side: "left" | "right",
+): SVGElement {
+  return svgElement(
+    doc,
+    "linearGradient",
+    {
+      id: `result-light-${roomId}-${side}`,
+      gradientUnits: "userSpaceOnUse",
+      x1: yardCentreX,
+      y1: 0,
+      x2: wingEdgeX(side, 1),
+      y2: 0,
+    },
+    [
+      svgElement(doc, "stop", { class: "result-light-near", offset: 0 }),
+      svgElement(doc, "stop", { class: "result-light-far", offset: 1 }),
+    ],
+  );
+}
+
+/** A lane the visit entered: both halves of its light and the candle in the middle. */
 function drawFloor(
   doc: Document,
   seed: number,
   floor: PictureFloor,
 ): SVGElement {
   const roomId = floor.room.roomId;
-  const room = roomGeometry[roomId];
-  // Each floor has a pencil of its own, so one floor's lines do not move when another changes.
+  // Each lane has a pencil of its own, so one lane's lines do not move when another changes.
   const pen = createSketchPen(
     createSeededRandom(seed + 1 + ghostSoundIds.indexOf(roomId)),
   );
-  const lamp = resultLampOf(roomId);
-  const lampBottom = lamp.anchor[1] + lamp.cordLength + 22;
-  const bulb = bulbOf(roomId);
-  const children: SVGElement[] = [
-    svgElement(doc, "g", { "clip-path": `url(#result-room-${roomId})` }, [
-      // The glow around the bulb: no deeper than the lamp itself, so it says nothing of a level.
-      svgElement(doc, "ellipse", {
-        class: "result-halo",
-        cx: bulb[0],
-        cy: bulb[1],
-        rx: haloRadii.x,
-        ry: haloRadii.y,
-        fill: "url(#result-halo)",
-      }),
-      ...drawWing(doc, pen, roomId, "left", floor.left),
-      ...drawWing(doc, pen, roomId, "right", floor.right),
-    ]),
-    // The line between the two wings, drawn the way a draughtsman marks a centre.
-    svgElement(doc, "path", {
-      class: "result-centre",
-      d: `M${houseCentreX} ${lampBottom}L${houseCentreX} ${room.bottom}`,
-    }),
+  const wings = [
+    ...drawWing(doc, pen, roomId, "left", floor.left),
+    ...drawWing(doc, pen, roomId, "right", floor.right),
   ];
-  if (roomId === "attic") {
-    const [from, to] = atticTieBeamEnds();
-    children.push(
-      svgElement(doc, "path", { class: "house-ink", d: pen.line(from, to) }),
-    );
-  }
-  children.push(
-    drawLamp(doc, { lampAnchor: lamp.anchor, lampCordLength: lamp.cordLength }),
-  );
+  const isCreature = (part: SVGElement): boolean =>
+    part.classList.contains("result-creature");
   return svgElement(
     doc,
     "g",
-    { class: "result-floor", "data-room": roomId, "data-kind": "entered" },
-    children,
+    {
+      class: "result-floor",
+      "data-room": roomId,
+      "data-kind": "entered",
+      "data-creature": roomId,
+    },
+    [
+      svgElement(doc, "defs", {}, [
+        lightGradient(doc, roomId, "left"),
+        lightGradient(doc, roomId, "right"),
+      ]),
+      svgElement(
+        doc,
+        "g",
+        { "clip-path": `url(#result-lane-${roomId})` },
+        wings.filter((part) => !isCreature(part)),
+      ),
+      drawCandle(doc, roomId),
+      // The creatures stand over the candle's glow and may lean past the end of the lane.
+      ...wings.filter(isCreature),
+    ],
   );
 }
 
 /**
- * Draws the result picture: the cross-section of the house, with one lamp in the middle of every
- * room the visit entered. Its light reaches into the left wing and into the right wing as far as
- * the picture model says. A wing with no level to draw is hatched, a wing where nothing was
- * caught stays dark, and a room the visit did not enter stays empty. Nothing in the drawing
- * joins one floor to another, and no floor carries a scale.
+ * A painted image placed with its anchor at `anchor`, `width` wide in the units of the drawing.
+ * Where nothing could be painted, an empty box of the same size keeps its place.
+ */
+function placedImage(
+  doc: Document,
+  image: PaintedImage | null,
+  anchor: readonly [number, number],
+  width: number,
+): SVGElement {
+  const aspect = image?.aspect ?? 1;
+  const anchorX = image?.anchorX ?? 0.5;
+  const anchorY = image?.anchorY ?? 1;
+  const height = width * aspect;
+  const box = {
+    x: anchor[0] - width * anchorX,
+    y: anchor[1] - height * anchorY,
+    width,
+    height,
+  };
+  if (image === null) {
+    return svgElement(doc, "rect", { ...box, fill: "none" });
+  }
+  const element = svgElement(doc, "image", {
+    ...box,
+    preserveAspectRatio: "none",
+  });
+  element.setAttribute("href", image.href);
+  return element;
+}
+
+/** Jack at the foot of the yard, his candle lit and his sweets at his feet, as the room paints him. */
+function drawJack(doc: Document): SVGElement {
+  const [x, foot] = jackFoot;
+  return svgElement(doc, "g", { class: "result-jack" }, [
+    svgElement(doc, "ellipse", {
+      class: "result-jack-glow",
+      cx: x,
+      cy: foot - jackSize * 0.45,
+      rx: jackSize * 1.3,
+      ry: jackSize * 0.8,
+      fill: "url(#result-jack-glow)",
+    }),
+    placedImage(doc, paintedJack(doc), jackFoot, jackSize * 2.4),
+  ]);
+}
+
+/**
+ * Draws the result picture: the moonlit yard of the visit, with one lane for each pitch, the
+ * highest at the top, and Jack at the foot. In every lane the visit entered a candle burns in the
+ * middle, and its light reaches into the left half and into the right half as far as the picture
+ * model says. A half with no level to draw is hatched, a half where nothing was caught stays dark,
+ * and a lane the visit did not enter stays empty. Nothing in the drawing joins one lane to
+ * another, and no lane carries a scale.
  */
 export function drawResultSection(
   doc: Document,
   picture: ResultPicture,
   options: ResultSectionOptions,
 ): SVGElement {
-  const pen = createSketchPen(createSeededRandom(options.seed));
-  const gradient = (side: "left" | "right"): SVGElement =>
-    svgElement(
-      doc,
-      "linearGradient",
-      {
-        id: `result-light-${side}`,
-        gradientUnits: "userSpaceOnUse",
-        x1: houseCentreX,
-        y1: 0,
-        x2: side === "left" ? houseWalls.innerLeft : houseWalls.innerRight,
-        y2: 0,
-      },
-      [
-        svgElement(doc, "stop", { class: "result-light-near", offset: 0 }),
-        svgElement(doc, "stop", { class: "result-light-far", offset: 1 }),
-      ],
-    );
   const definitions = svgElement(doc, "defs", {}, [
     svgElement(
       doc,
       "pattern",
       {
-        id: "result-cut-hatch",
-        width: 7,
-        height: 7,
-        patternUnits: "userSpaceOnUse",
-        patternTransform: "rotate(45)",
-      },
-      [
-        svgElement(doc, "rect", {
-          class: "house-cut-fill",
-          width: 7,
-          height: 7,
-        }),
-        svgElement(doc, "path", { class: "house-cut-hatch", d: "M0 0L0 7" }),
-      ],
-    ),
-    // Wider and slanted the other way than the cut walls, so the two are never mistaken.
-    svgElement(
-      doc,
-      "pattern",
-      {
         id: "result-doubt-hatch",
-        width: 13,
-        height: 13,
+        width: 11,
+        height: 11,
         patternUnits: "userSpaceOnUse",
         patternTransform: "rotate(-45)",
       },
-      [svgElement(doc, "path", { class: "result-doubt-line", d: "M0 0L0 13" })],
+      [svgElement(doc, "path", { class: "result-doubt-line", d: "M0 0L0 11" })],
     ),
-    gradient("left"),
-    gradient("right"),
     svgElement(doc, "radialGradient", { id: "result-halo" }, [
       svgElement(doc, "stop", { class: "result-halo-near", offset: 0 }),
       svgElement(doc, "stop", { class: "result-halo-far", offset: 1 }),
     ]),
-    // Centred on the middle of the floor and squeezed to the half ellipse: brightest on the floor.
-    svgElement(
-      doc,
-      "radialGradient",
-      {
-        id: "result-pool",
-        cx: 0.5,
-        cy: 1,
-        r: 1,
-        gradientTransform: "matrix(0.5 0 0 1 0.25 0)",
-      },
-      [
-        svgElement(doc, "stop", { class: "result-pool-near", offset: 0 }),
-        svgElement(doc, "stop", { class: "result-pool-far", offset: 1 }),
-      ],
-    ),
-    ...ghostSoundIds.map((roomId) =>
-      svgElement(doc, "clipPath", { id: `result-room-${roomId}` }, [
-        svgElement(doc, "path", {
-          d: pathData(roomGeometry[roomId].outline, true),
+    svgElement(doc, "radialGradient", { id: "result-jack-glow" }, [
+      svgElement(doc, "stop", { class: "result-jack-glow-near", offset: 0 }),
+      svgElement(doc, "stop", { class: "result-jack-glow-far", offset: 1 }),
+    ]),
+    ...ghostSoundIds.map((roomId) => {
+      const lane = laneBox(roomId);
+      return svgElement(doc, "clipPath", { id: `result-lane-${roomId}` }, [
+        svgElement(doc, "rect", {
+          x: lane.left,
+          y: lane.top,
+          width: lane.right - lane.left,
+          height: lane.bottom - lane.top,
+          rx: laneRadius,
         }),
-      ]),
-    ),
+      ]);
+    }),
   ]);
 
-  // The shell and the room names come from the first pencil, in a fixed order.
-  const earth = svgElement(doc, "path", {
-    class: "house-ink house-earth",
-    d: earthMarks(pen),
-  });
-  const shell = svgElement(doc, "path", {
-    class: "house-ink house-shell",
-    d: shellLines(pen),
-  });
   const entered = new Map(
     picture.floors.map((floor) => [floor.room.roomId, floor] as const),
   );
-  const notes = ghostSoundIds.map((roomId) => {
-    const note = drawLevelNote(doc, pen, roomId);
-    note.setAttribute("data-state", entered.has(roomId) ? "lit" : "closed");
-    return note;
+  const beds = ghostSoundIds.map((roomId) =>
+    drawLaneBed(doc, roomId, entered.has(roomId)),
+  );
+  const pitches = ghostSoundIds.flatMap((roomId) => {
+    const floor = entered.get(roomId);
+    return floor === undefined
+      ? []
+      : [drawPitchLabel(doc, roomId, floor.pitchLabel, true)];
   });
-
   const floors = ghostSoundIds.map((roomId) => {
     const floor = entered.get(roomId);
     return floor === undefined
@@ -381,10 +437,17 @@ export function drawResultSection(
       : drawFloor(doc, options.seed, floor);
   });
 
+  // The line from Jack up through the candles, the way a draughtsman marks a centre.
+  const topLane = laneBox(ghostSoundIds[ghostSoundIds.length - 1] ?? "attic");
+  const centre = svgElement(doc, "path", {
+    class: "result-centre",
+    d: `M${String(yardCentreX)} ${String(topLane.top)}L${String(yardCentreX)} ${String(jackFoot[1] - jackSize)}`,
+  });
+
   const wingLabel = (side: "left" | "right"): SVGElement => {
     const label = svgElement(doc, "text", {
       class: "result-wing-label",
-      x: wingEdgeX(side, 0.5),
+      x: wingEdgeX(side, 0.55),
       y: wingLabelY,
       "text-anchor": "middle",
     });
@@ -396,8 +459,8 @@ export function drawResultSection(
     doc,
     "svg",
     {
-      class: "house-section result-section",
-      viewBox: `${resultViewBox.x} ${resultViewBox.y} ${resultViewBox.width} ${resultViewBox.height}`,
+      class: "result-section",
+      viewBox: `${String(resultViewBox.x)} ${String(resultViewBox.y)} ${String(resultViewBox.width)} ${String(resultViewBox.height)}`,
       preserveAspectRatio: "xMidYMid meet",
       "aria-hidden": "true",
       focusable: "false",
@@ -405,15 +468,11 @@ export function drawResultSection(
     },
     [
       definitions,
-      earth,
+      centre,
+      ...beds,
+      ...pitches,
       ...floors,
-      svgElement(doc, "path", {
-        class: "house-cut",
-        d: cutShapes(),
-        fill: "url(#result-cut-hatch)",
-      }),
-      shell,
-      ...notes,
+      drawJack(doc),
       wingLabel("left"),
       wingLabel("right"),
     ],

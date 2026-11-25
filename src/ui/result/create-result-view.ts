@@ -33,7 +33,7 @@ import type {
   VisitArchive,
   VisitToSave,
 } from "../../session/result-page-types";
-import { drawCreatureSvg } from "../room/creature-svg";
+import { drawCreature } from "../room/creature-art";
 import { drawResultSection } from "./draw-result-section";
 import { attachResultYard } from "./result-yard";
 import { savePictureAsImage } from "./save-picture";
@@ -366,7 +366,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
     className: string,
   ): HTMLElement => {
     const badge = make("span", `result-badge ${className}`, [
-      drawCreatureSvg(doc, roomId, "awake"),
+      drawCreature(doc, roomId, "awake"),
     ]);
     badge.dataset.creature = roomId;
     badge.setAttribute("aria-hidden", "true");
@@ -500,6 +500,8 @@ export function createResultView(options: ResultViewOptions): ResultView {
     item.dataset.creature = roomId;
     item.dataset.standsOut = standsOutFor ?? "none";
     item.id = `result-floor-${roomId}`;
+    // Its swapped repeat, if any, is lit in the colour of its creature.
+    item.dataset.creature = roomId;
     item.tabIndex = -1;
     picksFloor(item, roomId);
     const offer = floor.swappedRepeat;

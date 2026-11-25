@@ -67,7 +67,7 @@ describe("reactionOfEvent", () => {
         positionLabel: "Sound 2 of 5",
         trialOrder: 31,
         room,
-        roomName: "Nursery",
+        roomName: "Tink",
         pitchLabel: "2 kHz",
         ear,
         missedLevelDb: -40,

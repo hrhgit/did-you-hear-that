@@ -270,7 +270,7 @@ describe("the score of the chase on the result page", () => {
     expect(totalCaughtLine(23)).toBe("23 caught in all");
     expect(longestRowLine(1)).toBe("Never two in a row");
     expect(longestRowLine(6)).toBe("Longest row: 6 in a row");
-    expect(roomCaughtLine("Cellar", 7)).toBe("Cellar: 7 caught");
+    expect(roomCaughtLine("Thump", 7)).toBe("Thump: 7 caught");
     fc.assert(
       fc.property(fc.nat(500), (count) => {
         for (const line of [
@@ -286,7 +286,7 @@ describe("the score of the chase on the result page", () => {
     for (const bad of [-1, 2.5, Number.NaN]) {
       expect(() => totalCaughtLine(bad)).toThrow(RangeError);
       expect(() => longestRowLine(bad)).toThrow(RangeError);
-      expect(() => roomCaughtLine("Cellar", bad)).toThrow(RangeError);
+      expect(() => roomCaughtLine("Thump", bad)).toThrow(RangeError);
     }
   });
 });
@@ -296,12 +296,12 @@ describe("betweenRoomsLine", () => {
     fc.assert(
       fc.property(rooms, (roomId) => {
         const line = betweenRoomsLine(roomId);
-        expect(line).toContain(roomNames[roomId].toLowerCase());
+        expect(line).toContain(roomNames[roomId]);
         expect(findBannedTerms(line, bannedTerms)).toEqual([]);
       }),
     );
     expect(betweenRoomsLine("stairs")).toBe(
-      "This room is quiet now. The stairs are next, when you are ready.",
+      "This room is quiet now. Scritch is next, when you are ready.",
     );
   });
 });

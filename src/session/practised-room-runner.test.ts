@@ -466,7 +466,7 @@ describe("createPractisedRoomsRunner (one-room, the roll call)", () => {
       member(attic),
     ]);
     run.runner.start();
-    // Corridor: the right is never caught. Attic: the left is never caught.
+    // Murmur: the right is never caught. Squeak: the left is never caught.
     run.hearAll("catch", "miss", "miss");
     expect(run.notHeard).toEqual([]);
     run.hearAll("catch", "catch");

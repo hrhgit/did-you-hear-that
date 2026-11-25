@@ -445,7 +445,7 @@ describe("differenceLabel and differenceLine", () => {
     for (const difference of [0, -0, 0.4, -0.4]) {
       expect(differenceLabel(difference)).toBe("0 dB");
       expect(differenceLine(difference)).toBe(
-        "On this floor you caught the same level on your left and on your right.",
+        "At this pitch you caught the same level on your left and on your right.",
       );
     }
   });
@@ -455,10 +455,10 @@ describe("differenceLabel and differenceLine", () => {
     expect(differenceLabel(-15)).toBe("15 dB quieter on the right");
     expect(differenceLabel(14.6)).toBe("15 dB quieter on the left");
     expect(differenceLine(15)).toBe(
-      "On this floor you caught a sound 15 dB quieter on your left than on your right.",
+      "At this pitch you caught a sound 15 dB quieter on your left than on your right.",
     );
     expect(differenceLine(-40)).toBe(
-      "On this floor you caught a sound 40 dB quieter on your right than on your left.",
+      "At this pitch you caught a sound 40 dB quieter on your right than on your left.",
     );
   });
 
@@ -503,13 +503,13 @@ describe("floorDescription", () => {
         null,
       ),
     ).toBe(
-      "Stairs, 4 kHz. Left: The quietest sound you caught here was 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
+      "Scritch, 4 kHz. Left: The quietest sound you caught here was 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
     );
   });
 
   it("gives both levels and the difference when both wings are found", () => {
     expect(floorDescription("cellar", 500, found(-20), found(-5), 15)).toBe(
-      "Cellar, 500 Hz. Left: The quietest sound you caught here was 20 dB quieter than your calibration. Right: The quietest sound you caught here was 5 dB quieter than your calibration. On this floor you caught a sound 15 dB quieter on your left than on your right.",
+      "Thump, 500 Hz. Left: The quietest sound you caught here was 20 dB quieter than your calibration. Right: The quietest sound you caught here was 5 dB quieter than your calibration. At this pitch you caught a sound 15 dB quieter on your left than on your right.",
     );
   });
 
@@ -517,7 +517,7 @@ describe("floorDescription", () => {
     expect(
       floorDescription("attic", 8000, betterThanFloor, worseThanCap, null),
     ).toBe(
-      "Attic, 8 kHz. Left: Quieter than this house can whisper. Right: You did not catch the loudest sound the house may play here. There is no left and right difference to show here, because one side has no level.",
+      "Squeak, 8 kHz. Left: Quieter than this house can whisper. Right: You did not catch the loudest sound the house may play here. There is no left and right difference to show here, because one side has no level.",
     );
   });
 

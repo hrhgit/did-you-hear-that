@@ -28,8 +28,8 @@ One exception: the fixed limits statement described below says what the product 
 
 In plain words, next to the picture and not hidden behind a link:
 
-1. Headphones differ at every pitch, so floors cannot be compared with each other.
-2. What can be compared is left against right on one floor, and this visit against the visitor's own later visits with the same headphones.
+1. Headphones differ at every pitch, so pitches cannot be compared with each other.
+2. What can be compared is left against right at one pitch, and this visit against the visitor's own later visits with the same headphones.
 3. This is not a diagnosis and has not been checked against clinical equipment.
 4. When to see a hearing professional: a left and right difference that is still there after swapping the headphones, a sudden change, or ringing that does not go away.
 

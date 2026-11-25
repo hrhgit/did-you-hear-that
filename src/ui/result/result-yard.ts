@@ -1,34 +1,22 @@
 import { canPaint } from "../room/creature-art";
-import { paintJack } from "../room/night-paint";
-import { resultViewBox } from "./result-geometry";
+import { horizonY, resultViewBox } from "./result-geometry";
 
 /**
- * The yard around the house on the result page: the same night as the room the visit was played
- * in, so the picture after the visit looks like the place the visitor just left. A canvas behind
- * the drawing paints the sky, the moon, the hills, the ground the house stands in, a gravestone
- * and Jack on the grass. The drawing itself stays as it is, and so does the saved picture.
+ * The yard behind the result picture: the same night as the room the visit was played in, so the
+ * picture after the visit looks like the place the visitor just left. A canvas behind the drawing
+ * paints the sky, the moon, the hills, a bare tree, gravestones and the grass the lanes lie on.
+ * The drawing itself, with its lanes and Jack, stays as it is, and so does the saved picture.
  *
- * Everything is painted in the units of the drawing's view box, so the ground meets the house's
- * own ground line at every size of the page.
+ * Everything is painted in the units of the drawing's view box, so the horizon meets the
+ * drawing's own at every size of the page.
  */
 
 type Ctx = CanvasRenderingContext2D;
 
 const tau = Math.PI * 2;
 
-/** Where the house meets the ground, in the units of the drawing. */
-const groundY = 742;
-
-/** The inside of the house, roof to cellar floor: painted dark so the lit rooms glow against it. */
-const houseInside: readonly (readonly [number, number])[] = [
-  [150, 232],
-  [360, 78],
-  [570, 232],
-  [540, 236],
-  [540, 902],
-  [180, 902],
-  [180, 236],
-];
+/** Where the sky meets the grass, in the units of the drawing. */
+const groundY = horizonY;
 
 /** A repeatable scatter: the same yard every time the page is drawn. */
 function scatter(seed: number): () => number {
@@ -69,10 +57,10 @@ function paintYard(
     ctx.fill();
   }
 
-  // The moon, high at the right of the roof, with its halo and its seas.
-  const moonX = 640;
-  const moonY = 128;
-  const moonR = 26;
+  // The moon, high at the right, with its halo and its seas.
+  const moonX = 372;
+  const moonY = 46;
+  const moonR = 17;
   const halo = ctx.createRadialGradient(
     moonX,
     moonY,
@@ -112,7 +100,7 @@ function paintYard(
     ctx.fill();
   }
 
-  // Two rows of far hills behind the house.
+  // Two rows of far hills along the horizon.
   const hills = (
     crest: number,
     colour: string,
@@ -121,22 +109,22 @@ function paintYard(
   ): void => {
     ctx.fillStyle = colour;
     ctx.beginPath();
-    ctx.moveTo(left, groundY);
+    ctx.moveTo(left, groundY + 1);
     for (let i = 0; i <= bumps; i += 1) {
       const x = left + (i / bumps) * width;
       ctx.lineTo(x, crest + Math.sin(i * 1.7 + crest) * amp + random() * amp);
     }
-    ctx.lineTo(right, groundY);
+    ctx.lineTo(right, groundY + 1);
     ctx.closePath();
     ctx.fill();
   };
-  hills(632, "#24163a", 7, 16);
-  hills(684, "#1a1029", 6, 12);
+  hills(groundY - 26, "#24163a", 7, 9);
+  hills(groundY - 12, "#1a1029", 6, 6);
 
-  // A bare tree at the left, half behind the house.
+  // A bare tree on the horizon at the left.
   const tree = (x: number, scale: number, lean: number): void => {
     ctx.save();
-    ctx.translate(x, groundY);
+    ctx.translate(x, groundY + 1);
     ctx.scale(scale, scale);
     ctx.rotate(lean);
     ctx.strokeStyle = "#0c0814";
@@ -160,42 +148,23 @@ function paintYard(
       }
       ctx.restore();
     };
-    branch(150, 14, 6);
+    branch(30, 5, 5);
     ctx.restore();
   };
-  tree(162, 1, -0.14);
+  tree(44, 1, -0.1);
 
-  // The ground, from the foot of the hills down past the cellar floor.
+  // The grass, from the horizon down past the last lane, darker towards the visitor.
   const ground = ctx.createLinearGradient(0, groundY, 0, bottom);
-  ground.addColorStop(0, "#1c1426");
-  ground.addColorStop(1, "#08060c");
+  ground.addColorStop(0, "#241a30");
+  ground.addColorStop(0.5, "#15101d");
+  ground.addColorStop(1, "#0a070e");
   ctx.fillStyle = ground;
   ctx.fillRect(left, groundY, width, bottom - groundY);
 
-  // The inside of the house, so the lit rooms glow against a dark house and not the sky.
-  ctx.fillStyle = "#110b1c";
-  ctx.beginPath();
-  houseInside.forEach(([x, y], index) => {
-    if (index === 0) {
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
-  });
-  ctx.closePath();
-  ctx.fill();
-
-  // Warm light from the house on the grass at its foot.
-  const pool = ctx.createRadialGradient(360, groundY, 0, 360, groundY, 260);
-  pool.addColorStop(0, "rgba(255, 170, 80, 0.16)");
-  pool.addColorStop(1, "rgba(255, 170, 80, 0)");
-  ctx.fillStyle = pool;
-  ctx.fillRect(100, groundY - 60, 520, 120);
-
-  // A gravestone at the right of the house.
+  // Gravestones along the horizon.
   const stone = (x: number, w: number, h: number, tilt: number): void => {
     ctx.save();
-    ctx.translate(x, groundY + 2);
+    ctx.translate(x, groundY + 3);
     ctx.rotate(tilt);
     const rock = ctx.createLinearGradient(-w / 2, -h, w / 2, 0);
     rock.addColorStop(0, "#5a5470");
@@ -209,7 +178,7 @@ function paintYard(
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = "rgba(20, 16, 30, 0.6)";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(0, -h * 0.75);
     ctx.lineTo(0, -h * 0.4);
@@ -218,34 +187,36 @@ function paintYard(
     ctx.stroke();
     ctx.restore();
   };
-  stone(600, 22, 32, 0.08);
+  stone(318, 13, 19, 0.08);
+  stone(342, 10, 14, -0.1);
+  stone(104, 11, 16, -0.06);
 
-  // Grass along the ground line, leaving the house's own walls clear.
-  ctx.strokeStyle = "rgba(70, 48, 84, 0.7)";
-  ctx.lineWidth = 1.2;
-  for (let blade = 0; blade < width / 3; blade += 1) {
+  // Tufts of grass scattered over the yard, thicker near the horizon.
+  ctx.strokeStyle = "rgba(90, 64, 108, 0.55)";
+  ctx.lineWidth = 1.1;
+  for (let blade = 0; blade < width / 2; blade += 1) {
     const x = left + random() * width;
-    if (x > 176 && x < 544) {
-      continue;
-    }
+    const y = groundY + 2 + random() ** 1.8 * (bottom - groundY);
     ctx.beginPath();
-    ctx.moveTo(x, groundY + 1);
-    ctx.lineTo(x + (random() - 0.5) * 5, groundY - 3 - random() * 7);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (random() - 0.5) * 4, y - 2 - random() * 5);
     ctx.stroke();
   }
 
-  // Low fog over the grass.
+  // Low fog drifting over the grass.
   for (const [x, y, r] of [
-    [180, groundY + 6, 140],
-    [520, groundY + 2, 160],
-    [700, groundY + 10, 120],
+    [60, groundY + 20, 120],
+    [380, groundY + 40, 140],
+    [120, 420, 160],
+    [360, 560, 150],
+    [220, 700, 200],
   ] as const) {
     const fog = ctx.createRadialGradient(x, y, 0, x, y, r);
-    fog.addColorStop(0, "rgba(170, 150, 200, 0.13)");
+    fog.addColorStop(0, "rgba(170, 150, 200, 0.09)");
     fog.addColorStop(1, "rgba(170, 150, 200, 0)");
     ctx.save();
     ctx.translate(x, y);
-    ctx.scale(1, 0.3);
+    ctx.scale(1, 0.35);
     ctx.translate(-x, -y);
     ctx.fillStyle = fog;
     ctx.beginPath();
@@ -253,24 +224,6 @@ function paintYard(
     ctx.fill();
     ctx.restore();
   }
-
-  // Jack on the grass at the right, his candle lit: the house waits for the next visit.
-  const jackGlow = ctx.createRadialGradient(
-    664,
-    groundY - 14,
-    0,
-    664,
-    groundY - 14,
-    60,
-  );
-  jackGlow.addColorStop(0, "rgba(255, 150, 50, 0.28)");
-  jackGlow.addColorStop(1, "rgba(255, 150, 50, 0)");
-  ctx.fillStyle = jackGlow;
-  ctx.fillRect(604, groundY - 74, 120, 120);
-  ctx.save();
-  ctx.translate(666, groundY + 2);
-  paintJack(ctx, 46, { t: 0, flame: 1, hurt: 0, pulse: 0, candy: 7, joy: 0 });
-  ctx.restore();
 }
 
 /**

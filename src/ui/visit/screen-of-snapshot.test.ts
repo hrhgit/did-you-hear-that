@@ -110,7 +110,7 @@ const replaySound: ReplaySound = {
   positionLabel: "Sound 3 of 8",
   trialOrder: 40,
   room: { roomIndex: 2, roomId: "stairs", frequencyHz: 4000 },
-  roomName: "Stairs",
+  roomName: "Scritch",
   pitchLabel: "4 kHz",
   ear: "right",
   missedLevelDb: -35,
@@ -341,7 +341,7 @@ describe("screenOfSnapshot", () => {
     expect(screen.sheet).toBeNull();
     expect(screen.answersShown).toBe(true);
     expect(screen.pauseShown).toBe(true);
-    expect(screen.room).toEqual({ name: "Nursery", progress: "Room 2 of 3" });
+    expect(screen.room).toEqual({ name: "Tink", progress: "Room 2 of 3" });
     expect(screen.creatures).toEqual([]);
     expect(screen.featured).toBeNull();
   });
@@ -357,9 +357,9 @@ describe("screenOfSnapshot", () => {
     expect(screen.answersShown).toBe(false);
     expect(screen.featured).toBeNull();
     expect(screen.creatures).toEqual([]);
-    expect(screen.room).toEqual({ name: "Corridor", progress: "Room 1 of 3" });
+    expect(screen.room).toEqual({ name: "Murmur", progress: "Room 1 of 3" });
     expect(screen.restLine).toBe(
-      "This room is quiet now. The nursery is next, when you are ready.",
+      "This room is quiet now. Tink is next, when you are ready.",
     );
   });
 
@@ -1098,14 +1098,14 @@ describe("screenOfSnapshot", () => {
   describe("in a swapped repeat", () => {
     const repeatBase = {
       heading: swappedRepeatCopy.heading,
-      roomName: "Stairs",
+      roomName: "Scritch",
       pitchLabel: "4 kHz",
       firstDifferenceLabel: "20 dB quieter on the left",
       stopLabel: swappedRepeatCopy.stopButton,
       backLabel: swappedRepeatCopy.backButton,
     } as const;
     const floor = {
-      roomName: "Stairs",
+      roomName: "Scritch",
       pitchLabel: "4 kHz",
       firstDifferenceLabel: "20 dB quieter on the left",
     };
@@ -1285,7 +1285,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.answersShown).toBe(true);
       // The bar names the floor and its pitch. Nobody stands in view, and no card is shown: one
       // floor is visited again, and its creature shows only when one of its sounds is caught.
-      expect(screen.room).toEqual({ name: "Stairs", progress: "4 kHz" });
+      expect(screen.room).toEqual({ name: "Scritch", progress: "4 kHz" });
       expect(screen.creatures).toEqual([]);
       expect(screen.featured).toBeNull();
       expect(screen.chase).toBeNull();
@@ -1509,7 +1509,7 @@ describe("screenOfSnapshot", () => {
       expect(room.sheet).toBeNull();
       expect(room.answersShown).toBe(true);
       expect(room.pauseShown).toBe(true);
-      expect(room.room?.name).toBe("Stairs");
+      expect(room.room?.name).toBe("Scritch");
       const repeat = swappedRepeatView({
         ...input,
         phase: "room",

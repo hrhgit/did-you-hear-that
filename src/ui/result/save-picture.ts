@@ -30,6 +30,7 @@ const carriedStyles = [
   "stroke-linecap",
   "stroke-linejoin",
   "opacity",
+  "filter",
   "stop-color",
   "stop-opacity",
   "font-family",

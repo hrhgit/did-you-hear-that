@@ -265,7 +265,7 @@ p.result-turn-back {
 }
 
 /*
- * The picture: the house standing in the yard of the room the visit was played in. A canvas
+ * The picture: the yard of the room the visit was played in, one lane for each creature. A canvas
  * behind the drawing paints the yard (result-yard.ts); without one the frame is plain night sky.
  */
 .result-figure {
@@ -371,8 +371,11 @@ p.result-turn-back {
 }
 
 .result-section {
+  display: block;
+  width: 100%;
+  overflow: visible;
   height: auto;
-  aspect-ratio: 564 / 906;
+  aspect-ratio: 440 / 760;
 }
 
 .result-figure-controls {
@@ -383,50 +386,86 @@ p.result-turn-back {
   margin: 1.25rem 0.4rem 0;
 }
 
-/* The lamps of the rooms the visit entered are on. */
-.result-floor .house-ink {
-  stroke: var(--color-moonlight);
+/* Each creature's lane: a faint bed on the grass, whether the visit entered it or not. */
+.result-lane {
+  fill: rgb(255 240 220 / 0.035);
+  stroke: color-mix(in srgb, var(--color-moonlight) 22%, transparent);
+  stroke-width: 1;
 }
 
-.result-floor .house-bulb {
-  fill: var(--color-lamp);
+.result-lane[data-state="closed"] {
+  stroke-dasharray: 3 5;
+  fill: none;
 }
 
+/* The pitch of a lane, above its candle. */
+.result-pitch {
+  fill: var(--color-graphite);
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.result-frame[data-yard="true"] .result-pitch {
+  fill: var(--color-moonlight);
+  fill-opacity: 0.8;
+}
+
+/* The candle in the middle of each lane, where both halves of its light start. */
+.result-candle-wax {
+  fill: #efe2c4;
+}
+
+.result-candle-flame {
+  fill: #ffd27a;
+  filter: drop-shadow(0 0 3px rgb(255 170 60 / 0.9));
+}
+
+/* Jack at the foot of the yard. */
+.result-jack-glow-near {
+  stop-color: #ff9632;
+  stop-opacity: 0.32;
+}
+
+.result-jack-glow-far {
+  stop-color: #ff9632;
+  stop-opacity: 0;
+}
+
+/* Each lane's light: its creature's colour, warmed by the candle, fading as it goes out. */
 .result-light-near {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.58;
+  stop-color: color-mix(
+    in srgb,
+    var(--creature-hue, var(--color-lamp)) 45%,
+    var(--color-lamp)
+  );
+  stop-opacity: 0.62;
 }
 
 .result-light-far {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.2;
+  stop-color: var(--creature-hue, var(--color-lamp));
+  stop-opacity: 0.22;
 }
 
-/* The glow around a bulb, and the pool its light leaves on a lit wing's floor. */
+/* The glow around a candle. */
 .result-halo-near {
   stop-color: var(--color-lamp);
   stop-opacity: 0.5;
 }
 
-.result-halo-far,
-.result-pool-far {
+.result-halo-far {
   stop-color: var(--color-lamp);
   stop-opacity: 0;
 }
 
-.result-pool-near {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.55;
-}
-
-/* Each lit wing's creature stands where its light ends, with a faint glow of its colour. */
+/* Each lit half's creature stands where its light ends, with a faint glow of its colour. */
 .result-creature {
   filter: drop-shadow(
     0 0 5px color-mix(in srgb, var(--creature-hue) 65%, transparent)
   );
 }
 
-/* A floor picked in the words below: the others dim while it is picked. */
+/* A lane picked in the words below: the others dim while it is picked. */
 .result-floor {
   transition: opacity 0.35s ease;
 }
@@ -436,15 +475,15 @@ p.result-turn-back {
   opacity: 0.32;
 }
 
-/* Where a wing's light ends. */
+/* Where a half lane's light ends. */
 .result-reach {
   fill: none;
-  stroke: var(--color-lamp);
+  stroke: color-mix(in srgb, var(--creature-hue, var(--color-lamp)) 60%, white);
   stroke-width: 1.7;
   stroke-linecap: round;
 }
 
-/* A wing with no level to draw. */
+/* A half lane with no level to draw. */
 .result-doubt-line {
   fill: none;
   stroke: var(--color-graphite);
@@ -462,7 +501,7 @@ p.result-turn-back {
   animation: result-appear 0.4s ease both;
 }
 
-/* The line between the two wings, the way a draughtsman marks a centre. */
+/* The line from Jack up through the candles, the way a draughtsman marks a centre. */
 .result-centre {
   fill: none;
   stroke: var(--color-graphite-faint);
@@ -476,10 +515,10 @@ p.result-turn-back {
   font-style: italic;
 }
 
-/* The one moment of movement: the light spreads from each lamp to where it ends. */
+/* The one moment of movement: the light spreads from each candle to where it ends. */
 .result-section[data-entering="true"] .result-light {
   transform-box: view-box;
-  transform-origin: 360px 0;
+  transform-origin: 220px 0;
   animation: result-spread 2.6s cubic-bezier(0.22, 0.7, 0.2, 1) 0.5s both;
 }
 
@@ -494,10 +533,6 @@ p.result-turn-back {
 
 .result-section[data-entering="true"] .result-halo {
   animation: result-appear 1.2s ease 0.2s both;
-}
-
-.result-section[data-entering="true"] .result-pool {
-  animation: result-appear 1.4s ease 1.5s both;
 }
 
 /* Once the light has spread, each creature steps up to where it ends. */
@@ -1054,7 +1089,6 @@ p.result-name-hint {
   .result-section[data-entering="true"] .result-earlier,
   .result-section[data-entering="true"] .result-doubt,
   .result-section[data-entering="true"] .result-halo,
-  .result-section[data-entering="true"] .result-pool,
   .result-section[data-entering="true"] .result-creature {
     animation: result-appear 0.4s ease both;
   }

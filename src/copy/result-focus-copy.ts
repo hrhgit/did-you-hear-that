@@ -146,12 +146,12 @@ export function focusHeading(
         : "Some sides stayed dark";
     case "farApart":
       return floorCount === 1
-        ? "Your left and right were far apart on one floor"
-        : `Your left and right were far apart on ${String(floorCount)} floors`;
+        ? "Your left and right were far apart at one pitch"
+        : `Your left and right were far apart at ${String(floorCount)} pitches`;
     case "unsettled":
       return floorCount === 1
-        ? "The house found no level on one floor"
-        : `The house found no level on ${String(floorCount)} floors`;
+        ? "The house found no level at one pitch"
+        : `The house found no level at ${String(floorCount)} pitches`;
     case "followsEarpiece":
       return "The difference went with the headphones";
     case "repeatUnclear":
@@ -166,16 +166,16 @@ export function focusLine(
 ): string {
   requireKind(kind);
   requireFloorCount(floorCount);
-  const rooms = floorCount === 1 ? "that room" : "those rooms";
+  const creatures = floorCount === 1 ? "that creature" : "those creatures";
   switch (kind) {
     case "followsEar":
       return limitsStatement.sentences[3];
     case "dark":
       return "Check that both earpieces play and that the volume is where you set it, then walk through the house again.";
     case "farApart":
-      return `Swapping the headphones and visiting ${rooms} again tells whether the difference stays with your ears or moves with the headphones.`;
+      return `Swapping the headphones and hearing ${creatures} again tells whether the difference stays with your ears or moves with the headphones.`;
     case "unsettled":
-      return `Each such floor below says why. Walking through the house again gives ${rooms} another try.`;
+      return `Each one below says why. Walking through the house again gives ${creatures} another try.`;
     case "followsEarpiece":
       return outcomeLines("followsEarpiece", null)[0] ?? "";
     case "repeatUnclear":
@@ -190,11 +190,11 @@ export function closeLine(limitDb: number, canStillSave: boolean): string {
       `A swap limit must be a positive number of decibels, but got ${String(limitDb)}.`,
     );
   }
-  const line = `No floor showed a difference of ${String(Math.round(limitDb))} dB or more between your left and your right.`;
+  const line = `No pitch showed a difference of ${String(Math.round(limitDb))} dB or more between your left and your right.`;
   return canStillSave ? `${line} ${resultFocusCopy.keepLine}` : line;
 }
 
-/** The label of the control that takes the visitor to a floor's words: "Stairs, 4 kHz". */
+/** The label of the control that takes the visitor to a floor's words: "Scritch, 4 kHz". */
 export function focusFloorLabel(roomName: string, pitch: string): string {
   return `${roomName}, ${pitch}`;
 }

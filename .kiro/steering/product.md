@@ -19,17 +19,17 @@ People who wear headphones for hours a day and have never had their hearing chec
 3. Enters a moonlit yard, where Jack the jack-o'-lantern guards his candy, and a soft beat keeps time. The creatures of the house live there, one for each pitch of the visit: five. First the roll call: each creature makes its sound once in each ear, loud enough to hear easily. Then it counts: the creatures take turns in no order, each on the left or the right, and each time one is caught it comes back quieter, until its search is over and it goes home. On some turns the house makes no sound at all. Every turn comes between the beats, and the creatures creep in on the beat to snuff Jack's candle: a catch kicks one away, and one that went by or came on the other side bites Jack and dims his flame. Catches in a row build a combo, as in a rhythm game, and the points grow with it. A flame that goes out is lit again: the room goes on and every answer counts (the rhythm game, decided by the owner on 2026-11-18, replacing the lantern). When the room has been quiet for about 12 seconds with no catch, the creature whose turn it is makes its sound once, louder (a reminder, which counts for nothing in the search), and each catch is followed by a soft chime. The counting is limited in time: the room closes after 5 minutes of counting at the latest, so that the visit never wears the visitor out however much is left to find (decided by the owner on 2026-11-20). Practice, rests and pauses do not count against the 5 minutes. A creature whose search ends sooner goes home sooner, and a creature still being searched when time is up is shown as not settled, the same as a search that ran out of tries.
 4. Opens the last door. A voice says three digits in noise and the visitor types them.
 5. Hears the replay. Every sound they missed is played again, louder, from the side where it was, with its creature.
-6. Sees the result. A cross-section of a five-storey house with a left wing and a right wing. Light reaches as deep into each wing as that ear could hear on that floor.
-7. Swaps the headphones and repeats a floor where left and right differed a lot. Each such floor can be repeated until one run of it ends with a record.
+6. Sees the result. The moonlit yard of the visit, with Jack at the foot and one lane for each creature, highest pitch at the top. From the middle of each lane, light reaches to the left and to the right as far as that ear could hear that creature's pitch, and the creature stands where its light ends (the yard, decided by the owner on 2026-11-24, replacing the cross-section of a five-storey house). The words beside the picture name each lane by its creature and its pitch.
+7. Swaps the headphones and repeats a creature whose left and right differed a lot. Each such creature can be repeated until one run of it ends with a record.
 
 ## What the result may claim
 
 Consumer headphones are not calibrated and differ from each other at every pitch. Two comparisons survive that:
 
-- the left ear against the right ear on the same floor, checked by the swapped-headphone repeat
+- the left ear against the right ear at the same pitch, checked by the swapped-headphone repeat
 - the same person with the same headphones, this visit against a later visit
 
-Nothing else is claimed. Floors are never compared with each other. There is no comparison with other people, no clinical scale and no verdict.
+Nothing else is claimed. Pitches are never compared with each other. There is no comparison with other people, no clinical scale and no verdict.
 
 ## Experience rules
 

@@ -69,7 +69,7 @@ async function expectFrame(page: Page): Promise<void> {
     page.getByRole("heading", { name: swappedRepeatCopy.heading, level: 1 }),
   ).toBeVisible();
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText(
-    "Stairs",
+    "Scritch",
   );
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText("4 kHz");
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText(
@@ -254,7 +254,7 @@ test.describe("the swapped repeat of a floor", () => {
     await expect(
       page.getByRole("img", { name: oneRoomCopy.sceneLabel }),
     ).toBeVisible();
-    await expect(page.locator(".visit-room-name")).toHaveText("Stairs");
+    await expect(page.locator(".visit-room-name")).toHaveText("Scritch");
     await expect(page.locator(".visit-room-progress")).toHaveText("4 kHz");
     await expect(page.locator(".rhythm-hud")).toBeHidden();
     await expect(page.locator("main")).toHaveAttribute("data-shelf", "none");

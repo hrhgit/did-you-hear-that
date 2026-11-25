@@ -121,13 +121,13 @@ describe("focusHeading and focusLine", () => {
 
   it("counts the floors that stand out, never ranking them", () => {
     expect(focusHeading("farApart", 1, 1)).toBe(
-      "Your left and right were far apart on one floor",
+      "Your left and right were far apart at one pitch",
     );
     expect(focusHeading("unsettled", 3, 4)).toBe(
-      "The house found no level on 3 floors",
+      "The house found no level at 3 pitches",
     );
-    expect(focusLine("unsettled", 1)).toContain("that room");
-    expect(focusLine("farApart", 2)).toContain("those rooms");
+    expect(focusLine("unsettled", 1)).toContain("that creature");
+    expect(focusLine("farApart", 2)).toContain("those creatures");
   });
 
   it("counts the dark sides, not the floors, for a dark heading", () => {
@@ -150,10 +150,10 @@ describe("focusHeading and focusLine", () => {
 describe("closeLine", () => {
   it("gives the swap limit in whole decibels and asks to save only when the visit can be", () => {
     expect(closeLine(15, false)).toBe(
-      "No floor showed a difference of 15 dB or more between your left and your right.",
+      "No pitch showed a difference of 15 dB or more between your left and your right.",
     );
     expect(closeLine(14.6, true)).toBe(
-      `No floor showed a difference of 15 dB or more between your left and your right. ${resultFocusCopy.keepLine}`,
+      `No pitch showed a difference of 15 dB or more between your left and your right. ${resultFocusCopy.keepLine}`,
     );
     expectClean(closeLine(15, true));
   });
@@ -165,7 +165,7 @@ describe("closeLine", () => {
 
 describe("focusFloorLabel", () => {
   it("names the room and its pitch", () => {
-    expect(focusFloorLabel("Stairs", "4 kHz")).toBe("Stairs, 4 kHz");
+    expect(focusFloorLabel("Scritch", "4 kHz")).toBe("Scritch, 4 kHz");
   });
 });
 
@@ -217,12 +217,12 @@ describe("the chase's counts", () => {
     expect(totalCaughtLine(23)).toBe("23 caught in all");
     expect(longestRowLine(1)).toBe("Never two in a row");
     expect(longestRowLine(6)).toBe("Longest row: 6 in a row");
-    expect(roomCaughtLine("Cellar", 7)).toBe("Cellar: 7 caught");
+    expect(roomCaughtLine("Thump", 7)).toBe("Thump: 7 caught");
   });
 
   it.each([-1, 1.5, Number.NaN])("refuses a count of %s", (count) => {
     expect(() => totalCaughtLine(count)).toThrow(RangeError);
     expect(() => longestRowLine(count)).toThrow(RangeError);
-    expect(() => roomCaughtLine("Cellar", count)).toThrow(RangeError);
+    expect(() => roomCaughtLine("Thump", count)).toThrow(RangeError);
   });
 });

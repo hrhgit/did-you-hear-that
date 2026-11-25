@@ -59,7 +59,7 @@ export const swappedRepeatCopy = Object.freeze({
   }),
   turnBackLine:
     "If the headphones are still swapped, turn them back now, so that the left earpiece is on your left ear.",
-  comparisonHeading: "This room both ways round",
+  comparisonHeading: "Both ways round",
   /** The keys are the arrangements. */
   runLabels: Object.freeze({
     asMarked: "Headphones as marked",

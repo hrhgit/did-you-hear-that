@@ -1,34 +1,48 @@
-import type { GhostSoundId } from "../../config/sound-id";
-import {
-  atticTieBeamY,
-  houseWalls,
-  roomGeometry,
-} from "../house/house-geometry";
+import { ghostSoundIds, type GhostSoundId } from "../../config/sound-id";
 import type { Point } from "../house/sketch-pen";
 
 /**
- * Where the light of the result picture sits, in the units of the house's drawing. On the result
- * every room the visit entered has one lamp in the middle, and its light reaches into the left
- * wing and into the right wing as far as the picture model says. These numbers place lines on a
- * drawing. None of them affects sound, timing or scoring.
+ * Where the result picture sits, in the units of its drawing. The picture is the moonlit yard of
+ * the visit: one lane for each creature, the highest pitch at the top, and Jack at the foot. From
+ * a candle in the middle of each lane, light reaches into the left half and into the right half
+ * of the lane as far as the picture model says. These numbers place shapes on a drawing. None of
+ * them affects sound, timing or scoring.
  */
 
-/** The part of the drawing the result shows: the house, the room names and the wing labels. */
+/** The part of the drawing the result shows: the sky, the lanes, Jack and the side labels. */
 export const resultViewBox = Object.freeze({
-  x: 136,
-  y: 50,
-  width: 564,
-  height: 906,
+  x: 0,
+  y: 0,
+  width: 440,
+  height: 760,
 });
 
-/** The middle of the house, where the lamp of every room hangs on the result. */
-export const houseCentreX = (houseWalls.innerLeft + houseWalls.innerRight) / 2;
+/** Where the sky meets the ground of the yard. */
+export const horizonY = 98;
 
-/** The width of one wing: from the middle of the house to the inner face of a wall. */
-export const wingWidth = houseWalls.innerRight - houseCentreX;
+/** The middle of the yard, where every lane's candle burns and Jack sits. */
+export const yardCentreX = resultViewBox.width / 2;
 
-/** Where the words "Left" and "Right" stand under the house. */
-export const wingLabelY = 938;
+/** The length of one half of a lane: from its candle to its end. */
+export const wingWidth = 168;
+
+/** How tall a lane is. */
+export const laneHeight = 80;
+
+/** From the top of one lane to the top of the next. */
+const lanePitch = 106;
+
+/** The top of the highest lane. */
+const firstLaneTop = 130;
+
+/** Where Jack sits on the grass, under the lanes. */
+export const jackFoot: Point = [yardCentreX, 736];
+
+/** Jack's width, in the units of the drawing. */
+export const jackSize = 60;
+
+/** Where the words "Left" and "Right" stand, either side of Jack. */
+export const wingLabelY = 730;
 
 /** A box of the drawing. `left` is less than or equal to `right`. */
 export interface DrawingBox {
@@ -46,84 +60,53 @@ function requireFraction(fraction: number): void {
   }
 }
 
-/** How far from the middle of the house a depth lies, in the units of the drawing. */
+/** The whole of a creature's lane, both halves. The highest pitch is at the top. */
+export function laneBox(roomId: GhostSoundId): DrawingBox {
+  const fromTop = ghostSoundIds.length - 1 - ghostSoundIds.indexOf(roomId);
+  const top = firstLaneTop + fromTop * lanePitch;
+  return {
+    left: yardCentreX - wingWidth,
+    right: yardCentreX + wingWidth,
+    top,
+    bottom: top + laneHeight,
+  };
+}
+
+/** How far from the middle of the yard a depth lies, in the units of the drawing. */
 export function reachOfDepth(fraction: number): number {
   requireFraction(fraction);
   return fraction * wingWidth;
 }
 
 /**
- * The x at which a depth lies in a wing. The light starts at the middle of the house, so a depth
- * of 0 is the middle and a depth of 1 is the inner face of the wing's outer wall.
+ * The x at which a depth lies in one half of a lane. The light starts at the candle, so a depth
+ * of 0 is the middle and a depth of 1 is the end of the lane.
  */
 export function wingEdgeX(side: "left" | "right", fraction: number): number {
   const reach = reachOfDepth(fraction);
-  return side === "left" ? houseCentreX - reach : houseCentreX + reach;
+  return side === "left" ? yardCentreX - reach : yardCentreX + reach;
 }
 
-/**
- * The box a wing's light fills for a depth: from the middle of the house to the depth, as tall as
- * the room. The attic's box is cut to the roof by the room's outline when it is drawn.
- */
+/** The box a half lane's light fills for a depth: from the candle to the depth, as tall as the lane. */
 export function wingLightBox(
   roomId: GhostSoundId,
   side: "left" | "right",
   fraction: number,
 ): DrawingBox {
-  const room = roomGeometry[roomId];
+  const lane = laneBox(roomId);
   const edge = wingEdgeX(side, fraction);
   return {
-    left: Math.min(houseCentreX, edge),
-    right: Math.max(houseCentreX, edge),
-    top: room.top,
-    bottom: room.bottom,
+    left: Math.min(yardCentreX, edge),
+    right: Math.max(yardCentreX, edge),
+    top: lane.top,
+    bottom: lane.bottom,
   };
 }
 
-/** The whole of one wing of a room. */
+/** The whole of one half of a lane. */
 export function wingBox(
   roomId: GhostSoundId,
   side: "left" | "right",
 ): DrawingBox {
   return wingLightBox(roomId, side, 1);
-}
-
-/**
- * The height of a room's ceiling at `x`. Every room has a flat ceiling but the attic, whose
- * ceiling is the inner face of the roof.
- */
-export function ceilingYAt(roomId: GhostSoundId, x: number): number {
-  const room = roomGeometry[roomId];
-  if (roomId !== "attic") {
-    return room.top;
-  }
-  const ridge = houseWalls.ridgeInner;
-  const distance = Math.min(Math.abs(x - ridge[0]), wingWidth);
-  return (
-    ridge[1] + ((houseWalls.roofMeetsWallY - ridge[1]) * distance) / wingWidth
-  );
-}
-
-/** Where the cord of a room's lamp meets the ceiling on the result, and how long the cord is. */
-export function resultLampOf(roomId: GhostSoundId): {
-  readonly anchor: Point;
-  readonly cordLength: number;
-} {
-  // The attic lamp hangs from the tie beam, as it does during the visit.
-  if (roomId === "attic") {
-    return { anchor: [houseCentreX, atticTieBeamY], cordLength: 18 };
-  }
-  return { anchor: [houseCentreX, roomGeometry[roomId].top], cordLength: 26 };
-}
-
-/** The two ends of the attic's tie beam, where it meets the inner faces of the roof. */
-export function atticTieBeamEnds(): readonly [Point, Point] {
-  const ridge = houseWalls.ridgeInner;
-  const reach =
-    ((atticTieBeamY - ridge[1]) / (houseWalls.roofMeetsWallY - ridge[1])) *
-    wingWidth;
-  return [
-    [houseCentreX - reach, atticTieBeamY],
-    [houseCentreX + reach, atticTieBeamY],
-  ];
 }

@@ -1,12 +1,15 @@
 import type { GhostSoundId } from "../config/sound-id";
 
-/** The name of each room as the visitor reads it on the drawing of the house. */
+/**
+ * The name the visitor reads for each sound of the visit: the name of the creature that makes it,
+ * the same as `creatureCopy` gives (the yard, 2026-11-24, replacing the rooms of the house).
+ */
 export const roomNames: Readonly<Record<GhostSoundId, string>> = Object.freeze({
-  cellar: "Cellar",
-  corridor: "Corridor",
-  nursery: "Nursery",
-  stairs: "Stairs",
-  attic: "Attic",
+  cellar: "Thump",
+  corridor: "Murmur",
+  nursery: "Tink",
+  stairs: "Scritch",
+  attic: "Squeak",
 });
 
 /** The side a sound came from, as the visitor answers it. */
@@ -14,8 +17,6 @@ export type AnswerSide = "left" | "right";
 
 /** What the visitor reads while in a room, apart from what the house says about a sound. */
 export const roomCopy = Object.freeze({
-  /** The name of the picture of the house, for a visitor who cannot see it. */
-  houseLabel: "A house of five rooms, one above the other",
   /** The two answers. `hint` is the short word shown in the corner of each half of the screen. */
   answers: Object.freeze({
     left: Object.freeze({ name: "I heard it on my left", hint: "Left" }),
@@ -141,15 +142,8 @@ export function deepestCatchLabel(
 }
 
 /** How the house announces each room as the one that comes next. */
-const roomIsNext: Readonly<Record<GhostSoundId, string>> = Object.freeze({
-  cellar: "The cellar is next",
-  corridor: "The corridor is next",
-  nursery: "The nursery is next",
-  stairs: "The stairs are next",
-  attic: "The attic is next",
-});
 
-/** What the house says between two rooms, naming the room that comes next. */
+/** What the house says between two rooms, naming the creature that comes next. */
 export function betweenRoomsLine(nextRoomId: GhostSoundId): string {
-  return `This room is quiet now. ${roomIsNext[nextRoomId]}, when you are ready.`;
+  return `This room is quiet now. ${roomNames[nextRoomId]} is next, when you are ready.`;
 }

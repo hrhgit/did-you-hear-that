@@ -4,6 +4,7 @@ import { bannedTerms } from "../config/banned-terms";
 import type { GhostSoundId } from "../config/sound-id";
 import { ghostSoundIds } from "../config/sound-id";
 import * as creatures from "./creature-copy";
+import { roomNames } from "./room-copy";
 import {
   creatureCardLabel,
   creatureCaughtCountLine,
@@ -368,5 +369,13 @@ describe("creatureCardLabel", () => {
         },
       ),
     );
+  });
+});
+
+describe("the names the visitor reads", () => {
+  it("name each sound by its creature", () => {
+    for (const roomId of ghostSoundIds) {
+      expect(roomNames[roomId]).toBe(creatureCopy[roomId].name);
+    }
   });
 });

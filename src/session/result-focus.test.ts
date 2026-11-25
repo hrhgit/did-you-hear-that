@@ -219,7 +219,7 @@ describe("resultFocus", () => {
         canStillSave: false,
       });
       expect(focus.line).toBe(
-        "No floor showed a difference of 15 dB or more between your left and your right.",
+        "No pitch showed a difference of 15 dB or more between your left and your right.",
       );
     });
 
@@ -249,14 +249,14 @@ describe("resultFocus", () => {
       );
       expect(focus).toEqual({
         kind: "farApart",
-        heading: "Your left and right were far apart on one floor",
-        line: "Swapping the headphones and visiting that room again tells whether the difference stays with your ears or moves with the headphones.",
+        heading: "Your left and right were far apart at one pitch",
+        line: "Swapping the headphones and hearing that creature again tells whether the difference stays with your ears or moves with the headphones.",
         points: [
           {
             kind: "farApart",
             roomId: "stairs",
             roomIndex: 1,
-            roomName: "Stairs",
+            roomName: "Scritch",
             pitchLabel: "4 kHz",
             line: "You caught a sound 15 dB quieter on your left than on your right.",
           },
@@ -331,7 +331,7 @@ describe("resultFocus", () => {
         visitOf([{ left: unreliable, right: found(-30) }, close, close]),
       );
       expect(focus.kind).toBe("unsettled");
-      expect(focus.heading).toBe("The house found no level on one floor");
+      expect(focus.heading).toBe("The house found no level at one pitch");
       expect(focus.points[0]?.line).toBe(
         "The house found no level on your left.",
       );
@@ -395,9 +395,9 @@ describe("resultFocus", () => {
       const focus = focusOf(visit);
       expect(focus.kind).toBe("farApart");
       expect(focus.heading).toBe(
-        "Your left and right were far apart on 2 floors",
+        "Your left and right were far apart at 2 pitches",
       );
-      expect(focus.line).toContain("those rooms");
+      expect(focus.line).toContain("those creatures");
       expect(focus.points.map((point) => [point.kind, point.roomId])).toEqual([
         ["farApart", "attic"],
         ["farApart", "corridor"],

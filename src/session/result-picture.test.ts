@@ -229,9 +229,9 @@ describe("resultPicture", () => {
       const picture = live(visitOf("full", mixedQuick));
       expect(picture.floors.map((floor) => floor.room)).toEqual(threeRooms);
       expect(picture.floors.map((floor) => floor.roomName)).toEqual([
-        "Corridor",
-        "Stairs",
-        "Attic",
+        "Murmur",
+        "Scritch",
+        "Squeak",
       ]);
       expect(picture.floors.map((floor) => floor.pitchLabel)).toEqual([
         "1 kHz",
@@ -361,7 +361,7 @@ describe("resultPicture", () => {
 
     it("describes each floor in words", () => {
       expect(third?.description).toBe(
-        "Attic, 8 kHz. Left: This room should be visited again. One catch here did not fit with your other answers. Right: The quietest sound you caught here was 30 dB quieter than your calibration. There is no left and right difference to show here, because one side has no level.",
+        "Squeak, 8 kHz. Left: This room should be visited again. One catch here did not fit with your other answers. Right: The quietest sound you caught here was 30 dB quieter than your calibration. There is no left and right difference to show here, because one side has no level.",
       );
     });
   });
@@ -391,7 +391,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(0);
       expect(floor?.differenceLabel).toBe("0 dB");
       expect(floor?.differenceLine).toBe(
-        "On this floor you caught the same level on your left and on your right.",
+        "At this pitch you caught the same level on your left and on your right.",
       );
     });
 
@@ -400,7 +400,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(15);
       expect(floor?.differenceLabel).toBe("15 dB quieter on the left");
       expect(floor?.differenceLine).toBe(
-        "On this floor you caught a sound 15 dB quieter on your left than on your right.",
+        "At this pitch you caught a sound 15 dB quieter on your left than on your right.",
       );
     });
 
@@ -409,7 +409,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(-15);
       expect(floor?.differenceLabel).toBe("15 dB quieter on the right");
       expect(floor?.differenceLine).toBe(
-        "On this floor you caught a sound 15 dB quieter on your right than on your left.",
+        "At this pitch you caught a sound 15 dB quieter on your right than on your left.",
       );
     });
   });
