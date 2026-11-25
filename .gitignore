@@ -10,3 +10,6 @@ cli.json.lock
 coverage/
 playwright-report/
 test-results/
+
+# Visit logs the dev server writes (vite.config.ts)
+logs/
