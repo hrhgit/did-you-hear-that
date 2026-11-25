@@ -332,6 +332,8 @@ export function createVisitStore(
         const fields: StoreEntryFields = { ...found.fields, headphoneName };
         const changed = {
           ...(loaded.value.visits[found.position] as JsonObject),
+          // A dropped visit type is written as the type it is read as, so the checksum holds.
+          visitType: fields.visitType,
           headphoneName,
           checksum: entryChecksum(fields),
         };
@@ -346,7 +348,7 @@ export function createVisitStore(
 
     changePayload(savedVisitId: string, payloadJson: string): StoreWrite {
       // As changeName, for the payload (swapped-repeat Q5, decided by the owner on 2026-11-15): the
-      // entry keeps its id, its dates, its visit type, its name, its place and every field the
+      // entry keeps its id, its dates, its visit type (as read), its name, its place and every field the
       // store does not know; every other entry is kept as read.
       return change((loaded) => {
         const found = findReadable(loaded, savedVisitId);
@@ -356,6 +358,8 @@ export function createVisitStore(
         const fields: StoreEntryFields = { ...found.fields, payloadJson };
         const changed = {
           ...(loaded.value.visits[found.position] as JsonObject),
+          // A dropped visit type is written as the type it is read as, so the checksum holds.
+          visitType: fields.visitType,
           payloadJson,
           checksum: entryChecksum(fields),
         };

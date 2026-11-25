@@ -419,6 +419,28 @@ describe("createVisitStore", () => {
       });
     });
 
+    it("keeps an entry saved as the dropped quick visit readable after its name or payload changes", () => {
+      const stored = {
+        ...first,
+        visitType: "quick",
+      } as unknown as StoreEntryFields;
+      const { store } = storeOver(valueText([entry(stored)]));
+      expect(store.changeName(first.savedVisitId, "Renamed")).toEqual({
+        ok: true,
+      });
+      expect(store.read()).toMatchObject({
+        entries: [{ ...first, headphoneName: "Renamed" }],
+        unreadableCount: 0,
+      });
+      expect(store.changePayload(first.savedVisitId, "{}")).toEqual({
+        ok: true,
+      });
+      expect(store.read()).toMatchObject({
+        entries: [{ ...first, headphoneName: "Renamed", payloadJson: "{}" }],
+        unreadableCount: 0,
+      });
+    });
+
     it("reads the first of two entries with the same id and counts the later one as unreadable", () => {
       const twin = fields(first.savedVisitId, { headphoneName: "Twin" });
       const { store } = storeOver(valueText([entry(first), entry(twin)]));
