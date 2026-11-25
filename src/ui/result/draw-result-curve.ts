@@ -4,15 +4,12 @@ import type { Ear } from "../../session/result-page-types";
 import type { CurvePoint, ResultCurve } from "../../session/result-curve";
 import yardUrl from "../room/art/yard.webp";
 import { paintedCreature } from "./painted-images";
+import { resultCurveViewBox } from "./result-curve-box";
 
 const svgNs = "http://www.w3.org/2000/svg";
 
-/**
- * The scene's own units: the painted night of the room, 3 : 2, with its horizon at 78% of its
- * height (result-curve design.md "Redesign, 2026-11-25: the yard chart").
- */
-const width = 600;
-const height = 400;
+/** The scene's own units (`result-curve-box.ts`); the painted horizon is at 78% of its height. */
+const { width, height } = resultCurveViewBox;
 /** The sky the curves are drawn in: between the trees, above the hills. */
 const sky = { left: 182, right: 472, top: 62, bottom: 260 } as const;
 /** Where the creatures stand, and the pitch label at their feet. */

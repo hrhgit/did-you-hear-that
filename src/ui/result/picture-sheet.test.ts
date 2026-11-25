@@ -6,7 +6,7 @@ import type {
 } from "../../session/result-page-types";
 import type { SwappedRepeatComparison } from "../../session/visit-flow-types";
 import { layoutPictureSheet, wrapText } from "./picture-sheet";
-import { tallLayout } from "./result-geometry";
+import { resultCurveViewBox } from "./result-curve-box";
 
 /** Every character is half as wide as the text is tall. */
 const measure = (text: string, sizePx: number): number =>
@@ -128,7 +128,7 @@ describe("layoutPictureSheet", () => {
 
   it("gives the drawing the proportions of the result's view box", () => {
     expect(sheet.drawing.height / sheet.drawing.width).toBeCloseTo(
-      tallLayout.viewBox.height / tallLayout.viewBox.width,
+      resultCurveViewBox.height / resultCurveViewBox.width,
       2,
     );
   });
