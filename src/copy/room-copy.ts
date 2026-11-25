@@ -1,12 +1,15 @@
 import type { GhostSoundId } from "../config/sound-id";
 
-/** The name of each room as the visitor reads it on the drawing of the house. */
+/**
+ * The name the visitor reads for each sound of the visit: the name of the creature that makes it,
+ * the same as `creatureCopy` gives (the yard, 2026-11-24, replacing the rooms of the house).
+ */
 export const roomNames: Readonly<Record<GhostSoundId, string>> = Object.freeze({
-  cellar: "Cellar",
-  corridor: "Corridor",
-  nursery: "Nursery",
-  stairs: "Stairs",
-  attic: "Attic",
+  cellar: "Thump",
+  corridor: "Murmur",
+  nursery: "Tink",
+  stairs: "Scritch",
+  attic: "Squeak",
 });
 
 /** The side a sound came from, as the visitor answers it. */
@@ -14,8 +17,6 @@ export type AnswerSide = "left" | "right";
 
 /** What the visitor reads while in a room, apart from what the house says about a sound. */
 export const roomCopy = Object.freeze({
-  /** The name of the picture of the house, for a visitor who cannot see it. */
-  houseLabel: "A house of five rooms, one above the other",
   /** The two answers. `hint` is the short word shown in the corner of each half of the screen. */
   answers: Object.freeze({
     left: Object.freeze({ name: "I heard it on my left", hint: "Left" }),
@@ -25,6 +26,8 @@ export const roomCopy = Object.freeze({
   answerKeys: Object.freeze({ left: "← or A", right: "→ or L" }),
   /** Fixed by wording.md: said after an answer on a trial with no sound. */
   noSoundLine: "I made no sound that time.",
+  /** Said after a trial with no sound went by unanswered, once it is scored (the game layer, 2026-11-17). */
+  nothingCameLine: "Nothing came that time.",
   stopButton: "Stop and leave",
   pauseButton: "Pause",
   goOnButton: "Go on",
@@ -105,10 +108,8 @@ export function otherSideLine(side: AnswerSide): string {
   return `That one was on your ${side}.`;
 }
 
-/** What the visitor reads about the lantern and the chase inside a room that counts. */
+/** What the visitor reads about the chase inside a room that counts. */
 export const chaseCopy = Object.freeze({
-  /** Said while the lantern is dark, when no answer is taken and the room waits. */
-  lanternDarkLine: "Your lantern is out. Wait for a light to come back.",
   /** Under each depth scale: the way its mark moves as quieter sounds are caught. */
   depthQuieterLabel: "quieter",
 });
@@ -121,28 +122,10 @@ function requireCount(count: number, what: string): void {
   }
 }
 
-/** The lantern for a visitor who cannot see it: "Lantern: 2 of 3 lights". */
-export function lanternLabel(cells: number, cellCount: number): string {
-  requireCount(cells, "The lights of a lantern");
-  requireCount(cellCount, "The lights of a full lantern");
-  if (cells > cellCount || cellCount === 0) {
-    throw new RangeError(
-      `A lantern holds from 0 lights to its full count, but got ${String(cells)} of ${String(cellCount)}.`,
-    );
-  }
-  return `Lantern: ${String(cells)} of ${String(cellCount)} lights`;
-}
-
 /** The sounds caught in this room: "4 caught". */
 export function caughtCountLine(count: number): string {
   requireCount(count, "The sounds caught");
   return `${String(count)} caught`;
-}
-
-/** The sounds caught one after the other: "3 in a row". */
-export function streakLine(count: number): string {
-  requireCount(count, "The sounds caught in a row");
-  return `${String(count)} in a row`;
 }
 
 /**
@@ -159,15 +142,8 @@ export function deepestCatchLabel(
 }
 
 /** How the house announces each room as the one that comes next. */
-const roomIsNext: Readonly<Record<GhostSoundId, string>> = Object.freeze({
-  cellar: "The cellar is next",
-  corridor: "The corridor is next",
-  nursery: "The nursery is next",
-  stairs: "The stairs are next",
-  attic: "The attic is next",
-});
 
-/** What the house says between two rooms, naming the room that comes next. */
+/** What the house says between two rooms, naming the creature that comes next. */
 export function betweenRoomsLine(nextRoomId: GhostSoundId): string {
-  return `This room is quiet now. ${roomIsNext[nextRoomId]}, when you are ready.`;
+  return `This room is quiet now. ${roomNames[nextRoomId]} is next, when you are ready.`;
 }

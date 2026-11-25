@@ -1,8 +1,5 @@
-import { createSeededRandom } from "../../config/seeded-random";
 import { siteTitle } from "../../copy/site-title";
 import type { VisitEvent, VisitSnapshot } from "../../session/visit-flow-types";
-import { drawHouseSection } from "../house/draw-house-section";
-import { startMotionLayer } from "../house/motion-layer";
 import { buildVisitPage } from "./build-visit-page";
 import { joinReplayButtons } from "./join-replay-buttons";
 import { joinSwapButtons } from "./join-swap-buttons";
@@ -28,16 +25,12 @@ export interface ReplaySheet {
   readonly requests: string[];
 }
 
-/** The seeds of the drawing and of what moves over it. Fixed, so every test sees the same page. */
-const houseDrawingSeed = 1887;
-const ambientSeed = 20261115;
-
 /**
  * The development replay sheet (`replay-sheet.html`): the page of the visit with no visit flow
  * and no sound. The browser tests hand it the snapshots and events a simulated visit gave in
  * Node, to draw the replay of missed sounds and the swapped repeat of a floor, which a visit in a
  * browser would take minutes to reach. It is built from the same parts as the real page, joined
- * in the same way.
+ * in the same way. Nothing on it draws lots, so every test sees the same page.
  */
 function startReplaySheet(
   doc: Document,
@@ -49,15 +42,7 @@ function startReplaySheet(
   }
   doc.title = siteTitle;
 
-  const page = buildVisitPage(doc, main);
-  const house = drawHouseSection(doc, createSeededRandom(houseDrawingSeed));
-  const motion = startMotionLayer({
-    doc,
-    view,
-    house,
-    random: createSeededRandom(ambientSeed),
-  });
-  page.houseFrame.append(house.element, motion.canvas);
+  const page = buildVisitPage(doc, main, { showReplayPreview: true });
 
   // The picture is not drawn here. An empty sheet stands in its place and stays hidden.
   const result = doc.createElement("section");
@@ -72,9 +57,7 @@ function startReplaySheet(
     view,
     page,
     result: { element: result, heading: resultHeading },
-    house,
-    motion,
-    caption: createCaption(view, page.caption),
+    caption: createCaption(view, page.caption, page.captionNote),
   });
 
   const requests: string[] = [];
@@ -116,6 +99,9 @@ function startReplaySheet(
   );
   page.notice.button.addEventListener("click", () => {
     requests.push(screenView.current()?.notice?.button?.action ?? "none");
+  });
+  page.notice.secondButton.addEventListener("click", () => {
+    requests.push(screenView.current()?.notice?.secondButton?.action ?? "none");
   });
 
   const sheet: ReplaySheet = {

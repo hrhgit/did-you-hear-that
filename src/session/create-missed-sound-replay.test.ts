@@ -29,7 +29,16 @@ import type {
   VisitLog,
   VisitTrial,
 } from "./visit-flow-types";
+import type { VisitRoom } from "./visit-flow-types";
 import { visitRooms } from "./visit-rooms";
+
+/** The three rooms most tests of this file use, as the three-room visit of the earlier spec had them. */
+const threeRooms: readonly VisitRoom[] = ["corridor", "stairs", "attic"].map(
+  (roomId, roomIndex) => ({
+    ...visitRooms("full").find((room) => room.roomId === roomId)!,
+    roomIndex,
+  }),
+);
 
 // The Replay_Controller on the fake audio backend, a calibrated output shell and the manual timer,
 // as room-runner.test.ts builds them, and on a scripted output for refusals (missed-sound-replay
@@ -43,7 +52,7 @@ const { refusedPlaysInARowMaxCount } = visitFlowConfig;
 const pageAheadMs = 5000;
 /** The output delay the fake backend's timestamp pair reports. */
 const outputDelayMs = 30;
-const rooms = visitRooms("quick");
+const rooms = threeRooms;
 
 function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
@@ -118,7 +127,7 @@ function makeLog(
 ): VisitLog {
   return deepFreeze({
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 42,
     rooms,
     calibrations: [
@@ -696,6 +705,9 @@ function scriptedOutput(script: readonly PlayOutcome[], state: OutputState) {
     rangeReport: () => null,
     playHeadphoneCheck: unused,
     beginRoom: unused,
+    fadeOutSound: () => undefined,
+    startBeat: unused,
+    stopBeat: () => undefined,
     play(request) {
       const outcome = script[plays.length];
       plays.push({ request, atMs: timer?.now() ?? Number.NaN });
@@ -780,7 +792,7 @@ describe("createMissedSoundReplay on a scripted output", () => {
     expect(replay.notRunning).toEqual([]);
   });
 
-  it.each<PlayRefusal>(["busy", "tooLong", "fadeTooShort", "unsupported"])(
+  it.each<PlayRefusal>(["busy", "emptyBuffer", "silentBuffer", "unsupported"])(
     "asks for the same sound one gap after a refusal %s",
     (reason) => {
       const replay = scriptedReplay([refusedWith(reason), scheduled()]);

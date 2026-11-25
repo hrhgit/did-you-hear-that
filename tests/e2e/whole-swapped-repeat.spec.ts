@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
-import { replayCopy } from "../../src/copy/replay-copy";
 import { resultPageCopy } from "../../src/copy/result-page-copy";
 import { roomCopy } from "../../src/copy/room-copy";
 import { rulesCopy } from "../../src/copy/rules-copy";
@@ -8,7 +7,7 @@ import { swappedRepeatCopy } from "../../src/copy/swapped-repeat-copy";
 import { visitCopy } from "../../src/copy/visit-copy";
 import { expectNoHorizontalScroll, openPage } from "./page-checks";
 import { previewServers } from "./preview-servers";
-import { button, calibrate, heading, playCheck } from "./visit-steps";
+import { button, enterHouse, heading, playCheck } from "./visit-steps";
 
 // One whole short visit on the public page, walked by a listener that lives in the page: it reads
 // each sound the page starts, its channel and its peak, and answers the way a visitor with a
@@ -51,11 +50,17 @@ type ListenerWindow = Window & { __listener: Listener };
  * Runs in the page before any of its scripts. Wraps `AudioBufferSourceNode.prototype.start` so
  * that every sound is read before it plays. Once the reference is set, a sound an ear hears is
  * answered with that ear's key 400 ms after it starts. This function is serialised into the page.
+ *
+ * Both ears stop hearing above the quietest sound the house can play. The test keeps the lowest
+ * calibration setting that can be kept, where every room's search reaches down to 30 dB below the
+ * calibration (audible-start, the playable floor). An ear that still hears the sound at that floor
+ * has no quietest catch to compare, and then no floor offers the repeat. With these two ears the
+ * corridor and the attic end 20 dB apart, left above right.
  */
 function installListener(): void {
   const listener: Listener = {
     referenceDb: null,
-    thresholdDb: { left: -20, right: -45 },
+    thresholdDb: { left: -15, right: -35 },
     swapped: false,
     sounds: [],
     answers: 0,
@@ -131,13 +136,13 @@ async function lastHeardSide(page: Page): Promise<"left" | "right"> {
   return last.channel === "left" ? "right" : "left";
 }
 
-test("walks a short visit with a quieter left ear, then visits a floor again with the headphones swapped", async ({
+test("walks a visit with a quieter left ear, then visits a floor again with the headphones swapped", async ({
   page,
 }) => {
   test.setTimeout(20 * 60_000);
   await page.addInitScript(installListener);
   const record = await openPage(page, address);
-  await calibrate(page);
+  await enterHouse(page);
 
   // The hiss of the check plays at 0 dB of the visit, so its peak is the listener's reference.
   await playCheck(page);
@@ -152,22 +157,17 @@ test("walks a short visit with a quieter left ear, then visits a floor again wit
   await button(page, visitCopy.goOnButton).click();
   await button(page, rulesCopy.enterButton).click();
 
-  // Through the rooms and past the replay to the picture.
+  // Through the one room to the picture. The listener answers the roll call
+  // as it answers everything else. A site set back to one room at a time rests between two rooms
+  // and waits for a press, which is given wherever it is asked for.
   const picture = heading(page, resultPageCopy.heading);
   const goOn = page.locator(".visit-rest").getByRole("button", {
     name: roomCopy.goOnButton,
     exact: true,
   });
-  const ways = [
-    goOn,
-    button(page, replayCopy.skipButton),
-    button(page, replayCopy.goOnButton),
-  ];
   await expect(async () => {
-    for (const way of ways) {
-      if (await way.isVisible()) {
-        await way.click({ timeout: 1_000 });
-      }
+    if (await goOn.isVisible()) {
+      await goOn.click({ timeout: 1_000 });
     }
     await expect(picture).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 12 * 60_000, intervals: [1_000] });
@@ -204,7 +204,7 @@ test("walks a short visit with a quieter left ear, then visits a floor again wit
   ).toBeVisible();
   await expectNoHorizontalScroll(page);
 
-  // The room again, answered as every room, to the comparison.
+  // The floor's room again, answered as the one room was, to the comparison.
   await button(page, swappedRepeatCopy.startButton).click();
   const comparison = page.getByRole("heading", {
     name: swappedRepeatCopy.comparisonHeading,

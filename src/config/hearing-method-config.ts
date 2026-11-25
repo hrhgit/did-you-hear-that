@@ -1,8 +1,23 @@
 /**
- * The two visits that walk through rooms: the visit of about 7 minutes and the visit of about 12
- * minutes.
+ * The visit that walks through the rooms: five creatures, one for each pitch, in a room whose
+ * counting lasts at most `visitFlowConfig.roomTimeLimitMs`. There used to be a second, shorter
+ * visit of three; the owner dropped it on 2026-11-20 and fixed the length of the room instead.
  */
-export type VisitType = "quick" | "full";
+export type VisitType = "full";
+
+/**
+ * The visit type each saved name is read as. A visit saved as the dropped shorter visit,
+ * `"quick"`, is still read, as a visit of its own rooms, so a returning visitor keeps it.
+ */
+export const savedVisitTypes: Readonly<Record<string, VisitType>> =
+  Object.freeze({ full: "full", quick: "full" });
+
+/** The visit type a saved name is read as, or null for a name no visit was ever saved under. */
+export function visitTypeOfSaved(name: unknown): VisitType | null {
+  return typeof name === "string" && Object.hasOwn(savedVisitTypes, name)
+    ? (savedVisitTypes[name] ?? null)
+    : null;
+}
 
 /**
  * The initial values of the threshold search, from the "Initial values" table in
@@ -67,19 +82,21 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   startingLevelDb: -10,
   // "Loudest allowed level | 5 dB above the anchor. Lowered from 15 dB on 2026-11-16 (brief 08b, a
   // decision of the owner's coordinator at the owner's request): the music anchor is likely louder
-  // than rubbed hands, so the lower cap keeps the loudest sound no louder at the ear than before.
-  // Making it stricter is allowed; raising it needs the project owner's approval first."
+  // than rubbed hands, so the lower cap keeps the loudest sound no louder at the ear than before."
+  // It is where the search stops rising, and may be changed freely: the audio safety rules were
+  // dropped on 2026-11-17, and the output stage no longer clamps to it.
   capRelativeToAnchorDb: 5,
   // "Quietest playable level | 70 dB below the anchor"
   floorDb: -70,
   // "Response window after a sound starts | 1.8 s". Shortened from 2.0 s by the owner on 2026-11-16
   // after playing, because a room took too long. Still longer than the longest ghost sound
   responseWindowMs: 1800,
-  // "Gap between trials | random, 1.0 to 2.5 s" (lower limit). Was 1.5 to 4.0 s until the owner
-  // shortened it on 2026-11-16 after playing
-  gapBetweenTrialsMinMs: 1000,
-  // "Gap between trials | random, 1.0 to 2.5 s" (upper limit)
-  gapBetweenTrialsMaxMs: 2500,
+  // "Gap between trials | random, 0.8 to 1.6 s" (lower limit). Was 1.5 to 4.0 s, then 1.0 to 2.5 s
+  // from 2026-11-16; shortened again by the owner on 2026-11-17 after playing (the game layer).
+  // An answer cuts its sound short, so the next sound never finds the output busy
+  gapBetweenTrialsMinMs: 800,
+  // "Gap between trials | random, 0.8 to 1.6 s" (upper limit)
+  gapBetweenTrialsMaxMs: 1600,
   // "Share of no-sound trials | 15 to 25 percent" (lower limit)
   noSoundTrialShareMinFraction: 0.15,
   // "Share of no-sound trials | 15 to 25 percent" (upper limit)
@@ -91,9 +108,7 @@ export const hearingMethodConfig: HearingMethodConfig = deepFreeze({
   // "Left and right difference that triggers the swapped repeat | 15 dB"
   swappedRepeatDifferenceDb: 15,
   roomFrequenciesHz: {
-    // "Rooms, quick visit | 1 kHz, 4 kHz, 8 kHz"
-    quick: [1000, 4000, 8000],
-    // "Rooms, full visit | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz"
+    // "Rooms | 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz"
     full: [500, 1000, 2000, 4000, 8000],
   },
   // Not in the steering table. threshold-search design.md, D8: the middle of the no-sound share range

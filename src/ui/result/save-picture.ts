@@ -9,45 +9,86 @@ import {
 export interface PictureToSave {
   readonly doc: Document;
   readonly view: Window & typeof globalThis;
-  /** The drawing of the house as it is on the page. */
+  /** The yard chart as it is on the page. */
   readonly section: SVGElement;
   readonly picture: ResultPicture;
   readonly headphones: SheetHeadphones | null;
 }
 
-/** The styles a drawing carries with it when it leaves the page's style sheets. */
+/**
+ * The styles a drawing carries with it when it leaves the page's style sheets. `display` keeps
+ * hidden the parts of a creature that are only shown in another mood, such as its shut eyes.
+ */
 const carriedStyles = [
+  "display",
   "fill",
   "fill-opacity",
   "stroke",
   "stroke-width",
   "stroke-opacity",
   "stroke-dasharray",
+  "stroke-dashoffset",
   "stroke-linecap",
   "stroke-linejoin",
   "opacity",
+  "filter",
   "stop-color",
   "stop-opacity",
   "font-family",
   "font-size",
   "font-style",
   "font-variant-numeric",
+  "font-weight",
+  "letter-spacing",
+  "paint-order",
   "text-anchor",
 ] as const;
 
+/** The width and height of the drawing's view box. */
+function viewBoxOf(section: SVGElement): { width: number; height: number } {
+  const [, , width = 600, height = 400] = (
+    section.getAttribute("viewBox") ?? ""
+  )
+    .split(/\s+/)
+    .map(Number);
+  return { width, height };
+}
+
+/** A file the page loads, such as the painted yard, as a data address the image can carry. */
+async function dataAddressOf(
+  view: Window & typeof globalThis,
+  address: string,
+): Promise<string> {
+  const response = await view.fetch(address);
+  if (!response.ok) {
+    throw new Error("A painting of the drawing could not be read.");
+  }
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new view.FileReader();
+    reader.onload = () => {
+      resolve(String(reader.result));
+    };
+    reader.onerror = () => {
+      reject(new Error("A painting of the drawing could not be read."));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * The drawing as SVG text that stands on its own: every element carries the colours and line
- * widths the page's style sheets gave it.
+ * widths the page's style sheets gave it, and the paintings it shows go inside it, since an
+ * image made from SVG text loads nothing from outside.
  */
-function standaloneDrawing(
+async function standaloneDrawing(
   section: SVGElement,
   view: Window & typeof globalThis,
   width: number,
   height: number,
-): string {
-  // The light is drawn where it ends, even if it was still spreading on the page.
-  section.setAttribute("data-entering", "false");
+): Promise<string> {
   const copy = section.cloneNode(true) as SVGElement;
+  const beams: Element[] = [];
   const originals = [section, ...section.querySelectorAll("*")];
   const copies = [copy, ...copy.querySelectorAll("*")];
   originals.forEach((original, index) => {
@@ -59,8 +100,25 @@ function standaloneDrawing(
     for (const property of carriedStyles) {
       twin.style.setProperty(property, computed.getPropertyValue(property));
     }
+    // The moonbeams and the dimming follow the page's focus card and the visitor's pointer; the
+    // image has neither.
+    if (original.classList.contains("result-curve-beam")) {
+      beams.push(twin);
+    }
+    if (original.classList.contains("result-curve-column")) {
+      twin.style.removeProperty("opacity");
+    }
     twin.removeAttribute("class");
   });
+  for (const beam of beams) {
+    beam.remove();
+  }
+  for (const image of copy.querySelectorAll("image")) {
+    const href = image.getAttribute("href") ?? "";
+    if (href !== "" && !href.startsWith("data:")) {
+      image.setAttribute("href", await dataAddressOf(view, href));
+    }
+  }
   copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   copy.setAttribute("width", String(width));
   copy.setAttribute("height", String(height));
@@ -85,8 +143,8 @@ function loadImage(
 }
 
 /**
- * Saves the picture as a PNG file through the browser's own download: the drawing of the house,
- * the caption, what the house says about silence, each floor in words and the limits statement
+ * Saves the picture as a PNG file through the browser's own download: the yard chart, the
+ * caption, what the visit says about silence, each floor in words and the limits statement
  * in full. Nothing is sent anywhere. Resolves to false if the browser could not make the image.
  */
 export async function savePictureAsImage(
@@ -120,6 +178,7 @@ export async function savePictureAsImage(
         context.font = fontOf(sizePx, italic);
         return context.measureText(text).width;
       },
+      viewBoxOf(section),
     );
     canvas.width = sheet.width;
     canvas.height = sheet.height;
@@ -127,7 +186,7 @@ export async function savePictureAsImage(
     context.fillStyle = colour("--color-night", "#080b12");
     context.fillRect(0, 0, sheet.width, sheet.height);
 
-    const drawingText = standaloneDrawing(
+    const drawingText = await standaloneDrawing(
       section,
       view,
       sheet.drawing.width,

@@ -29,6 +29,7 @@ import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
+import type { RhythmJudgement, RhythmStanding } from "./rhythm-score";
 
 export type {
   ClampLimit,
@@ -40,6 +41,8 @@ export type {
   KeepRefusal,
   NoSoundOutcome,
   PlayRefusal,
+  RhythmJudgement,
+  RhythmStanding,
   SoundOutcome,
   UnreliableReason,
   UnsupportedReason,
@@ -75,7 +78,7 @@ export interface VisitFlow {
 
   /** Front door: starts a visit of this type, starts sound, and moves to calibration. */
   chooseVisit(visitType: VisitType): void;
-  /** Calibration: starts the calibration sound at the bottom of the control: the music, looping, or the hiss repeats where the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
+  /** Calibration: starts the reference sound, looping music or hiss repeats when the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
   startCalibration(): void;
   /** Calibration: moves the control one step louder. The next hiss repeat plays the new setting, and the music reaches it in one ramp of 100 ms. */
   louder(): void;
@@ -123,13 +126,6 @@ export interface VisitFlow {
   stop(): void;
   /** Result: opens the swapped repeat for a room whose summary offers it. */
   chooseSwappedRepeat(roomIndex: number): void;
-  /**
-   * Missed-sound replay, phase `announcing`: starts the sounds. Call it from the visitor's press,
-   * because it may start sound (it calls `activate` within the call). Does nothing in any other
-   * phase or stage, or while a pause holds. In this stage `proceed` skips the replay, or goes on to
-   * the result once it has finished, and `stop` silences at once and shows the result.
-   */
-  startReplay(): void;
   /** Swapped repeat, phase `instruction`: the visitor says the earpieces are swapped. Plays nothing. */
   confirmSwap(): void;
   /**
@@ -206,7 +202,7 @@ export interface SnapshotBase<Stage extends VisitStage> {
 
 /** The front door. */
 export interface EntrySnapshot extends SnapshotBase<"entry"> {
-  /** The two visits, in this order: quick, then full. */
+  /** The visits on offer. There is one: the full visit. */
   readonly choices: readonly {
     /** The visit type to pass to `chooseVisit`. */
     readonly visitType: VisitType;
@@ -243,7 +239,7 @@ export interface CalibrationSnapshot extends SnapshotBase<"calibration"> {
   readonly calibrationSound?: CalibrationSound;
   /** The heading of this screen, from `calibrationCopy`. Always present, as above. */
   readonly heading?: string;
-  /** What to read before using the control, in order: what to do, why, how the sound follows the control, the keys. Always present, as above. */
+  /** What to read before using the control, in order: what to do, then the keys. Always present, as above. */
   readonly introLines?: readonly string[];
 }
 
@@ -271,21 +267,57 @@ export interface RoomSnapshot extends SnapshotBase<"room"> {
   /** What the room says about its practice and its counting. Always present in the snapshots the flow gives; optional only so that literals written before it still compile. */
   readonly practice?: RoomPractice;
   /**
-   * The visitor's lantern, or null while the room practises. It changes only with the visitor's
-   * own answers, with a caught sound in the moment it is scored, and with time. Always present in
-   * the snapshots the flow gives; optional only so that literals written before it still compile.
+   * How the night stands in the rhythm game (2026-11-18): score, combo and Jack's flame, or null
+   * while the room practises. It changes only in the moment a trial is scored and when a kick
+   * meets nothing. Always present in the snapshots the flow gives; optional only so that literals
+   * written before it still compile.
    */
-  readonly lantern?: RoomLantern | null;
+  readonly rhythm?: RhythmStanding | null;
+  /** The beat the room plays, or null while none plays (before the room's sound runs, in a pause). Optional as `rhythm` is. */
+  readonly beat?: RoomBeat | null;
   /** How the chase of this room stands, or null while the room practises. Optional as `lantern` is. */
   readonly chase?: RoomChase | null;
+  /**
+   * Every room of the visit that has begun a run, in visit order: where the rooms run together
+   * (one-room spec), every sound that takes its turn in this one room. Always present in the
+   * snapshots the flow gives; optional only so that literals written before it still compile.
+   */
+  readonly creatures?: readonly RoomCreature[];
+  /**
+   * Whether several rooms' searches take turns in this one room (one-room design.md, D1). Then the
+   * practice is the roll call and the room has no place in an order of rooms. Always present in the
+   * snapshots the flow gives; optional only so that literals written before it still compile.
+   */
+  readonly together?: boolean;
+}
+
+/**
+ * One room's sound as the room's screen keeps it while several searches take turns in one room
+ * (one-room spec): whether its search is still going, and how the chase of that sound alone stands.
+ * Every field changes only when a room run begins, in the moment a trial is scored, and when its
+ * search ends. It says nothing of a trial that is not scored yet.
+ */
+export interface RoomCreature {
+  /** The room this sound is in the log and the result. */
+  readonly room: VisitRoom;
+  /** `about`: its search is under way or will begin again. `gone`: its search has finished. */
+  readonly state: "about" | "gone";
+  /** The sounds of it caught in its last run. */
+  readonly caughtCount: number;
+  /** The quietest level of it caught on each side in its last run, or null where nothing was caught yet. */
+  readonly deepestCaughtDb: Readonly<Record<"left" | "right", number | null>>;
+  /** The loudest level its search may ask for. */
+  readonly topLevelDb: number;
+  /** The quietest level its search may ask for. */
+  readonly floorLevelDb: number;
 }
 
 /** The visitor's lantern inside a room (`lanternConfig`). */
-export interface RoomLantern {
-  /** The cells of light left. At 0 the lantern is dark: no answer is taken and the room waits. */
-  readonly cells: number;
-  /** The cells of a full lantern. */
-  readonly cellCount: number;
+/** The room's beat on the page clock: beat `k` sounds at `firstBeatAtMs + k × beatMs`. */
+export interface RoomBeat {
+  readonly firstBeatAtMs: number;
+  readonly beatMs: number;
+  readonly beatsPerBar: number;
 }
 
 /**
@@ -386,10 +418,12 @@ export type VisitSnapshot =
  * `slipped`: the house says on which side a sound went by unanswered. Said only when the trial is
  * scored, which is when its time to answer is over (the game layer, 2026-11-16).
  * `otherSide`: the house says the sound was on the other side from the answer.
+ * `nothingCame`: the house says nothing came, for a trial with no sound that went by unanswered.
+ * Said only once it is scored (the game layer, 2026-11-17).
  * `none`: nothing now.
  */
 export type TrialReaction =
-  "ripple" | "noSoundLine" | "slipped" | "otherSide" | "none";
+  "ripple" | "noSoundLine" | "slipped" | "otherSide" | "nothingCame" | "none";
 
 /** Released when a room begins. Says nothing about any trial. */
 export interface RoomStartedEvent {
@@ -409,6 +443,29 @@ export interface TrialScoredEvent {
   readonly trial: ScoredVisitTrial;
   /** What to show now. */
   readonly reaction: TrialReaction;
+  /** How the rhythm game judged the turn. Always given by the flow; optional for older literals. */
+  readonly judgement?: RhythmJudgement;
+  /** How the night stands after it. Always given by the flow; optional for older literals. */
+  readonly standing?: RhythmStanding;
+}
+
+/**
+ * Released for every turn put on the beat, a turn with a sound or without one alike, when the step
+ * that chose it is over: the shadows of both sides start creeping in to arrive at `atMs`. Says
+ * nothing of whether the turn has a sound or of its side (the rhythm game, 2026-11-18).
+ */
+export interface TurnCuedEvent {
+  readonly kind: "turnCued";
+  /** The off-beat of the turn, on the page clock. */
+  readonly atMs: number;
+  readonly beatMs: number;
+}
+
+/** Released for an answer that met no turn: the kick met nothing and the combo broke. */
+export interface KickedAtNothingEvent {
+  readonly kind: "kickedAtNothing";
+  readonly side: Ear;
+  readonly standing: RhythmStanding | null;
 }
 
 /** Released when the last trial of a room has been scored. */
@@ -426,7 +483,10 @@ export type VisitEvent =
   | ReplaySoundStartedEvent
   | SwappedTrialScoredEvent
   | PracticeSoundScoredEvent
-  | CountingStartedEvent;
+  | ReminderSoundScoredEvent
+  | CountingStartedEvent
+  | TurnCuedEvent
+  | KickedAtNothingEvent;
 
 // ─── The visit log ───────────────────────────────────────────────────────────────────────
 // Every time is in milliseconds on the timer's clock since the visit began (chooseVisit).
@@ -439,6 +499,8 @@ export interface VisitLog {
   readonly visitType: VisitType;
   /** The seed of this visit. With the log's answers it reproduces every trial. */
   readonly visitSeed: number;
+  /** Absent in visits made with the original staircase method. */
+  readonly searchMethod?: "quick" | "adaptive";
   /** The rooms in visit order. */
   readonly rooms: readonly VisitRoom[];
   /** Every calibration kept during the visit, in order. */
@@ -457,6 +519,11 @@ export interface VisitLog {
   readonly refusedPlays: readonly LoggedRefusedPlay[];
   /** Every practice sound, practice answer that scored nothing, and refused practice sound, kept apart from the trials. Absent in a visit with no practice, as before the audible-start spec. */
   readonly practice?: LoggedPractice;
+  /**
+   * Every reminder sound, kept apart from the trials: none of them counts (the game layer,
+   * 2026-11-17). Absent in a visit with no reminder.
+   */
+  readonly reminders?: readonly ReminderSound[];
 }
 
 /** One kept calibration. */
@@ -507,8 +574,10 @@ export interface LoggedRoomResult {
 export type LoggedEarResult =
   | (EarCounts & {
       readonly state: "found";
-      /** The quietest level caught on 2 of 3 rising presentations. */
+      /** The level found by the search. */
       readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
     })
   | (EarCounts & { readonly state: "betterThanFloor" })
   | (EarCounts & { readonly state: "worseThanCap" })
@@ -599,6 +668,11 @@ export interface ScoredPart<Outcome extends SoundOutcome | NoSoundOutcome> {
   readonly responseTimeMs: number | null;
   /** When it was scored: the answer, or the end of the window. */
   readonly scoredAtMs: number;
+  /**
+   * The Timing_Offset in force when it was presented, taken off `responseTimeMs` before the
+   * answer was graded (headphone-traits R1). Absent when 0 (D2).
+   */
+  readonly timingOffsetMs?: number;
 }
 
 /** The fields of a trial that was played and then not scored, because the visit paused or the room began again. */
@@ -673,8 +747,10 @@ export type VisitUnreliableReason =
 export type VisitEarResult =
   | (EarCounts & {
       readonly state: "found";
-      /** The quietest level caught on 2 of 3 rising presentations, relative to the visitor's calibration. */
+      /** The level found by the search, relative to the visitor's calibration. */
       readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
     })
   | (EarCounts & { readonly state: "betterThanFloor" })
   | (EarCounts & { readonly state: "worseThanCap" })
@@ -1186,8 +1262,8 @@ export type SwappedRepeat =
 /** What a calibration plays. `loading`: the music is not ready yet; `hiss`: the music could not be loaded. */
 export type CalibrationSound = "loading" | "music" | "hiss";
 
-/** How a calibration's anchor was set. `hands`: matched to rubbed hands, before the audible-start spec. */
-export type CalibrationAnchor = "hands" | "music" | "hiss";
+/** How the reference level was set. `hands` is the legacy rubbed-hands method. */
+export type CalibrationAnchor = "hands" | "music" | "hiss" | "preset";
 
 /**
  * `practice`: the room's sound plays to one ear at a time until each ear has caught it once;
@@ -1199,8 +1275,13 @@ export type RoomPracticePhase = "practice" | "notHeard" | "counting";
 /** What the room's screen says about its practice. Every string comes from `src/copy`. */
 export interface RoomPractice {
   readonly phase: RoomPracticePhase;
-  /** True from a practice sound's presentation until it is answered or its window closes. Never says which side. False outside `practice`. */
+  /** True from a practice sound's presentation until it is answered or its window closes. False outside `practice`. */
   readonly soundPlaying: boolean;
+  /**
+   * While `soundPlaying`: the ear the practice sound plays in, so that the screen can show its
+   * creature in the doorway of that side. Null otherwise. Optional as `practising` is.
+   */
+  readonly soundEar?: Ear | null;
   /** The practice heading in `practice` and `notHeard`; null in `counting`. */
   readonly heading: string | null;
   /** In `practice` and `notHeard`: what practice is. In `counting`: the line that says the counting has begun. */
@@ -1215,6 +1296,20 @@ export interface RoomPractice {
   readonly tryAgainLabel: string;
   /** The label of the control that calls `goOnWithoutPractice` in `notHeard`. */
   readonly goOnLabel: string;
+  /**
+   * In `practice`: the room whose sound is practised now, so that the screen can show who is making
+   * it. It never says which side: that is `soundEar`, and only while the sound plays. Null in `notHeard` and `counting`. Always present in the snapshots the
+   * flow gives; optional only so that literals written before it still compile (one-room spec).
+   */
+  readonly practising?: VisitRoom | null;
+  /** In `notHeard`: each room's side that did not catch its sound, in the order practised; otherwise empty. Optional as `practising` is. */
+  readonly notHeard?: readonly PracticeMiss[];
+}
+
+/** A side on which a room's practice sound was not caught. */
+export interface PracticeMiss {
+  readonly room: VisitRoom;
+  readonly ear: Ear;
 }
 
 /** The fields of every practice sound in the log. Times on the visit log's clock. */
@@ -1271,6 +1366,57 @@ export interface LoggedPractice {
   readonly refusedPlays: readonly LoggedPracticeRefusedPlay[];
 }
 
+/**
+ * The fields of every reminder sound in the log: a sound the room plays, louder than the creature
+ * was last caught at, after a long time in which the visitor caught nothing (the game layer,
+ * 2026-11-17). It counts for nothing and the search never hears of it. Times on the visit log's
+ * clock.
+ */
+export interface ReminderSoundCommon {
+  /** Its position among the reminder sounds of the visit, from 1. */
+  readonly order: number;
+  readonly roomIndex: number;
+  readonly attempt: number;
+  readonly ear: Ear;
+  readonly requestedLevelDb: number;
+  readonly playedLevelDb: number;
+  readonly clampLimit: ClampLimit | null;
+  readonly gapBeforeMs: number;
+  readonly presentedAtMs: number;
+  readonly windowStartMs: number;
+}
+
+export type ScoredReminderSound = ReminderSoundCommon & {
+  readonly status: "scored";
+  readonly response: VisitorResponse;
+  readonly outcome: SoundOutcome;
+  readonly answeredAtMs: number | null;
+  readonly responseTimeMs: number | null;
+  readonly scoredAtMs: number;
+  /** As for a trial (headphone-traits R1). Absent when 0. */
+  readonly timingOffsetMs?: number;
+  /** True for an easy turn on the beat (headphone-traits R2). Absent for a reminder after a quiet. */
+  readonly easy?: true;
+};
+
+export type DiscardedReminderSound = ReminderSoundCommon & {
+  readonly status: "discarded";
+  readonly discardedAtMs: number;
+};
+
+export type ReminderSound = ScoredReminderSound | DiscardedReminderSound;
+
+/** Released in the same moment a reminder sound is scored. */
+export interface ReminderSoundScoredEvent {
+  readonly kind: "reminderSoundScored";
+  readonly room: VisitRoom;
+  readonly trial: ScoredReminderSound;
+  /** `ripple` for a caught reminder, drawn on `trial.ear`; `none` otherwise. */
+  readonly reaction: Extract<TrialReaction, "ripple" | "none">;
+  /** For `ripple`, the ripple's label; otherwise null. */
+  readonly line: string | null;
+}
+
 /** Released in the same moment a practice sound is scored. */
 export interface PracticeSoundScoredEvent {
   readonly kind: "practiceSoundScored";
@@ -1280,6 +1426,8 @@ export interface PracticeSoundScoredEvent {
   readonly reaction: Extract<TrialReaction, "ripple" | "none">;
   /** For `ripple`, the ripple's label; otherwise null. */
   readonly line: string | null;
+  /** How the rhythm game would judge it. Practice scores nothing. Optional for older literals. */
+  readonly judgement?: RhythmJudgement;
 }
 
 /** Released when the practice of a room run ends and its counting begins. Says nothing about any trial. */

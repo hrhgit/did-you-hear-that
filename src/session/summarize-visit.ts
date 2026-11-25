@@ -93,6 +93,12 @@ export function visitEarResult(
         ...counts,
         state: "found",
         thresholdDb: searchResult.thresholdDb,
+        ...(searchResult.lowDb === undefined
+          ? {}
+          : { lowDb: searchResult.lowDb }),
+        ...(searchResult.highDb === undefined
+          ? {}
+          : { highDb: searchResult.highDb }),
       });
     case "betterThanFloor":
       return Object.freeze({ ...counts, state: "betterThanFloor" });

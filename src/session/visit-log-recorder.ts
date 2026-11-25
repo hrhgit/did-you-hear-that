@@ -5,6 +5,7 @@ import type { PlayRefusal } from "../audio/output/create-audio-output";
 import type { ClampLimit } from "../audio/output/output-types";
 import type {
   Ear,
+  HearingSearchMethod,
   NoSoundOutcome,
   SoundOutcome,
   VisitorResponse,
@@ -25,6 +26,9 @@ import type {
   LoggedRoomResult,
   PauseReason,
   DiscardedPracticeTrial,
+  DiscardedReminderSound,
+  ReminderSound,
+  ScoredReminderSound,
   LoggedPracticeRefusedPlay,
   PracticeTrial,
   ScoredPracticeTrial,
@@ -73,6 +77,21 @@ export interface PlayedPractice {
   readonly windowStartMs: number;
 }
 
+/** A reminder sound that was played (the game layer, 2026-11-17). Times on the timer's clock. */
+export interface PlayedReminder {
+  readonly roomIndex: number;
+  readonly attempt: number;
+  readonly ear: Ear;
+  readonly requestedLevelDb: number;
+  readonly playedLevelDb: number;
+  readonly clampLimit: ClampLimit | null;
+  readonly gapBeforeMs: number;
+  readonly presentedAtMs: number;
+  readonly windowStartMs: number;
+  /** True for an easy turn on the beat (headphone-traits R2). */
+  readonly easy?: boolean;
+}
+
 /** How a played trial was decided. Times are on the timer's clock. */
 export interface TrialDecision {
   readonly response: VisitorResponse;
@@ -81,6 +100,8 @@ export interface TrialDecision {
   readonly answeredAtMs: number | null;
   /** When the trial was decided. */
   readonly scoredAtMs: number;
+  /** The Timing_Offset in force when it was presented (headphone-traits R1.7). Kept only above 0. */
+  readonly timingOffsetMs?: number;
 }
 
 /** Builds the visit log of one visit (visit-flow design.md, "The visit log"). */
@@ -171,6 +192,22 @@ export interface VisitLogRecorder {
     readonly trialNumber: number;
     readonly reason: PlayRefusal;
   }): LoggedRefusedPlay;
+  /** Records a reminder sound that was decided, with the next reminder `order`. */
+  reminderScored(
+    sound: PlayedReminder,
+    decision: {
+      readonly response: VisitorResponse;
+      readonly outcome: SoundOutcome;
+      readonly answeredAtMs: number | null;
+      readonly scoredAtMs: number;
+      readonly timingOffsetMs?: number;
+    },
+  ): ScoredReminderSound;
+  /** Records a reminder sound that was not decided, with the next reminder `order`. */
+  reminderDiscarded(
+    sound: PlayedReminder,
+    discardedAtMs: number,
+  ): DiscardedReminderSound;
   /** Records a practice sound that was decided, with the next practice `order`. */
   practiceScored(
     sound: PlayedPractice,
@@ -245,6 +282,12 @@ function copyEarResult(result: LoggedEarResult): LoggedEarResult {
         ...counts,
         state: "found",
         thresholdDb: plainNumber("thresholdDb", result.thresholdDb),
+        ...(result.lowDb === undefined
+          ? {}
+          : { lowDb: plainNumber("lowDb", result.lowDb) }),
+        ...(result.highDb === undefined
+          ? {}
+          : { highDb: plainNumber("highDb", result.highDb) }),
       });
     case "betterThanFloor":
       return Object.freeze({ ...counts, state: "betterThanFloor" });
@@ -302,6 +345,7 @@ interface OpenPause {
 export function createVisitLogRecorder(options: {
   readonly visitType: VisitType;
   readonly visitSeed: number;
+  readonly searchMethod?: HearingSearchMethod;
   readonly rooms: readonly VisitRoom[];
   readonly startedAtMs: number;
 }): VisitLogRecorder {
@@ -330,6 +374,7 @@ export function createVisitLogRecorder(options: {
   const practiceTrials: PracticeTrial[] = [];
   const practiceIgnoredAnswers: LoggedIgnoredAnswer[] = [];
   const practiceRefusedPlays: LoggedPracticeRefusedPlay[] = [];
+  const reminders: ReminderSound[] = [];
 
   const sinceStart = (name: string, atMs: number): number =>
     plainNumber(name, atMs) - visitStartMs + 0;
@@ -358,6 +403,31 @@ export function createVisitLogRecorder(options: {
     presentedAtMs: sinceStart("presentedAtMs", sound.presentedAtMs),
     windowStartMs: sinceStart("windowStartMs", sound.windowStartMs),
   });
+
+  const reminderCommon = (sound: PlayedReminder) => ({
+    order: reminders.length + 1,
+    roomIndex: plainNumber("roomIndex", sound.roomIndex),
+    attempt: plainNumber("attempt", sound.attempt),
+    ear: sound.ear,
+    requestedLevelDb: plainNumber("requestedLevelDb", sound.requestedLevelDb),
+    playedLevelDb: plainNumber("playedLevelDb", sound.playedLevelDb),
+    clampLimit: sound.clampLimit,
+    gapBeforeMs: plainNumber("gapBeforeMs", sound.gapBeforeMs),
+    presentedAtMs: sinceStart("presentedAtMs", sound.presentedAtMs),
+    windowStartMs: sinceStart("windowStartMs", sound.windowStartMs),
+    ...(sound.easy === true ? { easy: true as const } : {}),
+  });
+
+  /** The offset of a decision, kept only above 0 (headphone-traits D2). */
+  const offsetPart = (decision: { readonly timingOffsetMs?: number }) =>
+    decision.timingOffsetMs !== undefined && decision.timingOffsetMs > 0
+      ? {
+          timingOffsetMs: plainNumber(
+            "timingOffsetMs",
+            decision.timingOffsetMs,
+          ),
+        }
+      : {};
 
   const ignoredAnswerOf = (input: {
     readonly atMs: number;
@@ -406,10 +476,13 @@ export function createVisitLogRecorder(options: {
         ) as Record<GhostSoundId, number>,
       );
       const { anchor } = input;
-      if (anchor !== undefined && anchor !== "music" && anchor !== "hiss") {
-        throw new RangeError(
-          `A calibration's anchor is music or hiss, but got ${String(anchor)}.`,
-        );
+      if (
+        anchor !== undefined &&
+        anchor !== "music" &&
+        anchor !== "hiss" &&
+        anchor !== "preset"
+      ) {
+        throw new RangeError(`Invalid calibration anchor: ${String(anchor)}.`);
       }
       const floors = input.roomFloorLevelDb;
       const roomFloorLevelDb =
@@ -522,6 +595,7 @@ export function createVisitLogRecorder(options: {
           answeredAtMs === null ? null : answeredAtMs - common.windowStartMs,
         ),
         scoredAtMs: sinceStart("scoredAtMs", decision.scoredAtMs),
+        ...offsetPart(decision),
       };
       // The check above makes the outcome fit the kind, which the type cannot see.
       const entry = Object.freeze({
@@ -547,6 +621,44 @@ export function createVisitLogRecorder(options: {
     answerIgnored(input) {
       const entry = ignoredAnswerOf(input);
       ignoredAnswers.push(entry);
+      return entry;
+    },
+
+    reminderScored(sound, decision) {
+      if (!soundOutcomes.includes(decision.outcome)) {
+        throw new TypeError(
+          `A reminder sound cannot have the outcome ${String(decision.outcome)}.`,
+        );
+      }
+      const common = reminderCommon(sound);
+      const answeredAtMs =
+        decision.answeredAtMs === null
+          ? null
+          : sinceStart("answeredAtMs", decision.answeredAtMs);
+      const entry: ScoredReminderSound = Object.freeze({
+        ...common,
+        status: "scored",
+        response: decision.response,
+        outcome: decision.outcome,
+        answeredAtMs,
+        responseTimeMs: plainOrNull(
+          "responseTimeMs",
+          answeredAtMs === null ? null : answeredAtMs - common.windowStartMs,
+        ),
+        scoredAtMs: sinceStart("scoredAtMs", decision.scoredAtMs),
+        ...offsetPart(decision),
+      });
+      reminders.push(entry);
+      return entry;
+    },
+
+    reminderDiscarded(sound, discardedAtMs) {
+      const entry: DiscardedReminderSound = Object.freeze({
+        ...reminderCommon(sound),
+        status: "discarded",
+        discardedAtMs: sinceStart("discardedAtMs", discardedAtMs),
+      });
+      reminders.push(entry);
       return entry;
     },
 
@@ -663,6 +775,10 @@ export function createVisitLogRecorder(options: {
         formatVersion: 1,
         visitType: options.visitType,
         visitSeed,
+        ...(options.searchMethod !== undefined &&
+        options.searchMethod !== "staircase"
+          ? { searchMethod: options.searchMethod }
+          : {}),
         rooms,
         calibrations: Object.freeze([...calibrations]),
         headphoneChecks: Object.freeze([...headphoneChecks]),
@@ -683,6 +799,10 @@ export function createVisitLogRecorder(options: {
                 refusedPlays: Object.freeze([...practiceRefusedPlays]),
               }),
             }),
+        // Absent when no reminder was played, so such a log reads as before.
+        ...(reminders.length === 0
+          ? {}
+          : { reminders: Object.freeze([...reminders]) }),
       });
     },
   };

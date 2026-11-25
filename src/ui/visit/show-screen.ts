@@ -1,5 +1,3 @@
-import type { HouseSection } from "../house/draw-house-section";
-import type { MotionLayer } from "../house/motion-layer";
 import { repeatComparisonBlock } from "../result/show-repeat-comparison";
 import type { Sheet, VisitPage } from "./build-visit-page";
 import { leadSentence } from "./lead-sentence";
@@ -12,8 +10,9 @@ export interface ScreenView {
   /** Shows a screen. Only text, `hidden` and `disabled` change, and the focus when a sheet changes. */
   show(screen: Screen): void;
   /**
-   * Draws a reaction to a scored trial: a ripple and a shape for a caught sound, a shape leaving
-   * for one that went by, or a line alone. Or the ripple of a sound that is played again.
+   * Draws a reaction to a scored trial: the creature of a caught sound in the doorway of its
+   * side, with rings, the outline of one that went by, leaving, or a line alone. Or the rings of a
+   * sound that is played again, or the line of a creature that has gone home.
    */
   react(reaction: ScreenReaction): void;
   /** The screen shown now. */
@@ -55,14 +54,12 @@ export function createScreenView(options: {
   readonly page: VisitPage;
   /** The result, which lies over the visit like a sheet and is drawn by `src/ui/result`. */
   readonly result: Sheet;
-  readonly house: HouseSection;
-  readonly motion: MotionLayer;
   readonly caption: Caption;
 }): ScreenView {
-  const { doc, view, page, result, house, motion, caption } = options;
-  const sheets: Readonly<Record<SheetName, Sheet>> = {
+  const { doc, view, page, result, caption } = options;
+  const { scene, shelf } = page;
+  const sheets: Readonly<Partial<Record<SheetName, Sheet>>> = {
     frontDoor: page.frontDoor,
-    calibration: page.calibration,
     headphoneCheck: page.headphoneCheck,
     rules: page.rules,
     notice: page.notice,
@@ -75,7 +72,6 @@ export function createScreenView(options: {
   let restShownAtMs: number | null = null;
   let replaySheetShownAtMs: number | null = null;
   let replayLinesShown = "";
-  let calibrationLinesShown = "";
   let swapLinesShown = "";
   let swapComparisonShown: unknown = null;
   let swapPhaseKey: string | null = null;
@@ -84,59 +80,6 @@ export function createScreenView(options: {
 
   const focus = (element: HTMLElement): void => {
     element.focus({ preventScroll: true });
-  };
-
-  const showCalibration = (screen: Screen): void => {
-    const calibration = screen.calibration;
-    if (calibration === null) {
-      return;
-    }
-    const sheet = page.calibration;
-    const startHadFocus = doc.activeElement === sheet.startButton;
-    setText(sheet.heading, calibration.heading);
-    const lines = calibration.introLines.join("\n");
-    if (lines !== calibrationLinesShown) {
-      calibrationLinesShown = lines;
-      sheet.introLines.replaceChildren(
-        ...calibration.introLines.map((line) => {
-          const paragraph = doc.createElement("p");
-          paragraph.textContent = line;
-          return paragraph;
-        }),
-      );
-    }
-    setLine(sheet.keysLine, calibration.started ? calibration.keysLine : null);
-    sheet.startButton.hidden = calibration.started;
-    sheet.keepButton.hidden = !calibration.started;
-    sheet.dial.hidden = !calibration.started;
-    sheet.louderButton.disabled = !calibration.canGoLouder;
-    sheet.keepButton.disabled = !calibration.canKeep;
-    const { range } = sheet;
-    const ends = [
-      ["min", calibration.bottomDb],
-      ["max", calibration.topDb],
-      ["step", calibration.stepDb],
-    ] as const;
-    for (const [name, value] of ends) {
-      if (range.getAttribute(name) !== String(value)) {
-        range.setAttribute(name, String(value));
-      }
-    }
-    if (range.value !== String(calibration.targetDb)) {
-      range.value = String(calibration.targetDb);
-    }
-    sheet.meter.style.setProperty(
-      "--visit-setting",
-      String(calibration.settingFraction ?? 0),
-    );
-    setText(
-      sheet.statusLine,
-      screen.soundNotStartedLine ?? calibration.statusLine ?? "",
-    );
-    if (calibration.started && startHadFocus) {
-      // The slider takes the focus, so that the keys move it at once.
-      focus(range);
-    }
   };
 
   const showHeadphoneCheck = (screen: Screen): void => {
@@ -149,11 +92,14 @@ export function createScreenView(options: {
     const answerHadFocus = answers.some(
       (button) => doc.activeElement === button,
     );
-    setText(sheet.roomsLine, check.roomsLine);
+    setLine(sheet.roomsLine, check.roomsLine);
     for (const button of answers) {
       button.disabled = !check.awaitingAnswer;
     }
-    setText(sheet.judgementLine, check.statusLine ?? "");
+    setText(
+      sheet.judgementLine,
+      screen.soundNotStartedLine ?? check.statusLine ?? "",
+    );
     sheet.goOnButton.hidden = !check.canGoOn;
     if (answerHadFocus && !check.awaitingAnswer) {
       // The answer that was pressed can no longer hold the focus.
@@ -211,70 +157,94 @@ export function createScreenView(options: {
     }
     setLine(panel.heading, practice.heading);
     showLines(panel.lines, practice.lines, "practice");
+    // Who is making the practice sound. Never on which side.
+    setLine(
+      panel.introLine,
+      screen.featured?.rollCall === true ? screen.featured.line : null,
+    );
     setLine(panel.soundLine, practice.soundPlayingLine);
   };
 
-  /** The lights drawn in the lantern, so that it is filled again only when the count changes. */
-  let lanternCellsDrawn = -1;
-  const showChase = (screen: Screen): void => {
-    const chase = screen.chase;
-    const panel = page.chase;
-    panel.row.hidden = chase === null;
-    panel.depth.left.element.hidden = chase === null;
-    panel.depth.right.element.hidden = chase === null;
-    if (chase === null) {
-      delete page.root.dataset.lantern;
-      setLine(panel.darkLine, null);
-      return;
-    }
-    const { lantern } = chase;
-    if (lanternCellsDrawn !== lantern.cellCount) {
-      lanternCellsDrawn = lantern.cellCount;
-      panel.lantern.replaceChildren(
-        ...Array.from({ length: lantern.cellCount }, () => {
-          const cell = doc.createElement("span");
-          cell.className = "visit-lantern-cell";
-          return cell;
-        }),
-      );
-    }
-    [...panel.lantern.children].forEach((cell, index) => {
-      const lit = index < lantern.cells ? "true" : "false";
-      if ((cell as HTMLElement).dataset.lit !== lit) {
-        (cell as HTMLElement).dataset.lit = lit;
+  /** Whether the room was in plain view on the screen before this one. */
+  let roomWasInView = false;
+
+  /** Who was practising in the room on the screen before this one, or null for nobody. */
+  let practisingShown: string | null = null;
+
+  /**
+   * The room: who stands in it, the cards along its foot, and the lantern. The picture is laid out
+   * again only while the room is in plain view and when a sheet first covers it, so nothing jumps
+   * behind a sheet that is fading away.
+   */
+  const showRoom = (screen: Screen): void => {
+    const { chase } = screen;
+    // In plain view: no sheet over the room and no rest between two rooms.
+    const inView = screen.sheet === null && screen.restLine === null;
+    if (inView) {
+      if (!roomWasInView) {
+        // What the last sounds left in the doorways is long out of sight.
+        scene.clear();
       }
-    });
-    if (panel.lantern.getAttribute("aria-label") !== lantern.label) {
-      panel.lantern.setAttribute("aria-label", lantern.label);
-    }
-    // A dark lantern dims the lit room, slowly, as every change of brightness here.
-    if (lantern.darkLine === null) {
-      delete page.root.dataset.lantern;
+      page.root.dataset.shelf = screen.creatures.length > 0 ? "shown" : "none";
+      if (screen.featured?.rollCall === true) {
+        page.root.dataset.rollCall = "true";
+      } else {
+        delete page.root.dataset.rollCall;
+      }
+      shelf.show(screen.creatures);
+      scene.setFeatured(screen.featured);
+      // Whoever is practising, in the doorway of its sound or in the middle between them.
+      const practising =
+        screen.featured?.rollCall === true ? screen.featured.id : null;
+      if (
+        practising !== null &&
+        practisingShown !== null &&
+        practising !== practisingShown
+      ) {
+        // What the house said about the one before must not stand under the next one.
+        caption.hurry();
+      }
+      practisingShown = practising;
+      scene.setBeat(screen.beat ?? null);
+      // Nothing counts in a practice: the display says it is a warm-up. Once the room counts it
+      // shows the combo, the score and Jack's flame (the rhythm game, 2026-11-18).
+      scene.setStanding(
+        chase === null
+          ? null
+          : {
+              score: chase.score,
+              combo: chase.combo,
+              flame: chase.flame,
+              label: chase.label,
+              relitLine: chase.relitLine,
+            },
+        chase === null && screen.practice !== null,
+      );
     } else {
-      page.root.dataset.lantern = "dark";
-    }
-    setLine(panel.darkLine, lantern.darkLine);
-    setText(panel.caughtLine, chase.caughtLine);
-    setLine(panel.streakLine, chase.streakLine);
-    for (const side of ["left", "right"] as const) {
-      const scale = panel.depth[side];
-      const depth = chase.depth[side];
-      scale.element.dataset.caught = depth.fraction === null ? "false" : "true";
-      scale.element.style.setProperty(
-        "--visit-depth",
-        String(depth.fraction ?? 0),
-      );
-      if (scale.element.getAttribute("aria-label") !== depth.label) {
-        scale.element.setAttribute("aria-label", depth.label);
+      scene.setFeatured(null);
+      practisingShown = null;
+      if (screen.restLine !== null) {
+        // The rest between two rooms lies over the foot of the room, where the cards are.
+        shelf.show([]);
+      } else if (screen.sheet !== "notice") {
+        // A notice is a pause: the room waits behind it as it was. Every other sheet ends what
+        // the room was showing.
+        shelf.show([]);
+        scene.setBeat(null);
+        scene.setStanding(null, false);
+      } else {
+        // Behind a notice the cards wait as they were, and the display of the game is put away
+        // until the room is in view again.
+        scene.setStanding(null, false);
       }
-      setText(scale.quieterLabel, chase.depthQuieterLabel);
     }
+    roomWasInView = inView;
   };
 
   const showReplay = (screen: Screen): void => {
     const replay = screen.replay;
     const playing = replay?.playing === true;
-    // While the sounds play, the house gives up room for the words beside it.
+    // While the sounds play, the room gives up its foot for the words under it.
     if (playing) {
       page.root.dataset.replay = "playing";
     } else {
@@ -463,10 +433,11 @@ export function createScreenView(options: {
       const first = shown === null;
       shown = screen;
 
-      // The drawing.
+      // The room behind everything: in full view, or faint under a sheet.
       page.root.dataset.house = screen.sheet === null ? "full" : "faint";
-      house.setRoomStates(screen.roomStates);
-      motion.setLitRoom(screen.litRoom);
+      // Which sheet is up, so that each can lay out the yard behind it in its own way.
+      page.root.dataset.sheet = screen.sheet ?? "none";
+      scene.setCovered(screen.sheet === "result");
 
       // The bar.
       page.stopButton.hidden = !screen.stopShown;
@@ -479,7 +450,7 @@ export function createScreenView(options: {
         setText(page.roomProgress, screen.room.progress);
       }
 
-      // The room.
+      // The answers, the rest and the caption.
       page.answerButtons.left.hidden = !screen.answersShown;
       page.answerButtons.right.hidden = !screen.answersShown;
       if (screen.restLine === null) {
@@ -489,7 +460,12 @@ export function createScreenView(options: {
         restShownAtMs ??= view.performance.now();
       }
       page.rest.hidden = screen.restLine === null;
-      if (screen.sheet !== null || screen.replay !== null) {
+      if (
+        screen.sheet !== null ||
+        screen.replay !== null ||
+        screen.restLine !== null
+      ) {
+        // The rest lies over the place of the caption.
         caption.clear();
       }
 
@@ -498,11 +474,10 @@ export function createScreenView(options: {
         page.frontDoor.statusLine,
         screen.sheet === "frontDoor" ? screen.soundNotStartedLine : null,
       );
-      showCalibration(screen);
       showHeadphoneCheck(screen);
       showNotice(screen);
       showPractice(screen);
-      showChase(screen);
+      showRoom(screen);
       showReplay(screen);
       showSwap(screen);
       for (const [name, sheet] of Object.entries(sheets)) {
@@ -525,7 +500,7 @@ export function createScreenView(options: {
         focusKey = key;
         if (!first) {
           if (screen.sheet !== null) {
-            focus(sheets[screen.sheet].heading);
+            focus(sheets[screen.sheet]?.heading ?? page.root);
           } else if (screen.restLine !== null) {
             focus(page.restButton);
           } else {
@@ -535,23 +510,56 @@ export function createScreenView(options: {
       }
     },
     react(reaction) {
-      if (reaction.kind === "replayRipple") {
-        // The ripple starts in the room the sound came from, whichever of the event and the
-        // snapshot arrives first. It has no line here: the words of a replayed sound stand
-        // beside the house for as long as it is the current one.
-        motion.setLitRoom(reaction.roomId);
-        motion.ripple(reaction.side);
-        return;
+      switch (reaction.kind) {
+        case "replayRipple":
+          // The creature of the sound stands in the doorway of its side, whichever of the event
+          // and the snapshot arrives first, and rings go out from it. It has no line here: the
+          // words of a replayed sound stand under the room for as long as it is the current one.
+          scene.setFeatured({
+            id: reaction.roomId,
+            place: reaction.side,
+            sounding: false,
+          });
+          scene.rings(reaction.side);
+          return;
+        case "ripple":
+          if (shown?.featured?.rollCall === true) {
+            // A practice sound, whose creature stands in plain view in the doorway of the side it
+            // sounds from: rings from the side that was answered, and a hop from the one that made it.
+            scene.rings(reaction.side);
+            if (shown.featured.id === reaction.roomId) {
+              scene.cheer();
+            }
+          } else {
+            // The sound was caught: its creature is kicked away from Jack on its side.
+            scene.caught(reaction.side, reaction.roomId, reaction.judgement);
+          }
+          shelf.flash(reaction.roomId);
+          caption.say(reaction.line, "catch");
+          return;
+        case "slipped":
+          // The sound went by. Its time to answer is over, and so is its trial.
+          // It reaches Jack and bites a little of his flame away.
+          scene.slipped(reaction.side, reaction.roomId, reaction.judgement);
+          caption.say(reaction.line, "miss");
+          return;
+        case "say":
+          if (reaction.judgement !== undefined) {
+            scene.passed(reaction.judgement, reaction.side ?? null);
+          }
+          caption.say(reaction.line);
+          return;
+        case "cue":
+          scene.cue(reaction.atMs, reaction.beatMs);
+          return;
+        case "whiff":
+          scene.whiff(reaction.side);
+          return;
+        case "gone":
+          // Its card shows it asleep as soon as the screen says so. Here, the line.
+          caption.note(reaction.line);
+          return;
       }
-      if (reaction.kind === "ripple") {
-        // The sound was caught: its ripple, and its shape showing by that wall.
-        motion.ripple(reaction.side);
-        motion.sighting(reaction.side, "caught");
-      } else if (reaction.kind === "slipped") {
-        // The sound went by. Its time to answer is over, and so is its trial.
-        motion.sighting(reaction.side, "slipped");
-      }
-      caption.say(reaction.line);
     },
     current: () => shown,
     restButtonIsMeant: () =>

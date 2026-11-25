@@ -69,7 +69,6 @@ describe("audio output CP6. A room at or below its top is never clamped (Univers
               earChoice: ear,
               requestedLevelDb: levelDb,
               calibrationGain,
-              previousAppliedGain: null,
             });
             expect(result.kind).toBe("ready");
             if (result.kind !== "ready") {

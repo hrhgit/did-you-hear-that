@@ -3,7 +3,7 @@
 //
 //   npx tsx tests/listeners/print-replay-length-measurement.ts
 //
-// Plays quick and full visits through the shipped engine with the ranges, seeds and visit counts
+// Plays full visits through the shipped engine with the ranges, seeds and visit counts
 // of "Measurements", and prints the tables as Markdown. It writes no file and needs no
 // package.json script. The numbers are for the project owner to choose the most count and the gap
 // from (Q1, Q2). The script chooses nothing and changes no config value. The figures come from the
@@ -33,7 +33,6 @@ const visitCount = 1000;
 
 /** The seed of each visit type ("Measurements"). */
 const visitSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261117,
   full: 20261118,
 });
 
@@ -67,7 +66,7 @@ const ranges: readonly ListenerParameterRange[] = Object.freeze([
   attentiveListenerRange,
   plausibleListenerRange,
 ]);
-const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
+const visitTypes: readonly VisitType[] = Object.freeze(["full"]);
 
 /** The median as the nearest-rank 50th percentile, so that it is a value of the list, as every percentile here is. */
 const median = (sorted: readonly number[]): number => percentile(sorted, 0.5);
@@ -195,9 +194,9 @@ function printGaps(measurements: readonly ReplayLengthMeasurement[]): void {
   console.log("The gap's effect, as the median length over the four columns:");
   console.log("");
   console.log(
-    `| Gap | ${gapTableMaxCounts.map((maxCount) => `Most ${String(maxCount)}`).join(" | ")} | No limit, quick | No limit, full |`,
+    `| Gap | ${gapTableMaxCounts.map((maxCount) => `Most ${String(maxCount)}`).join(" | ")} | No limit, full |`,
   );
-  console.log(`|---|${gapTableMaxCounts.map(() => "---|").join("")}---|---|`);
+  console.log(`|---|${gapTableMaxCounts.map(() => "---|").join("")}---|`);
   for (const gapMs of gapsMs) {
     const name =
       gapMs === lengthTableGapMs
@@ -207,7 +206,7 @@ function printGaps(measurements: readonly ReplayLengthMeasurement[]): void {
       ...gapTableMaxCounts.map((maxCount) =>
         medianSpan(measurements, maxCount, gapMs),
       ),
-      medianSpan(ofType("quick"), null, gapMs),
+      medianSpan(ofType("full"), null, gapMs),
       medianSpan(ofType("full"), null, gapMs),
     ];
     console.log(`| ${name} | ${cells.join(" | ")} |`);
@@ -265,7 +264,7 @@ function main(): void {
     }
   }
   console.log(
-    `Method: playPopulationRooms with specSearchUnderTest and hearingMethodConfig, ${String(visitCount)} visits per column, one listener per room, seed ${String(visitSeed.quick)} for quick visits and ${String(visitSeed.full)} for full ones. The proposed most count (${String(proposedMaxCount)}) and gap (${String(lengthTableGapMs)} ms) were decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1, Q2).`,
+    `Method: playPopulationRooms with specSearchUnderTest and hearingMethodConfig, ${String(visitCount)} visits per column, one listener per room, seed ${String(visitSeed.full)} for full visits. The proposed most count (${String(proposedMaxCount)}) and gap (${String(lengthTableGapMs)} ms) were decided by the owner's coordinator on 2026-11-16, at the owner's request (Q1, Q2).`,
   );
   console.log("");
   printCounts(measurements);

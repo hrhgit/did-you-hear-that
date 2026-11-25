@@ -34,6 +34,9 @@ export interface RepeatComparisonDrawingOptions {
 
 const sides = ["left", "right"] as const;
 
+/** The corner radius of a lane, as on the result picture. */
+const laneRadius = 14;
+
 /** One wing of one strip: its light and the line where the light ends, or its hatching. */
 function drawWing(
   doc: Document,
@@ -87,7 +90,7 @@ function drawWing(
   });
 }
 
-/** One run of the room: a strip with a lamp in the middle, and its words. */
+/** One run of the room: a lane with a candle in the middle, and its words. */
 function drawRun(
   doc: Document,
   pen: SketchPen,
@@ -112,29 +115,42 @@ function drawRun(
     element.textContent = words;
     return element;
   };
-  const lampTop = box.top;
+  const wickY = box.bottom - 26;
+  const flameTip = wickY - 12;
   return svgElement(
     doc,
     "g",
     { class: "repeat-run", "data-arrangement": run.arrangement },
     [
-      ...sides.flatMap((side) =>
-        drawWing(doc, pen, idPrefix, strip, side, run[side]),
-      ),
-      svgElement(doc, "path", {
+      // The lane's bed, and its light kept inside its rounded ends.
+      svgElement(doc, "rect", {
         class: "repeat-room",
-        d: pen.box(box.left, box.top, box.right, box.bottom),
+        x: box.left,
+        y: box.top,
+        width: box.right - box.left,
+        height: box.bottom - box.top,
+        rx: laneRadius,
       }),
-      // A small lamp in the middle of the room, hung from the ceiling.
+      svgElement(
+        doc,
+        "g",
+        { "clip-path": `url(#${idPrefix}-lane-${String(strip)})` },
+        sides.flatMap((side) =>
+          drawWing(doc, pen, idPrefix, strip, side, run[side]),
+        ),
+      ),
+      // A small candle in the middle of the lane, where both halves of its light start.
+      svgElement(doc, "rect", {
+        class: "repeat-candle-wax",
+        x: repeatCentreX - 3.5,
+        y: wickY,
+        width: 7,
+        height: box.bottom - 8 - wickY,
+        rx: 2,
+      }),
       svgElement(doc, "path", {
-        class: "repeat-lamp",
-        d: `M${repeatCentreX} ${lampTop}L${repeatCentreX} ${lampTop + 9}M${repeatCentreX - 3} ${lampTop + 9}L${repeatCentreX + 3} ${lampTop + 9}L${repeatCentreX + 8} ${lampTop + 18}L${repeatCentreX - 8} ${lampTop + 18}Z`,
-      }),
-      svgElement(doc, "circle", {
-        class: "repeat-bulb",
-        cx: repeatCentreX,
-        cy: lampTop + 20,
-        r: 2.6,
+        class: "repeat-candle-flame",
+        d: `M${String(repeatCentreX)} ${String(flameTip)}C${String(repeatCentreX + 4.5)} ${String(wickY - 5)} ${String(repeatCentreX + 3.5)} ${String(wickY - 1)} ${String(repeatCentreX)} ${String(wickY - 1)}C${String(repeatCentreX - 3.5)} ${String(wickY - 1)} ${String(repeatCentreX - 4.5)} ${String(wickY - 5)} ${String(repeatCentreX)} ${String(flameTip)}Z`,
       }),
       text(
         "repeat-run-label",
@@ -157,7 +173,7 @@ function drawRun(
 }
 
 /**
- * Draws a floor's first run and its swapped repeat one above the other. The visitor's left ear is
+ * Draws a creature's first run and its swapped repeat as two lanes, one above the other. The visitor's left ear is
  * at the left in both. The light in each wing reaches as far as the comparison says, on the scale
  * of the result picture. Between the two strips each earpiece has a line from where it sat in the
  * first run to where it sat in the repeat, so the two lines cross. No scale is drawn.
@@ -201,6 +217,23 @@ export function drawRepeatComparison(
     ),
     gradient("left"),
     gradient("right"),
+    ...([0, 1] as const).map((strip) => {
+      const box = repeatStripBox(strip);
+      return svgElement(
+        doc,
+        "clipPath",
+        { id: `${idPrefix}-lane-${String(strip)}` },
+        [
+          svgElement(doc, "rect", {
+            x: box.left,
+            y: box.top,
+            width: box.right - box.left,
+            height: box.bottom - box.top,
+            rx: laneRadius,
+          }),
+        ],
+      );
+    }),
   ]);
   const earLabel = (side: "left" | "right"): SVGElement => {
     const label = svgElement(doc, "text", {

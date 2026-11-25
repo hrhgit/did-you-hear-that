@@ -25,6 +25,11 @@ const {
 /** The lowest supported rate, where the calibration noise renders quickest. */
 const sampleRateHz = soundRulesConfig.sampleRateMinHz;
 
+/** Where the hiss's calibration starts: the middle of −40…−4 dB, rounded down (audible-start, 2026-11-18). */
+const hissStartDb = -22;
+/** Where the music's calibration starts: the middle of −40…−5 dB, rounded down to the grid. */
+const musicStartDb = -23;
+
 /**
  * A running shell on the fake backend, whose page clock is the manual timer's clock, and a
  * controller on it. `advance` moves the audio clock and the timer together. The fake has no music
@@ -76,7 +81,7 @@ async function setup() {
 }
 
 describe("createCalibrationController", () => {
-  it("plays nothing until opened, then the first repeat at once, at the bottom of the control (R16.1)", async () => {
+  it("plays nothing until opened, then the first repeat at once, at the middle of the control (R16.1)", async () => {
     const { backend, controller } = await setup();
     expect(backend.scheduled()).toHaveLength(0);
     expect(controller.snapshot()).toMatchObject({
@@ -90,8 +95,8 @@ describe("createCalibrationController", () => {
     expect(backend.scheduled()).toHaveLength(1);
     expect(controller.snapshot()).toMatchObject({
       playing: true,
-      targetSettingDb: calibrationSettingMinDb,
-      playedSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb,
+      playedSettingDb: hissStartDb,
       atTop: false,
     });
   });
@@ -121,19 +126,15 @@ describe("createCalibrationController", () => {
       controller.louder();
     }
     expect(controller.snapshot()).toMatchObject({
-      targetSettingDb: calibrationSettingMinDb + 12,
-      playedSettingDb: calibrationSettingMinDb,
+      targetSettingDb: hissStartDb + 12,
+      playedSettingDb: hissStartDb,
     });
     expect(calibrationRiseMaxDb).toBeGreaterThanOrEqual(12);
 
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(
-      calibrationSettingMinDb + 12,
-    );
+    expect(controller.snapshot().playedSettingDb).toBe(hissStartDb + 12);
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(
-      calibrationSettingMinDb + 12,
-    );
+    expect(controller.snapshot().playedSettingDb).toBe(hissStartDb + 12);
   });
 
   it("moves the target down from the played setting, never above it", async () => {
@@ -143,17 +144,21 @@ describe("createCalibrationController", () => {
       controller.louder();
     }
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(-30);
+    expect(controller.snapshot().playedSettingDb).toBe(hissStartDb + 10);
     controller.quieter();
-    expect(controller.snapshot().targetSettingDb).toBe(-31);
+    expect(controller.snapshot().targetSettingDb).toBe(hissStartDb + 9);
     advanceToNextRepeat();
-    expect(controller.snapshot().playedSettingDb).toBe(-31);
+    expect(controller.snapshot().playedSettingDb).toBe(hissStartDb + 9);
   });
 
   it("keeps the target within the control", async () => {
     const { controller } = await setup();
     controller.open();
     controller.quieter();
+    expect(controller.snapshot().targetSettingDb).toBe(
+      hissStartDb - calibrationSettingStepDb,
+    );
+    controller.setTarget(Number.NEGATIVE_INFINITY);
     expect(controller.snapshot().targetSettingDb).toBe(calibrationSettingMinDb);
     for (let press = 0; press < 100; press += 1) {
       controller.louder();
@@ -182,7 +187,7 @@ describe("createCalibrationController", () => {
     });
   });
 
-  it("stops the loop on a stop, and a new open starts again from the bottom", async () => {
+  it("stops the loop on a stop, and a new open starts again from the middle", async () => {
     const { backend, output, controller, advance, advanceToNextRepeat } =
       await setup();
     controller.open();
@@ -200,7 +205,7 @@ describe("createCalibrationController", () => {
     expect(backend.scheduled()).toHaveLength(count);
     controller.open();
     expect(backend.scheduled()).toHaveLength(count + 1);
-    expect(controller.snapshot().playedSettingDb).toBe(calibrationSettingMinDb);
+    expect(controller.snapshot().playedSettingDb).toBe(hissStartDb);
   });
 
   it("stops the loop on close", async () => {
@@ -213,8 +218,14 @@ describe("createCalibrationController", () => {
   });
 
   it("refuses a setting below the Keep_Minimum with the volume line and goes on playing (R16.6)", async () => {
-    const { backend, controller, advance } = await setup();
+    const { backend, controller, advance, advanceToNextRepeat } = await setup();
     controller.open();
+    // Dragged below the Keep_Minimum and played, so the volume is high.
+    controller.setTarget(calibrationSettingKeepMinDb - 3);
+    advanceToNextRepeat();
+    expect(controller.snapshot().playedSettingDb).toBe(
+      calibrationSettingKeepMinDb - 3,
+    );
     const outcome = controller.keep();
     expect(outcome).toEqual({ kind: "refused", reason: "systemVolumeHigh" });
     expect(controller.snapshot()).toMatchObject({
@@ -229,14 +240,14 @@ describe("createCalibrationController", () => {
   it("keeps the setting last played, ends the loop and shows the kept line (R16.4, R16.8)", async () => {
     const { backend, controller, advance, advanceToNextRepeat } = await setup();
     controller.open();
-    for (let press = 0; press < 20; press += 1) {
+    for (let press = 0; press < 10; press += 1) {
       controller.louder();
     }
     for (let repeat = 0; repeat < 8; repeat += 1) {
       advanceToNextRepeat();
     }
     const played = controller.snapshot().playedSettingDb;
-    expect(played).toBe(calibrationSettingMinDb + 20);
+    expect(played).toBe(hissStartDb + 10);
     expect(played).toBeGreaterThanOrEqual(calibrationSettingKeepMinDb);
     expect(controller.snapshot().line).toBe(calibrationCopy.hiss.openLine);
 
@@ -325,15 +336,15 @@ describe("createCalibrationController", () => {
       },
     );
 
-    it("takes a target set before open, and open puts the target at the bottom (D3)", async () => {
+    it("takes a target set before open, and open puts the target at the middle of the control (D3)", async () => {
       const { backend, controller } = await setup();
       controller.setTarget(-10);
       expect(controller.snapshot().targetSettingDb).toBe(-10);
       expect(backend.scheduled()).toHaveLength(0);
       controller.open();
       expect(controller.snapshot()).toMatchObject({
-        targetSettingDb: calibrationSettingMinDb,
-        playedSettingDb: calibrationSettingMinDb,
+        targetSettingDb: hissStartDb,
+        playedSettingDb: hissStartDb,
       });
     });
 
@@ -347,7 +358,7 @@ describe("createCalibrationController", () => {
         advanceToNextRepeat();
         played.push(controller.snapshot().playedSettingDb);
       }
-      expect(played).toEqual([-40, ...Array<number>(20).fill(-4)]);
+      expect(played).toEqual([hissStartDb, ...Array<number>(20).fill(-4)]);
       expect(controller.snapshot()).toMatchObject({
         targetSettingDb: calibrationSettingTopDb(),
         atTop: true,
@@ -357,14 +368,15 @@ describe("createCalibrationController", () => {
     it("lets louder and quieter go on from a dragged target as before", async () => {
       const { controller, advanceToNextRepeat } = await setup();
       controller.open();
-      controller.setTarget(-38);
+      // Dragged above the played setting, so louder goes on from the target.
+      controller.setTarget(-10);
       controller.louder();
-      expect(controller.snapshot().targetSettingDb).toBe(-37);
+      expect(controller.snapshot().targetSettingDb).toBe(-9);
       advanceToNextRepeat();
-      expect(controller.snapshot().playedSettingDb).toBe(-37);
+      expect(controller.snapshot().playedSettingDb).toBe(-9);
       controller.setTarget(-20);
       controller.quieter();
-      expect(controller.snapshot().targetSettingDb).toBe(-38);
+      expect(controller.snapshot().targetSettingDb).toBe(-10);
     });
   });
 
@@ -487,7 +499,7 @@ describe("createCalibrationController with the calibration music (audible-start 
     return { backend, timer, output, controller, advance, loopCalls };
   }
 
-  it("plays the music, not the repeats, from the bottom of the control, with the music's lines", async () => {
+  it("plays the music, not the repeats, from the middle of the control, with the music's lines", async () => {
     const { backend, controller, loopCalls } = await musicSetup();
     expect(controller.snapshot()).toMatchObject({
       calibrationSound: "music",
@@ -501,8 +513,8 @@ describe("createCalibrationController with the calibration music (audible-start 
     expect(loopCalls()[0]).toMatchObject({ kind: "startLoop" });
     expect(controller.snapshot()).toMatchObject({
       playing: true,
-      targetSettingDb: calibrationSettingMinDb,
-      playedSettingDb: calibrationSettingMinDb,
+      targetSettingDb: musicStartDb,
+      playedSettingDb: musicStartDb,
       atTop: false,
       line: calibrationCopy.openLine,
     });
@@ -519,7 +531,7 @@ describe("createCalibrationController with the calibration music (audible-start 
       played.push(controller.snapshot().playedSettingDb ?? Number.NaN);
     }
     // A step is shown once its ramp has ended, at the next step.
-    expect(played.slice(0, 3)).toEqual([-40, -30, -30]);
+    expect(played.slice(0, 3)).toEqual([musicStartDb, -30, -30]);
     for (let index = 1; index < played.length; index += 1) {
       expect(played[index] - played[index - 1]).toBeLessThanOrEqual(
         calibrationRiseMaxDb,
@@ -570,7 +582,9 @@ describe("createCalibrationController with the calibration music (audible-start 
   it("refuses a setting below the Keep_Minimum with the music's volume line, and the music plays on", async () => {
     const { controller, advance, loopCalls } = await musicSetup();
     controller.open();
-    advance(1_000);
+    // Dragged below the Keep_Minimum and reached by the music, so the volume is high.
+    controller.setTarget(calibrationSettingKeepMinDb - 3);
+    advance(30_000);
     expect(controller.keep()).toEqual({
       kind: "refused",
       reason: "systemVolumeHigh",
@@ -621,7 +635,8 @@ describe("createCalibrationController with the calibration music (audible-start 
       calibrationSound: "music",
       playing: true,
       controlTopDb: -5,
-      playedSettingDb: calibrationSettingMinDb,
+      targetSettingDb: musicStartDb,
+      playedSettingDb: musicStartDb,
       line: calibrationCopy.openLine,
     });
   });
@@ -637,7 +652,7 @@ describe("createCalibrationController with the calibration music (audible-start 
     expect(controller.snapshot()).toMatchObject({
       calibrationSound: "hiss",
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
       controlTopDb: calibrationSettingTopDb(),
       line: calibrationCopy.hiss.openLine,
     });
@@ -688,7 +703,9 @@ describe("createCalibrationController with the calibration music (audible-start 
       line: calibrationCopy.hiss.openLine,
     });
     controller.open();
-    advance(2_000);
+    // Dragged below the Keep_Minimum and played, so the volume is high.
+    controller.setTarget(calibrationSettingKeepMinDb - 3);
+    advance(10_000);
     expect(controller.keep()).toMatchObject({ reason: "systemVolumeHigh" });
     expect(controller.snapshot().line).toBe(
       calibrationCopy.hiss.systemVolumeHighLine,

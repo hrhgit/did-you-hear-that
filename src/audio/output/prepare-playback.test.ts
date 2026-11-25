@@ -9,7 +9,7 @@ import type { PlaybackRequest, PreparedPlayback } from "./output-types";
 import { preparePlayback } from "./prepare-playback";
 
 const { ceilingFraction, ghostSoundMaxDurationMs } = audioSafetyConfig;
-const { capRelativeToAnchorDb, upwardStepDb } = hearingMethodConfig;
+const { capRelativeToAnchorDb } = hearingMethodConfig;
 const sampleRateHz = 44100;
 
 /** One second of a constant, which the Output_Fade alone fades to 25 ms at each end. */
@@ -25,7 +25,6 @@ function request(overrides: Partial<PlaybackRequest> = {}): PlaybackRequest {
     earChoice: "left",
     requestedLevelDb: 0,
     calibrationGain: 1,
-    previousAppliedGain: null,
     ...overrides,
   };
 }
@@ -66,15 +65,12 @@ describe("preparePlayback", () => {
       ).toEqual({ kind: "refused", reason: "emptyBuffer" });
     });
 
-    it("refuses a buffer longer than the longest ghost sound, and accepts one exactly that long (R10.3)", () => {
+    it("plays a buffer longer than the longest ghost sound (the length limit was dropped on 2026-11-17)", () => {
       const longestCount = Math.floor(
         (ghostSoundMaxDurationMs * sampleRateHz) / 1000,
       );
       expect(
-        preparePlayback(request({ samples: constant(0.05, longestCount + 1) })),
-      ).toEqual({ kind: "refused", reason: "tooLong" });
-      expect(
-        preparePlayback(request({ samples: constant(0.05, longestCount) }))
+        preparePlayback(request({ samples: constant(0.05, longestCount * 4) }))
           .kind,
       ).toBe("ready");
     });
@@ -116,17 +112,6 @@ describe("preparePlayback", () => {
       }
     });
 
-    it("refuses a previous gain that is not finite or not above zero", () => {
-      for (const gain of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-        expect(
-          preparePlayback(
-            request({ previousAppliedGain: { left: null, right: gain } }),
-          ),
-          String(gain),
-        ).toEqual({ kind: "refused", reason: "invalidCalibrationGain" });
-      }
-    });
-
     it("refuses a ghost sound in both ears (R6.3, D21)", () => {
       expect(
         preparePlayback(request({ soundId: "stairs", earChoice: "both" })),
@@ -147,23 +132,10 @@ describe("preparePlayback", () => {
       });
     });
 
-    it("refuses a buffer that jumps from silence to its peak in the middle (R10.2, D13)", () => {
+    it("plays a buffer that jumps from silence to its peak in the middle (the fade-length check was dropped on 2026-11-17)", () => {
       const samples = new Float32Array(sampleRateHz);
       samples.fill(0.05, 20000);
-      expect(preparePlayback(request({ samples }))).toEqual({
-        kind: "refused",
-        reason: "fadeTooShort",
-      });
-    });
-
-    it("refuses an output that 32-bit rounding leaves with too short a fade (D35)", () => {
-      // About ten steps of the smallest 32-bit value at the peak.
-      const levelDb = gainToDecibels(1.4e-44);
-      expect(
-        preparePlayback(
-          request({ samples: constant(1), requestedLevelDb: levelDb }),
-        ),
-      ).toEqual({ kind: "refused", reason: "fadeTooShort" });
+      expect(preparePlayback(request({ samples })).kind).toBe("ready");
     });
 
     it("never reaches the beyondCeiling guard, even at the largest gains (R7.7)", () => {
@@ -184,20 +156,17 @@ describe("preparePlayback", () => {
     });
   });
 
-  describe("the anchor cap (R7.3)", () => {
-    it("plays a request of +20 dB at the cap of +5 dB with the limit anchorCap", () => {
+  describe("no anchor cap in the output stage (dropped on 2026-11-17)", () => {
+    it("plays a request of +20 dB as asked when the ceiling allows it", () => {
       const result = ready(
         preparePlayback(
           request({ requestedLevelDb: 20, calibrationGain: 0.01 }),
         ),
       );
       expect(result.requestedLevelDb).toBe(20);
-      expect(result.playedLevelDb).toBeLessThanOrEqual(capRelativeToAnchorDb);
-      expect(result.playedLevelDb).toBeCloseTo(capRelativeToAnchorDb, 12);
-      expect(result.clampLimit).toBe("anchorCap");
-      expect(result.appliedGain).toBe(
-        0.01 * decibelsToGain(capRelativeToAnchorDb),
-      );
+      expect(result.playedLevelDb).toBe(20);
+      expect(result.clampLimit).toBeNull();
+      expect(result.appliedGain).toBe(0.01 * decibelsToGain(20));
     });
   });
 
@@ -230,109 +199,6 @@ describe("preparePlayback", () => {
           Math.fround(faded[n] * result.appliedGain) + 0,
         );
       }
-    });
-  });
-
-  describe("the rise limit (R11.2, R11.3, D15)", () => {
-    it("lowers a rise of 15 dB on one ear to one upward step", () => {
-      const calibrationGain = 0.1;
-      const result = ready(
-        preparePlayback(
-          request({
-            calibrationGain,
-            requestedLevelDb: -5,
-            previousAppliedGain: {
-              left: calibrationGain * decibelsToGain(-20),
-              right: null,
-            },
-          }),
-        ),
-      );
-      expect(result.clampLimit).toBe("rise");
-      expect(result.playedLevelDb).toBeCloseTo(-20 + upwardStepDb, 9);
-    });
-
-    it("ignores the previous gain of the other ear", () => {
-      const result = ready(
-        preparePlayback(
-          request({
-            requestedLevelDb: -5,
-            previousAppliedGain: { left: null, right: decibelsToGain(-40) },
-          }),
-        ),
-      );
-      expect(result.clampLimit).toBeNull();
-      expect(result.playedLevelDb).toBe(-5);
-    });
-
-    it("holds the lower of the two limits for both ears", () => {
-      const result = ready(
-        preparePlayback(
-          request({
-            soundId: "calibration",
-            earChoice: "both",
-            requestedLevelDb: 0,
-            calibrationGain: 0.01,
-            previousAppliedGain: {
-              left: 0.01 * decibelsToGain(-10),
-              right: 0.01 * decibelsToGain(-20),
-            },
-          }),
-        ),
-      );
-      expect(result.clampLimit).toBe("rise");
-      expect(result.playedLevelDb).toBeCloseTo(-20 + upwardStepDb, 9);
-    });
-
-    it("does not clamp a rise of exactly one upward step through decibelsToGain", () => {
-      for (const calibrationGain of [1e-6, 0.003, 0.1, 0.5, 0.8]) {
-        for (
-          let fromDb = -70;
-          fromDb <= capRelativeToAnchorDb - upwardStepDb;
-          fromDb += 5
-        ) {
-          const toDb = fromDb + upwardStepDb;
-          const result = ready(
-            preparePlayback(
-              request({
-                calibrationGain,
-                requestedLevelDb: toDb,
-                previousAppliedGain: {
-                  left: calibrationGain * decibelsToGain(fromDb),
-                  right: null,
-                },
-              }),
-            ),
-          );
-          expect(result.clampLimit, `${calibrationGain} ${fromDb}`).toBeNull();
-          expect(result.playedLevelDb).toBe(toDb);
-        }
-      }
-    });
-
-    it("lets the ceiling act after the rise limit and reports the ceiling", () => {
-      const result = ready(
-        preparePlayback(
-          request({
-            samples: constant(0.5),
-            requestedLevelDb: 0,
-            previousAppliedGain: { left: decibelsToGain(-20), right: null },
-          }),
-        ),
-      );
-      // The rise limit gives -15 dB, a peak of about 0.089, within the ceiling.
-      expect(result.clampLimit).toBe("rise");
-      const louder = ready(
-        preparePlayback(
-          request({
-            samples: constant(0.5),
-            requestedLevelDb: 0,
-            previousAppliedGain: { left: decibelsToGain(-3), right: null },
-          }),
-        ),
-      );
-      expect(louder.clampLimit).toBe("ceiling");
-      expect(louder.peakFraction).toBeLessThanOrEqual(ceilingFraction);
     });
   });
 

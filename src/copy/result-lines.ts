@@ -33,8 +33,7 @@ export interface WingWords {
 
 const unreliableReasonLines: Readonly<Record<UnreliableReasonName, string>> =
   Object.freeze({
-    trialLimit:
-      "Your answers here had not settled when the house ran out of tries.",
+    trialLimit: "The check ended before your answers settled.",
     inconsistentCatch: "One catch here did not fit with your other answers.",
     falseAlarmRate: "In this room you often answered when I made no sound.",
     levelNotAsAsked:
@@ -155,7 +154,7 @@ export function wingLine(wing: WingWords): string {
   requireWing(wing);
   switch (wing.state) {
     case "found":
-      return `The quietest sound you caught here was ${relativeLevelLabel(wing.thresholdDb as number)}.`;
+      return `The estimated level here is ${relativeLevelLabel(wing.thresholdDb as number)}.`;
     case "betterThanFloor":
       return "Quieter than this house can whisper.";
     case "worseThanCap":
@@ -163,6 +162,55 @@ export function wingLine(wing: WingWords): string {
     case "unreliable":
       return "This room should be visited again.";
   }
+}
+
+/**
+ * A wing's level in two parts for the floor's card: `value`, set large, and `note`, which
+ * finishes it in small type. Together they say what `wingLine` says, and a found level is still
+ * labelled as relative to the visitor's calibration.
+ */
+export interface WingValueWords {
+  readonly value: string;
+  readonly note: string;
+}
+
+/** The two parts of a wing's level: "30 dB quieter" and "than your calibration". */
+export function wingValue(wing: WingWords): WingValueWords {
+  requireWing(wing);
+  switch (wing.state) {
+    case "found": {
+      const whole = Math.round(wing.thresholdDb as number);
+      if (whole === 0) {
+        return { value: "As loud", note: "as your calibration" };
+      }
+      return {
+        value: `${String(Math.abs(whole))} dB ${whole < 0 ? "quieter" : "louder"}`,
+        note: "than your calibration",
+      };
+    }
+    case "betterThanFloor":
+      return { value: "Quieter still", note: "than this house can whisper" };
+    case "worseThanCap":
+      return {
+        value: "Not caught",
+        note: "the loudest sound went by",
+      };
+    case "unreliable":
+      return { value: "No level", note: "visit this room again" };
+  }
+}
+
+/** Whole decibels relative to the calibration, shown as a span of magnitudes. */
+export function levelRangeLabel(lowDb: number, highDb: number): string {
+  const low = Math.abs(Math.round(lowDb));
+  const high = Math.abs(Math.round(highDb));
+  const first = lowDb <= 0 && highDb >= 0 ? 0 : Math.min(low, high);
+  return `${String(first)}–${String(Math.max(low, high))}`;
+}
+
+/** The spoken form keeps the direction relative to the calibration at each end. */
+export function levelRangeLine(lowDb: number, highDb: number): string {
+  return `The range runs from ${relativeLevelLabel(lowDb)} to ${relativeLevelLabel(highDb)}.`;
 }
 
 /** Why a wing is unreliable, in one line. */
@@ -192,17 +240,17 @@ export function differenceLine(rightMinusLeftDb: number | null): string {
   }
   const whole = wholeDifference(rightMinusLeftDb);
   if (whole === 0) {
-    return "On this floor you caught the same level on your left and on your right.";
+    return "At this pitch the estimates are the same on your left and right.";
   }
   return whole > 0
-    ? `On this floor you caught a sound ${String(whole)} dB quieter on your left than on your right.`
-    : `On this floor you caught a sound ${String(-whole)} dB quieter on your right than on your left.`;
+    ? `At this pitch the estimate is ${String(whole)} dB quieter on your left than on your right.`
+    : `At this pitch the estimate is ${String(-whole)} dB quieter on your right than on your left.`;
 }
 
 /** The offer of the swapped repeat on a floor whose left and right are this far apart. */
 export function swappedRepeatLine(rightMinusLeftDb: number): string {
   const size = Math.abs(wholeDifference(rightMinusLeftDb));
-  return `Your left and right are ${String(size)} dB apart here. Swap the headphones, so that the left earpiece is on your right ear, and visit this room again. That helps tell whether the difference stays with your ears or moves with the headphones.`;
+  return `Your left and right are ${String(size)} dB apart here. A swap tells whether the difference stays with your ears or moves with the headphones.`;
 }
 
 /** A wing's line, followed by the line of its first reason when it is unreliable. */

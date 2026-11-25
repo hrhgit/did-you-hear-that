@@ -69,16 +69,17 @@ export interface AudioBackend {
   loadCalibrationMusic(filePath: string): Promise<DecodedCalibrationMusic>;
   /**
    * Starts the calibration music's loop (audible-start design.md, "Playing"): the two channels,
-   * which the shell makes equal, looping without a break from `startMs` on the audio clock, at the
+   * which the shell makes equal, playing from `startMs` on the audio clock, at the
    * linear `levelGain`, behind a fade gain that rises from exact zero to 1 over `fadeInMs` with the
    * raised cosine of the output fade. The loop goes through the stop gain, so `fadeToSilence`
-   * stops it with every other sound. The shell starts at most one loop at a time.
+   * stops it with every other sound. Music loops unless `repeat` is false.
    */
   startLoop(
     channels: ScheduledChannels,
     startMs: number,
     levelGain: number,
     fadeInMs: number,
+    repeat?: boolean,
   ): void;
   /**
    * Ramps the loop's level gain exponentially from its value at `startMs` to `levelGain` at
@@ -91,6 +92,22 @@ export interface AudioBackend {
    * source at the end of the fade. Does nothing without a loop.
    */
   stopLoop(fadeOutMs: number): void;
+  /**
+   * Starts the room's beat looping from `startMs` at the linear `levelGain`, on a path of its own:
+   * `fadeToSilence` leaves it going, and `stopBeat` ends it (the rhythm game, 2026-11-18).
+   */
+  startBeat(
+    channels: ScheduledChannels,
+    startMs: number,
+    levelGain: number,
+  ): void;
+  /**
+   * Lets the beat sink to `duckGain` times its level from `fromMs` to `toMs` on the audio clock,
+   * and rise again after. Does nothing without a beat.
+   */
+  duckBeat(fromMs: number, toMs: number, duckGain: number): void;
+  /** Fades the beat to exact zero over `fadeOutMs` and stops it. Does nothing without a beat. */
+  stopBeat(fadeOutMs: number): void;
   /** Suspends the context. A change of state the shell asked for is not an `interrupted` event. */
   suspend(): void;
   /** Closes the context. A change of state the shell asked for is not an `interrupted` event. */

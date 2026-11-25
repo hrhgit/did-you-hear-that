@@ -376,6 +376,16 @@ export interface PictureWing {
   readonly reasonLine: string | null;
   /** The earlier visit's mark in this wing, or null. Always null until the comparison tasks are built. */
   readonly earlier: EarlierWing | null;
+  /**
+   * `line` in two parts for the floor's card (added 2026-11-17): the value set large, such as
+   * "30 dB quieter", and the words that finish it, such as "than your calibration".
+   */
+  readonly valueLabel: string;
+  readonly valueNote: string;
+  /** The estimated range beside the level, when both ends are available. */
+  readonly range?: { readonly lowDb: number; readonly highDb: number };
+  /** The found level relative to the calibration, for the curve (result-curve R1.3); found only. */
+  readonly levelDb?: number;
 }
 
 /** The earlier visit's result in one wing. */
@@ -383,6 +393,8 @@ export interface EarlierWing {
   readonly state: WingState;
   /** Where the faint outline is drawn, on this floor's scale in the shown visit, or null for no outline. */
   readonly outlineDepthFraction: number | null;
+  /** The earlier found level relative to its own calibration, for the curve; found only. */
+  readonly levelDb?: number;
 }
 
 /** The earlier visit the outlines come from. */

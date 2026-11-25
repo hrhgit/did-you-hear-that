@@ -92,10 +92,12 @@ Property 1 is expected to fail at first. Counterexamples and their fixes are kep
 | 30 November to 2 December | Feature freeze. Video, project page, write-up, blog post, social post |
 | 3 December | Submit |
 
+Specs written after this order: `audible-start` (calibration to music, practice, the playable floor), the game layer (the lantern and the chase, in the steering), and `one-room` (the searches of every pitch take turns in one room, with a creature for each pitch).
+
 ## What gets cut first
 
 1. The last door (spec 11).
 2. Comparison with past visits on the result page.
-3. The 500 Hz and 2 kHz rooms, leaving the three rooms of the quick visit.
+3. The 500 Hz and 2 kHz creatures (Thump and Tink), leaving the three of the quick visit.
 
 The missed-sound replay, the result page and the no-headphone replay are never cut. They are what a judge without headphones sees.

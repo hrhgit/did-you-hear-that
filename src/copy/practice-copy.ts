@@ -8,18 +8,16 @@ import type { AnswerSide } from "./room-copy";
 export const practiceCopy = Object.freeze({
   heading: "Practice",
   lines: Object.freeze([
-    "First, a practice. This room makes its sound once in each ear, loud enough to hear easily.",
-    "Answer which side it came from. Nothing counts yet.",
+    "Press the side each sound comes from. Nothing counts yet.",
   ]),
   soundPlayingLine: "Listen. It is making its sound now.",
   countingLines: Object.freeze([
-    "Now it counts. The sounds get quieter, and some turns make no sound at all.",
-    "Each answer costs your lantern a light. A catch gives it back.",
+    "Now it counts. Some turns make no sound at all.",
   ]),
   /** The label of the ripple of a caught practice sound. */
   caughtLine: "That's it. You heard it.",
   tryAgainLabel: "Try again",
-  goOnLabel: "Go on without practice",
+  goOnLabel: "Start counting",
 });
 
 /** The side named in the not-heard lines. */
@@ -42,7 +40,6 @@ export function notHeardLines(ears: readonly AnswerSide[]): readonly string[] {
       : "either side";
   return Object.freeze([
     `The practice sound was not caught on ${sides}, even a little louder.`,
-    "Check that the earpieces are in and that the volume is where you set it.",
-    "Try again plays the practice once more. Going on starts the counting anyway; a side you cannot hear here will show as louder than this room can play.",
+    "Check that both earpieces are in.",
   ]);
 }

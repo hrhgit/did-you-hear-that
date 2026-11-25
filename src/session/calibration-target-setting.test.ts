@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { calibrationSettingTopDb } from "../audio/output/calibration-setting-top";
-import { calibrationTargetSettingDb } from "./calibration-target-setting";
+import {
+  calibrationStartSettingDb,
+  calibrationTargetSettingDb,
+} from "./calibration-target-setting";
 
 const { calibrationSettingMinDb, calibrationSettingStepDb } = audioOutputConfig;
 
@@ -79,5 +82,33 @@ describe("calibrationTargetSettingDb", () => {
     { bottomDb: -60, topDb: -4, stepDb: Number.NaN },
   ])("throws a RangeError for a control that is no control: %o", (bad) => {
     expect(() => calibrationTargetSettingDb(-20, bad)).toThrow(RangeError);
+  });
+});
+
+describe("calibrationStartSettingDb", () => {
+  // The middle of the hiss's control, −40 to −4 dB: −22 dB (R19.5, the owner's 2026-11-18 request).
+  it("starts the hiss in the middle of its control, −22 dB", () => {
+    expect(calibrationStartSettingDb(control)).toBe(-22);
+  });
+
+  // The music's control tops out at −5 dB, so its middle is −22.5 dB, rounded down to −23 dB.
+  it("starts the music in the middle of its control, rounded down to −23 dB", () => {
+    expect(
+      calibrationStartSettingDb({ bottomDb: -40, topDb: -5, stepDb: 1 }),
+    ).toBe(-23);
+  });
+
+  it("is always on the grid and inside the control", () => {
+    const coarse = { bottomDb: -10, topDb: 2, stepDb: 2.5 };
+    expect(calibrationStartSettingDb(coarse)).toBe(-5);
+    expect(
+      calibrationStartSettingDb({ bottomDb: -40, topDb: -40, stepDb: 1 }),
+    ).toBe(-40);
+  });
+
+  it("throws a RangeError for a control that is no control", () => {
+    expect(() =>
+      calibrationStartSettingDb({ bottomDb: -4, topDb: -40, stepDb: 1 }),
+    ).toThrow(RangeError);
   });
 });

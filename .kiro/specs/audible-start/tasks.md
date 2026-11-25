@@ -26,7 +26,7 @@ The Kiro credits ran out after task 7. From task 8 on, the code was written by C
 | 9. Keep_Minimum −27 dB | Done as written. | 9f1d48d |
 | 10. The practice ladder and the search's starts | Simplified. The ladder is the anchor, then one upward step, at most the room's top (`practiceLevelsDb`). The search does not start from the practice: every ear starts 10 dB below the anchor (`hearing-method-config`), so CP2 (the search starts from the practice catch) has nothing to check and was not written. | 38d6725, 2d1ddcd |
 | 11. Each ear's own starting level | Dropped, for the same reason: the fixed start of −10 dB stays. | none |
-| 12. The practice copy and view | Done, with the screen drawn as well (the practice under the bar, the line while a practice sound plays, the notice with Try again and Go on without practice). | 2d1ddcd, and the commit after 1834bd8 |
+| 12. The practice copy and view | Done, with the screen drawn as well (the practice under the bar, the line while a practice sound plays, the notice with Start counting first and Try again after it). | 2d1ddcd, and the commit after 1834bd8 |
 | 13. Practice in the room runner, logged apart | Done (`practised-room-runner.ts`; practice is logged in `visitLog.practice`, never in the trials). | 2d1ddcd |
 | 14. Try again or go on | Done. | 2d1ddcd, ed75066 |
 | 15. Practice in the swapped repeat | Dropped. The repeat runs on a room the visitor has already practised. | none |

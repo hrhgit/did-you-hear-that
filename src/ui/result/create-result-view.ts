@@ -1,4 +1,12 @@
+import { hearingMethodConfig } from "../../config/hearing-method-config";
+import type { GhostSoundId } from "../../config/sound-id";
 import { leavingCopy } from "../../copy/leaving-copy";
+import { focusFloorLabel, resultFocusCopy } from "../../copy/result-focus-copy";
+import {
+  differenceLabel,
+  levelRangeLabel,
+  levelRangeLine,
+} from "../../copy/result-lines";
 import {
   chaseScoreCopy,
   longestRowLine,
@@ -6,8 +14,20 @@ import {
   roomCaughtLine,
   totalCaughtLine,
 } from "../../copy/result-page-copy";
+import {
+  balanceOffsetLine,
+  delayLine,
+  headphoneTraitsCopy,
+  quietCutLine,
+} from "../../copy/headphone-traits-copy";
 import { roomNames } from "../../copy/room-copy";
 import { chaseScoreOf } from "../../session/chase-score";
+import { headphoneTraitsOf } from "../../session/headphone-traits";
+import {
+  resultFocus,
+  type FocusPointKind,
+  type ResultFocus,
+} from "../../session/result-focus";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import type {
   FindEarlierVisit,
@@ -20,12 +40,15 @@ import type {
   VisitArchive,
   VisitToSave,
 } from "../../session/result-page-types";
-import { drawResultSection } from "./draw-result-section";
+import { drawCreature } from "../room/creature-art";
+import { resultCurveCopy } from "../../copy/result-curve-copy";
+import { resultCurve } from "../../session/result-curve";
+import { drawResultCurve } from "./draw-result-curve";
 import { savePictureAsImage } from "./save-picture";
 import { repeatComparisonBlock } from "./show-repeat-comparison";
 
-/** The seed of the pencil that draws the result, so the house looks the same every time. */
-const resultDrawingSeed = 1887;
+/** How long a floor's words glow after the focus card took the visitor to them. */
+const calledGlowMs = 1800;
 
 /** What the result view is given. Everything that reads or keeps a visit comes in from outside. */
 export interface ResultViewOptions {
@@ -114,39 +137,62 @@ export function createResultView(options: ResultViewOptions): ResultView {
     backToThisVisitButton,
   ]);
   const falseAlarmLine = make("p", "result-silence visit-voice");
-  const noticeHeading = make("h2", "result-notice-heading");
-  const noticeLine = make("p", "visit-voice");
-  const notice = make("div", "result-notice", [noticeHeading, noticeLine]);
   // After a swapped repeat: the headphones may still be the other way round.
   const turnBack = make("p", "result-turn-back");
   turnBack.setAttribute("role", "status");
   turnBack.hidden = true;
-  // The score of the chase: the game's side of the visit, from the same log as the picture.
-  const scoreTotal = make("p", "result-score-total");
-  const scoreRow = make("p", "result-score-row");
-  const scoreRooms = make("ul", "result-score-rooms");
-  const score = make("section", "result-score", [
-    make("h2", "result-score-heading", [chaseScoreCopy.heading]),
-    make("div", "result-score-lines", [scoreTotal, scoreRow]),
-    scoreRooms,
-  ]);
   const head = make("header", "result-head", [
     heading,
     make("p", "result-meta", [dateLabel, visitTypeLabel]),
-    score,
     turnBack,
     shownVisit,
     falseAlarmLine,
-    notice,
   ]);
 
-  // The picture, and the control that saves it as an image.
-  const drawing = make("div", "result-drawing");
+  // What stands out: the one thing the page puts first, and what to do next. When the whole
+  // visit is unreliable it holds the visit notice.
+  const focusHeading = make("h2", "result-focus-heading");
+  focusHeading.id = "result-focus-heading";
+  const focusLine = make("p", "result-focus-line");
+  const focusPoints = make("ul", "result-focus-points");
+  const focus = make("section", "result-focus", [
+    make("p", "result-focus-eyebrow", [resultFocusCopy.eyebrow]),
+    focusHeading,
+    focusLine,
+    focusPoints,
+  ]);
+  focus.setAttribute("aria-labelledby", focusHeading.id);
+
+  // The score of the chase: the game's side of the visit, from the same log as the picture. It
+  // counts catches only, never levels.
+  const scoreTiles = make("div", "result-score-tiles");
+  const scoreRooms = make("ul", "result-score-rooms");
+  const score = make("section", "result-score", [
+    make("h2", "result-score-heading", [chaseScoreCopy.heading]),
+    scoreTiles,
+    scoreRooms,
+  ]);
+
+  // What the visit says about the headphones at this volume (headphone-traits R6): one row for
+  // each trait the visit could tell, its reason in small text.
+  const traitRows = make("dl", "result-traits-rows");
+  const traits = make("section", "result-traits", [
+    make("h2", "result-traits-heading", [headphoneTraitsCopy.heading]),
+    traitRows,
+  ]);
+
+  // The picture (result-curve design.md "Redesign, 2026-11-25"): the yard at night, each
+  // pitch's creature on the grass and both ears' levels in the sky above it, its key drawn in;
+  // one small note, and the control that saves it as an image.
+  const drawing = make("div", "result-curve-chart");
   drawing.setAttribute("role", "img");
   const savePictureButton = button(resultPageCopy.savePictureButton);
   const pictureStatus = status();
-  const figure = make("div", "result-figure", [
-    drawing,
+  const figure = make("figure", "result-figure result-curve", [
+    make("div", "result-curve-frame", [drawing]),
+    make("figcaption", "result-curve-foot", [
+      make("p", "result-curve-note", [resultCurveCopy.shapeNote]),
+    ]),
     make("div", "result-figure-controls", [savePictureButton, pictureStatus]),
   ]);
 
@@ -159,6 +205,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const floorList = make("ol", "result-floors");
   floorList.id = "result-floors";
   drawing.setAttribute("aria-describedby", floorList.id);
+  // The Floor_Line once, under the list, when every floor has the same one.
+  const sharedFloorLine = make(
+    "p",
+    "visit-quiet result-floor-line result-floors-line",
+  );
+  sharedFloorLine.hidden = true;
   const comparisonLine = make("p", "result-comparison visit-quiet");
 
   // Keeping the visit.
@@ -191,10 +243,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
   savedCopyLacks.hidden = true;
   const keep = make("section", "result-keep", [
     nameLabel,
-    nameInput,
+    make("div", "result-keep-row", [
+      nameInput,
+      make("div", "result-controls", [saveButton]),
+    ]),
     nameHint,
     savedCopyLacks,
-    make("div", "result-controls", [saveButton]),
     saveStatus,
   ]);
 
@@ -237,9 +291,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const element = make("section", "result", [
     make("div", "result-page", [
       head,
+      focus,
       figure,
       limits,
-      make("div", "result-words", [floorList, comparisonLine]),
+      score,
+      traits,
+      make("div", "result-words", [floorList, sharedFloorLine, comparisonLine]),
       keep,
       saved,
       make("div", "result-controls result-leave", [backButton]),
@@ -258,19 +315,6 @@ export function createResultView(options: ResultViewOptions): ResultView {
   let shownPicture: ResultPicture | null = null;
   /** What the drawing on the page was made from, so that it is redrawn only when that changes. */
   let drawnKey: string | null = null;
-
-  /** Everything of a picture that the drawing shows. */
-  const drawingKeyOf = (picture: ResultPicture): string =>
-    JSON.stringify(
-      picture.floors.map((floor) => [
-        floor.room.roomId,
-        ...[floor.left, floor.right].map((wing) => [
-          wing.state,
-          wing.lightDepthFraction,
-          wing.earlier?.outlineDepthFraction ?? null,
-        ]),
-      ]),
-    );
 
   const pictureNow = (list: SavedVisitList): ResultPicture | null => {
     if (shownSaved !== null) {
@@ -296,41 +340,167 @@ export function createResultView(options: ResultViewOptions): ResultView {
     return null;
   };
 
-  const wingWords = (label: string, wing: PictureWing): HTMLElement => {
+  /** Words that are read out but not shown, beside a shown form that is not read out. */
+  const spoken = (line: string): HTMLElement =>
+    make("span", "result-spoken", [line]);
+  const shownOnly = <T extends HTMLElement>(element: T): T => {
+    element.setAttribute("aria-hidden", "true");
+    return element;
+  };
+
+  /** A room's creature, small, in a round frame of its colour. */
+  const creatureBadge = (
+    roomId: GhostSoundId,
+    className: string,
+  ): HTMLElement => {
+    const badge = make("span", `result-badge ${className}`, [
+      drawCreature(doc, roomId, "awake"),
+    ]);
+    badge.dataset.creature = roomId;
+    badge.setAttribute("aria-hidden", "true");
+    return badge;
+  };
+
+  const wingWords = (
+    side: "left" | "right",
+    label: string,
+    wing: PictureWing,
+  ): HTMLElement => {
+    // The level large and its note small. Read out, it is the wing's line in full.
+    const value = shownOnly(make("p", "result-wing-value", [wing.valueLabel]));
+    const line = make("p", "result-wing-line", [spoken(wing.line)]);
+    if (wing.range !== undefined) {
+      const { lowDb, highDb } = wing.range;
+      value.append(
+        make("span", "result-wing-range", [levelRangeLabel(lowDb, highDb)]),
+      );
+      line.append(spoken(levelRangeLine(lowDb, highDb)));
+    }
     const words = make("div", "result-wing", [
       make("span", "result-wing-side", [label]),
-      make("p", "visit-voice", [wing.line]),
+      value,
+      shownOnly(make("p", "result-wing-note", [wing.valueNote])),
+      line,
     ]);
     words.dataset.state = wing.state;
+    words.dataset.side = side;
     if (wing.reasonLine !== null) {
-      words.append(make("p", "visit-quiet", [wing.reasonLine]));
+      words.append(
+        make("p", "visit-quiet result-wing-reason", [wing.reasonLine]),
+      );
     }
     return words;
   };
 
-  const floorWords = (floor: PictureFloor): HTMLElement => {
+  /** The floors' words on the page now, by room, for the focus card to lead to. */
+  const floorItems = new Map<GhostSoundId, HTMLElement>();
+  let calledTimer: number | null = null;
+
+  /** Puts the moonbeam on one pitch of the drawing and dims the others, or none for null. */
+  const pickFloor = (roomId: GhostSoundId | null): void => {
+    const section = drawing.querySelector("svg");
+    if (section === null) {
+      return;
+    }
+    section.setAttribute("data-picking", roomId === null ? "false" : "true");
+    for (const floor of section.querySelectorAll(".result-curve-column")) {
+      floor.setAttribute(
+        "data-picked",
+        floor.getAttribute("data-room") === roomId ? "true" : "false",
+      );
+    }
+  };
+  const picksFloor = (element: HTMLElement, roomId: GhostSoundId): void => {
+    element.addEventListener("pointerenter", () => {
+      pickFloor(roomId);
+    });
+    element.addEventListener("pointerleave", () => {
+      pickFloor(null);
+    });
+    element.addEventListener("focusin", () => {
+      pickFloor(roomId);
+    });
+    element.addEventListener("focusout", () => {
+      pickFloor(null);
+    });
+  };
+
+  /** Takes the visitor to a floor's words, which glow for a moment. */
+  const callFloor = (roomId: GhostSoundId): void => {
+    const item = floorItems.get(roomId);
+    if (item === undefined) {
+      return;
+    }
+    const still = view.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    item.scrollIntoView({
+      block: "center",
+      behavior: still ? "auto" : "smooth",
+    });
+    item.focus({ preventScroll: true });
+    for (const other of floorItems.values()) {
+      other.removeAttribute("data-called");
+    }
+    item.setAttribute("data-called", "true");
+    if (calledTimer !== null) {
+      view.clearTimeout(calledTimer);
+    }
+    calledTimer = view.setTimeout(() => {
+      item.removeAttribute("data-called");
+      calledTimer = null;
+    }, calledGlowMs);
+  };
+
+  /**
+   * One floor in words. `standsOutFor` is why the focus card names it, or null. `ownFloorLine`
+   * is false when the list says the Floor_Line once for every floor.
+   */
+  const floorWords = (
+    floor: PictureFloor,
+    standsOutFor: FocusPointKind | null,
+    ownFloorLine: boolean,
+  ): HTMLElement => {
+    const roomId = floor.room.roomId;
+    // The difference of the two sides: shown as it is when they are apart, with its heading when
+    // they are level, and only read out when there is none.
+    const difference = make("p", "result-difference", [
+      make("span", "result-difference-heading", [
+        resultPageCopy.differenceHeading,
+      ]),
+      make("span", "result-difference-label", [floor.differenceLabel]),
+    ]);
+    difference.dataset.kind =
+      floor.rightMinusLeftDb === null
+        ? "none"
+        : floor.differenceLabel === differenceLabel(0)
+          ? "level"
+          : "apart";
     const item = make("li", "result-floor-words", [
-      make("h3", "result-floor-heading", [
-        make("span", "result-floor-name", [floor.roomName]),
-        make("span", "result-floor-pitch", [floor.pitchLabel]),
-      ]),
-      make("div", "result-wings", [
-        wingWords(resultPageCopy.leftLabel, floor.left),
-        wingWords(resultPageCopy.rightLabel, floor.right),
-      ]),
-      make("p", "result-difference", [
-        make("span", "result-difference-heading", [
-          resultPageCopy.differenceHeading,
+      make("div", "result-floor-top", [
+        creatureBadge(roomId, "result-floor-badge"),
+        make("h3", "result-floor-heading", [
+          make("span", "result-floor-name", [floor.roomName]),
+          make("span", "result-floor-pitch", [floor.pitchLabel]),
         ]),
-        make("span", "result-difference-label", [floor.differenceLabel]),
+      ]),
+      difference,
+      make("div", "result-wings", [
+        wingWords("left", resultPageCopy.leftLabel, floor.left),
+        wingWords("right", resultPageCopy.rightLabel, floor.right),
       ]),
     ]);
-    if (floor.playableFloorLine !== null) {
+    if (ownFloorLine && floor.playableFloorLine !== null) {
       item.append(
         make("p", "visit-quiet result-floor-line", [floor.playableFloorLine]),
       );
     }
-    item.dataset.room = floor.room.roomId;
+    item.dataset.room = roomId;
+    item.dataset.creature = roomId;
+    item.dataset.standsOut = standsOutFor ?? "none";
+    item.id = `result-floor-${roomId}`;
+    // Its swapped repeat, if any, is lit in the colour of its creature.
+    item.dataset.creature = roomId;
+    item.tabIndex = -1;
+    picksFloor(item, roomId);
     const offer = floor.swappedRepeat;
     if (offer !== null) {
       const swapButton = button(offer.buttonLabel);
@@ -356,6 +526,64 @@ export function createResultView(options: ResultViewOptions): ResultView {
     return item;
   };
 
+  /** The focus of the result on the page now, or null when nothing is shown. */
+  const focusOf = (picture: ResultPicture): ResultFocus | null => {
+    if (shownSaved !== null) {
+      return resultFocus({
+        picture,
+        summary: shownSaved.summary,
+        floorDb: shownSaved.floorDb,
+        swappedRepeatDifferenceDb: shownSaved.swappedRepeatDifferenceDb,
+        canStillSave: false,
+      });
+    }
+    if (live !== null) {
+      return resultFocus({
+        picture,
+        summary: live.summary,
+        floorDb: hearingMethodConfig.floorDb,
+        swappedRepeatDifferenceDb:
+          hearingMethodConfig.swappedRepeatDifferenceDb,
+        canStillSave: liveSavedId === null,
+      });
+    }
+    return null;
+  };
+
+  const drawFocus = (focusNow: ResultFocus | null): void => {
+    focus.hidden = focusNow === null;
+    if (focusNow === null) {
+      return;
+    }
+    focus.dataset.kind = focusNow.kind;
+    focusHeading.textContent = focusNow.heading;
+    focusLine.textContent = focusNow.line;
+    focusPoints.hidden = focusNow.points.length === 0;
+    focusPoints.replaceChildren(
+      ...focusNow.points.map((point) => {
+        const go = make("button", "result-focus-floor", [
+          creatureBadge(point.roomId, "result-focus-badge"),
+          make("span", "result-focus-floor-label", [
+            focusFloorLabel(point.roomName, point.pitchLabel),
+          ]),
+        ]);
+        go.type = "button";
+        go.setAttribute("aria-controls", `result-floor-${point.roomId}`);
+        go.addEventListener("click", () => {
+          callFloor(point.roomId);
+        });
+        picksFloor(go, point.roomId);
+        const entry = make("li", "result-focus-point", [
+          go,
+          make("p", "result-focus-point-line", [point.line]),
+        ]);
+        entry.dataset.kind = point.kind;
+        entry.dataset.creature = point.roomId;
+        return entry;
+      }),
+    );
+  };
+
   /** Draws the picture and the line about the earlier visit. Called on every change of the name. */
   const drawPicture = (list: SavedVisitList, entering: boolean): void => {
     const picture = pictureNow(list);
@@ -365,19 +593,16 @@ export function createResultView(options: ResultViewOptions): ResultView {
       drawnKey = null;
       return;
     }
-    const key = drawingKeyOf(picture);
+    const curve = resultCurve(picture);
+    const standingOut = new Map(
+      focusOf(picture)?.points.map(
+        (point) => [point.roomId, point.kind] as const,
+      ) ?? [],
+    );
+    const key = JSON.stringify([curve, [...standingOut]]);
     if (entering || key !== drawnKey) {
       drawnKey = key;
-      drawing.replaceChildren(
-        drawResultSection(doc, picture, {
-          seed: resultDrawingSeed,
-          wingLabels: {
-            left: resultPageCopy.leftLabel,
-            right: resultPageCopy.rightLabel,
-          },
-          entering,
-        }),
-      );
+      drawing.replaceChildren(drawResultCurve(doc, curve, { standingOut }));
     }
     const typedSomething = shownSaved === null && nameInput.value.trim() !== "";
     setLine(
@@ -456,6 +681,52 @@ export function createResultView(options: ResultViewOptions): ResultView {
     }
   };
 
+  /** The headphone rows of the shown visit; the section is hidden when it can tell nothing. */
+  function drawTraits(log: VisitToSave["visitLog"] | null): void {
+    const found = log === null ? null : headphoneTraitsOf(log);
+    const rows: HTMLElement[] = [];
+    const row = (label: string, value: string, note: string | null): void => {
+      rows.push(
+        make("div", "result-traits-row", [
+          make("dt", "result-traits-label", [label]),
+          make("dd", "result-traits-value", [value]),
+          ...(note === null
+            ? []
+            : [make("dd", "result-traits-note visit-quiet", [note])]),
+        ]),
+      );
+    };
+    if (found?.delay) {
+      const eased = (log?.trials ?? []).some(
+        (trial) => trial.status === "scored" && (trial.timingOffsetMs ?? 0) > 0,
+      );
+      row(
+        headphoneTraitsCopy.delayLabel,
+        delayLine(found.delay.roundedMs, found.delay.band),
+        eased ? headphoneTraitsCopy.delayEasedNote : null,
+      );
+    }
+    if (found?.quietCut) {
+      row(
+        headphoneTraitsCopy.quietCutLabel,
+        quietCutLine(found.quietCut.levelDb),
+        headphoneTraitsCopy.quietCutNote,
+      );
+    }
+    if (found?.balance) {
+      const balance = found.balance;
+      row(
+        headphoneTraitsCopy.balanceLabel,
+        balance.kind === "even"
+          ? headphoneTraitsCopy.balanceEvenLine
+          : balanceOffsetLine(balance.quieterSide, balance.offsetDb),
+        balance.kind === "even" ? null : headphoneTraitsCopy.balanceOffsetNote,
+      );
+    }
+    traitRows.replaceChildren(...rows);
+    traits.hidden = rows.length === 0;
+  }
+
   /** Draws everything from what the archive holds now. */
   function drawAll(entering: boolean): void {
     const list = archive.list();
@@ -471,6 +742,8 @@ export function createResultView(options: ResultViewOptions): ResultView {
     if (picture === null) {
       return;
     }
+    const focusNow = focusOf(picture);
+    drawFocus(focusNow);
     heading.textContent = picture.heading;
     drawing.setAttribute("aria-label", picture.heading);
     dateLabel.textContent = picture.dateLabel;
@@ -480,28 +753,67 @@ export function createResultView(options: ResultViewOptions): ResultView {
     score.hidden = shownLog === null;
     if (shownLog !== null) {
       const chase = chaseScoreOf(shownLog);
-      scoreTotal.textContent = totalCaughtLine(chase.caughtCount);
-      scoreRow.textContent = longestRowLine(chase.longestRow);
+      // A count large and its label small. Read out, it is the count's line in full.
+      const tile = (count: number, label: string, line: string): HTMLElement =>
+        make("p", "result-score-tile", [
+          shownOnly(make("span", "result-score-number", [String(count)])),
+          shownOnly(make("span", "result-score-label", [label])),
+          spoken(line),
+        ]);
+      scoreTiles.replaceChildren(
+        tile(
+          chase.caughtCount,
+          chaseScoreCopy.caughtLabel,
+          totalCaughtLine(chase.caughtCount),
+        ),
+        tile(
+          chase.longestRow,
+          chaseScoreCopy.rowLabel,
+          longestRowLine(chase.longestRow),
+        ),
+      );
       scoreRooms.replaceChildren(
         ...chase.rooms.map((room) =>
-          make("li", "", [
-            roomCaughtLine(roomNames[room.roomId], room.caughtCount),
+          make("li", "result-score-room", [
+            creatureBadge(room.roomId, "result-score-badge"),
+            make("span", "", [
+              roomCaughtLine(roomNames[room.roomId], room.caughtCount),
+            ]),
           ]),
         ),
       );
     }
-    notice.hidden = picture.visitNotice === null;
-    if (picture.visitNotice !== null) {
-      noticeHeading.textContent = picture.visitNotice.heading;
-      noticeLine.textContent = picture.visitNotice.line;
-    }
+    drawTraits(shownLog);
     limitsHeading.textContent = picture.limitsStatement.heading;
     limitsList.replaceChildren(
       ...picture.limitsStatement.sentences.map((sentence) =>
         make("li", "", [sentence]),
       ),
     );
-    floorList.replaceChildren(...[...picture.floors].reverse().map(floorWords));
+    const standingOut = new Map(
+      focusNow?.points.map((point) => [point.roomId, point.kind] as const) ??
+        [],
+    );
+    floorItems.clear();
+    const firstFloorLine = picture.floors[0]?.playableFloorLine ?? null;
+    const sameFloorLine =
+      picture.floors.length > 1 &&
+      firstFloorLine !== null &&
+      picture.floors.every(
+        (floor) => floor.playableFloorLine === firstFloorLine,
+      );
+    setLine(sharedFloorLine, sameFloorLine ? firstFloorLine : null);
+    floorList.replaceChildren(
+      ...[...picture.floors].reverse().map((floor) => {
+        const item = floorWords(
+          floor,
+          standingOut.get(floor.room.roomId) ?? null,
+          !sameFloorLine,
+        );
+        floorItems.set(floor.room.roomId, item);
+        return item;
+      }),
+    );
 
     shownVisit.hidden = shownSaved === null;
     if (shownSaved !== null) {
@@ -654,6 +966,11 @@ export function createResultView(options: ResultViewOptions): ResultView {
       drawnKey = null;
       element.hidden = true;
       drawing.replaceChildren();
+      floorItems.clear();
+      if (calledTimer !== null) {
+        view.clearTimeout(calledTimer);
+        calledTimer = null;
+      }
     },
   };
 }

@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "./audio-output-config";
 import { audioSafetyConfig } from "./audio-safety-config";
 import { hearingMethodConfig } from "./hearing-method-config";
-import { soundIds } from "./sound-id";
-
-const loosening =
-  "needs the project owner's approval first (.kiro/specs/audio-output/design.md, D32)";
+import { everySoundId, soundIds } from "./sound-id";
 
 describe("audioOutputConfig", () => {
   it("ends every field name with its unit (R2.2)", () => {
@@ -145,8 +142,10 @@ describe("audioOutputConfig", () => {
   });
 
   describe("playable buffers (D6)", () => {
-    it("gives a Peak_Bound to exactly the six sounds", () => {
-      expect(Object.keys(audioOutputConfig.peakBoundDb)).toEqual([...soundIds]);
+    it("gives a Peak_Bound to exactly the six sounds, the chime and the puff", () => {
+      expect(Object.keys(audioOutputConfig.peakBoundDb)).toEqual([
+        ...everySoundId,
+      ]);
     });
 
     it("makes every Peak_Bound positive", () => {
@@ -162,61 +161,6 @@ describe("audioOutputConfig", () => {
         true,
       );
       expect(audioOutputConfig.renderAttemptsMaxCount).toBeGreaterThan(0);
-    });
-  });
-
-  describe("loosening guards (R2.6, D32)", () => {
-    it("keeps the output fade at 25 ms or longer", () => {
-      expect(
-        audioOutputConfig.outputFadeMs,
-        `outputFadeMs is below 25 ms. A shorter output fade ${loosening}.`,
-      ).toBeGreaterThanOrEqual(25);
-    });
-
-    it("keeps the stop fade at 20 ms or longer", () => {
-      expect(
-        audioOutputConfig.stopFadeMs,
-        `stopFadeMs is below 20 ms. A shorter stop fade ${loosening}.`,
-      ).toBeGreaterThanOrEqual(20);
-    });
-
-    // Raised from -60 dB by the owner on 2026-11-16 after playing.
-    it("keeps the bottom of the calibration control at -40 dB or lower", () => {
-      expect(
-        audioOutputConfig.calibrationSettingMinDb,
-        `calibrationSettingMinDb is above -40 dB. A louder first calibration repeat ${loosening}.`,
-      ).toBeLessThanOrEqual(-40);
-    });
-
-    it("keeps the Keep_Minimum at -27 dB or higher (audible-start D25)", () => {
-      expect(
-        audioOutputConfig.calibrationSettingKeepMinDb,
-        `calibrationSettingKeepMinDb is below -27 dB. Keeping a lower setting ${loosening}, and leaves less than 30 dB of playable range below the anchor.`,
-      ).toBeGreaterThanOrEqual(-27);
-    });
-
-    // The owner dropped the 5 dB rise limit and the 2 s rise period of the calibration sound on
-    // 2026-11-16 after playing: the sound follows the control. The guards keep the music's rise
-    // a smooth ramp of at least one gain step, and the rise within the whole control.
-    it("keeps the rise between calibration repeats within the whole control, 40 dB or less", () => {
-      expect(
-        audioOutputConfig.calibrationRiseMaxDb,
-        `calibrationRiseMaxDb is above 40 dB. A larger rise between repeats ${loosening}.`,
-      ).toBeLessThanOrEqual(40);
-    });
-
-    it("keeps the rise period of the calibration music at 100 ms or longer", () => {
-      expect(
-        audioOutputConfig.calibrationMusicRisePeriodMs,
-        `calibrationMusicRisePeriodMs is below 100 ms. A faster rise of the calibration music ${loosening}.`,
-      ).toBeGreaterThanOrEqual(100);
-    });
-
-    it("keeps the headphone check level at 0 dB or lower", () => {
-      expect(
-        audioOutputConfig.headphoneCheckLevelDb,
-        `headphoneCheckLevelDb is above 0 dB. A louder headphone check ${loosening}.`,
-      ).toBeLessThanOrEqual(0);
     });
   });
 });

@@ -20,10 +20,10 @@ const counts = {
   wrongSideCount: 1,
   missCount: 5,
 };
-const rooms = visitRooms("quick");
+const rooms = visitRooms("full");
 const visitLog: VisitLog = {
   formatVersion: 1,
-  visitType: "quick",
+  visitType: "full",
   visitSeed: 42,
   rooms,
   calibrations: [
@@ -90,7 +90,7 @@ function savedVisit(
     savedVisitId,
     savedAtEpochMs: 1795180800000,
     savedOnLocalDate: "2026-11-20",
-    visitType: "quick",
+    visitType: "full",
     headphoneName,
     summary,
     visitLog: logAnchoredWith(anchor),

@@ -44,10 +44,7 @@ function found(thresholdDb: number): LoggedEarResult {
   return { ...counts, state: "found", thresholdDb };
 }
 
-function visitOf(
-  visitType: "quick" | "full" = "quick",
-  variant = 0,
-): VisitToSave {
+function visitOf(visitType: "full" = "full", variant = 0): VisitToSave {
   const rooms = visitRooms(visitType);
   const visitLog: VisitLog = {
     formatVersion: 1,
@@ -233,22 +230,22 @@ describe("createVisitArchive", () => {
 
     it("lists saved visits newest first with their labels, and says a browser may clear them", () => {
       const { archive } = setUp();
-      const quick = savedVisitOf(archive.save(visitOf("quick", 1), "Buds"));
-      const full = savedVisitOf(archive.save(visitOf("full", 2), ""));
+      const first = savedVisitOf(archive.save(visitOf("full", 1), "Buds"));
+      const second = savedVisitOf(archive.save(visitOf("full", 2), ""));
       const list = archive.list();
       expect(list.state).toBe("ready");
       expect(list.visits.map((listing) => listing.visit)).toEqual([
-        full,
-        quick,
+        second,
+        first,
       ]);
       expect(list.visits[0]).toEqual({
-        visit: full,
+        visit: second,
         dateLabel: "20 November 2026",
-        visitTypeLabel: "Long visit, 5 rooms",
+        visitTypeLabel: "Full visit, 5 rooms",
         deleteLabel:
-          "Delete the visit of 20 November 2026, long visit, 5 rooms",
+          "Delete the visit of 20 November 2026, full visit, 5 rooms",
       });
-      expect(list.visits[1]?.visitTypeLabel).toBe("Short visit, 3 rooms");
+      expect(list.visits[1]?.visitTypeLabel).toBe("Full visit, 5 rooms");
       expect(list.canSave).toBe(true);
       expect(list.canDeleteAll).toBe(true);
       expect(list.lines).toEqual([resultPageCopy.mayBeClearedLine]);
@@ -256,7 +253,7 @@ describe("createVisitArchive", () => {
 
     it("counts unreadable entries and says so", () => {
       const { archive, area } = setUp();
-      archive.save(visitOf("quick", 1), "");
+      archive.save(visitOf("full", 1), "");
       const value = storedValue(area);
       value.visits.push({ broken: true });
       area.setItem(savedVisitsKey, JSON.stringify(value));
@@ -274,7 +271,7 @@ describe("createVisitArchive", () => {
         savedVisitId: "0000abcd",
         savedAtEpochMs: 1,
         savedOnLocalDate: "2026-11-20",
-        visitType: "quick" as const,
+        visitType: "full" as const,
         headphoneName: null,
         payloadJson: '{"formatVersion":1}',
       };
@@ -306,7 +303,7 @@ describe("createVisitArchive", () => {
         variant < resultPageConfig.savedVisitsMaxCount;
         variant += 1
       ) {
-        expect(archive.save(visitOf("quick", variant), "").saved).toBe(true);
+        expect(archive.save(visitOf("full", variant), "").saved).toBe(true);
       }
       const list = archive.list();
       expect(list.visits).toHaveLength(resultPageConfig.savedVisitsMaxCount);
@@ -386,7 +383,7 @@ describe("createVisitArchive", () => {
   describe("save", () => {
     it("writes one entry with the wall clock's time and date, the tidy name and the shipped settings", () => {
       const { archive, area } = setUp();
-      const visit = visitOf("quick", 3);
+      const visit = visitOf("full", 3);
       const outcome = archive.save(visit, "  White \t earbuds ");
       const saved = savedVisitOf(outcome);
       expect(outcome).toEqual({
@@ -399,7 +396,7 @@ describe("createVisitArchive", () => {
         savedVisitId: expect.stringMatching(/^[0-9a-f]{8}$/),
         savedAtEpochMs: 1795180800000,
         savedOnLocalDate: "2026-11-20",
-        visitType: "quick",
+        visitType: "full",
         headphoneName: "White earbuds",
         summary: roundTrip(visit.summary),
         visitLog: roundTrip(visit.visitLog),
@@ -430,10 +427,10 @@ describe("createVisitArchive", () => {
     it("saves no name for an empty or blank name", () => {
       const { archive } = setUp();
       expect(
-        savedVisitOf(archive.save(visitOf("quick", 1), "")).headphoneName,
+        savedVisitOf(archive.save(visitOf("full", 1), "")).headphoneName,
       ).toBeNull();
       expect(
-        savedVisitOf(archive.save(visitOf("quick", 2), " \n\t")).headphoneName,
+        savedVisitOf(archive.save(visitOf("full", 2), " \n\t")).headphoneName,
       ).toBeNull();
     });
 
@@ -529,19 +526,17 @@ describe("createVisitArchive", () => {
     it("takes a name at the limit and refuses one past it with nameTooLong, writing nothing", () => {
       const { archive, area } = setUp();
       const limit = resultPageConfig.headphoneNameMaxCharacterCount;
-      expect(archive.save(visitOf("quick", 1), "🎧".repeat(limit)).saved).toBe(
+      expect(archive.save(visitOf("full", 1), "🎧".repeat(limit)).saved).toBe(
         true,
       );
       const writes = area.calls.length;
-      expect(archive.save(visitOf("quick", 2), "🎧".repeat(limit + 1))).toEqual(
-        {
-          saved: false,
-          reason: "nameTooLong",
-          line: saveRefusedLine("nameTooLong"),
-        },
-      );
+      expect(archive.save(visitOf("full", 2), "🎧".repeat(limit + 1))).toEqual({
+        saved: false,
+        reason: "nameTooLong",
+        line: saveRefusedLine("nameTooLong"),
+      });
       expect(
-        archive.save(visitOf("quick", 2), ` ${"a".repeat(limit)}   `).saved,
+        archive.save(visitOf("full", 2), ` ${"a".repeat(limit)}   `).saved,
       ).toBe(true);
       expect(area.calls.slice(writes, writes + 1)).toEqual([
         { method: "getItem", key: savedVisitsKey },
@@ -552,13 +547,13 @@ describe("createVisitArchive", () => {
       const { archive, area } = setUp();
       const visits = Array.from(
         { length: resultPageConfig.savedVisitsMaxCount },
-        (_, variant) => visitOf("quick", variant),
+        (_, variant) => visitOf("full", variant),
       );
       for (const visit of visits) {
         archive.save(visit, "");
       }
       const before = area.items();
-      expect(archive.save(visitOf("quick", 999), "")).toEqual({
+      expect(archive.save(visitOf("full", 999), "")).toEqual({
         saved: false,
         reason: "tooMany",
         line: saveRefusedLine("tooMany"),
@@ -636,9 +631,9 @@ describe("createVisitArchive", () => {
 
     it("keeps the order of saving when the clock is set back", () => {
       const { archive, time } = setUp();
-      const first = savedVisitOf(archive.save(visitOf("quick", 1), ""));
+      const first = savedVisitOf(archive.save(visitOf("full", 1), ""));
       time.set({ epochMs: 1000, localDate: "1970-01-01" });
-      const second = savedVisitOf(archive.save(visitOf("quick", 2), ""));
+      const second = savedVisitOf(archive.save(visitOf("full", 2), ""));
       expect(second.savedAtEpochMs).toBe(1000);
       expect(
         archive.list().visits.map((listing) => listing.visit.savedVisitId),
@@ -667,8 +662,8 @@ describe("createVisitArchive", () => {
   describe("deleting", () => {
     it("deletes one listed visit and nothing else", () => {
       const { archive, area } = setUp({ initialItems: { other: "kept" } });
-      const first = savedVisitOf(archive.save(visitOf("quick", 1), "A"));
-      const second = savedVisitOf(archive.save(visitOf("quick", 2), "B"));
+      const first = savedVisitOf(archive.save(visitOf("full", 1), "A"));
+      const second = savedVisitOf(archive.save(visitOf("full", 2), "B"));
       const otherEntry = storedValue(area).visits[1];
       expect(archive.deleteVisit(first.savedVisitId)).toEqual({
         deleted: true,
@@ -703,8 +698,8 @@ describe("createVisitArchive", () => {
 
     it("deletes every saved visit, readable or not, and counts the listed ones", () => {
       const { archive, area } = setUp({ initialItems: { other: "kept" } });
-      archive.save(visitOf("quick", 1), "");
-      archive.save(visitOf("quick", 2), "");
+      archive.save(visitOf("full", 1), "");
+      archive.save(visitOf("full", 2), "");
       const value = storedValue(area);
       value.visits.push("broken");
       area.setItem(savedVisitsKey, JSON.stringify(value));
@@ -773,8 +768,8 @@ describe("createVisitArchive", () => {
         seed: 3,
         mode: "keep",
       });
-      const first = savedVisitOf(writer.save(visitOf("quick", 1), ""));
-      writer.save(visitOf("quick", 2), "");
+      const first = savedVisitOf(writer.save(visitOf("full", 1), ""));
+      writer.save(visitOf("full", 2), "");
       const before = area.items();
       const refusing = createVisitArchive({
         localStorage: () => ({
@@ -830,8 +825,8 @@ describe("createVisitArchive", () => {
   describe("swapped repeats in a saved visit (swapped-repeat R13.1, R13.3, D17)", () => {
     it("lists a visit saved with a record with that record, and one saved without as before", () => {
       const { archive, area } = setUp();
-      const plain = visitOf("quick", 1);
-      const visit = visitOf("quick", 2);
+      const plain = visitOf("full", 1);
+      const visit = visitOf("full", 2);
       const record = repeatOf(visit);
       expect(record.outcome).toBe("followsEar");
       const repeated: VisitToSave = { ...visit, swappedRepeats: [record] };
@@ -876,7 +871,7 @@ describe("createVisitArchive", () => {
 
     it("is false for a visit not saved, for a saved visit without records, and for a visit with another log; a saved visit lists no records", () => {
       const { archive } = setUp();
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
       expect(archive.savedCopyLacksRepeats(withRecords(visit, 1))).toBe(false);
       const saved = savedVisitOf(archive.save(visit, "Buds"));
@@ -885,13 +880,13 @@ describe("createVisitArchive", () => {
       expect(archive.savedCopyLacksRepeats(visit)).toBe(false);
       expect(archive.savedCopyLacksRepeats(visitOf("full", 6))).toBe(false);
       expect(
-        archive.savedCopyLacksRepeats(withRecords(visitOf("quick", 5), 1)),
+        archive.savedCopyLacksRepeats(withRecords(visitOf("full", 5), 1)),
       ).toBe(false);
     });
 
     it("is true once the visit holds a record its saved copy lacks, and false again after the second save, which keeps the id, the date and the name and gives savedAgainLine", () => {
       const { archive, area, time } = setUp();
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       const first = savedVisitOf(archive.save(visit, "Buds"));
       const repeated = withRecords(visit, 1);
       expect(archive.savedCopyLacksRepeats(repeated)).toBe(true);
@@ -936,7 +931,7 @@ describe("createVisitArchive", () => {
 
     it("does not apply a different name typed in the press that saves again, and applies it on the next press", () => {
       const { archive } = setUp();
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       archive.save(visit, "Buds");
       const repeated = withRecords(visit, 1);
       expect(archive.save(repeated, "Big cans")).toMatchObject({
@@ -959,7 +954,7 @@ describe("createVisitArchive", () => {
 
     it("is false once the saved copy has been deleted, and the next save adds the visit anew with its records", () => {
       const { archive } = setUp();
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       const first = savedVisitOf(archive.save(visit, "Buds"));
       archive.deleteVisit(first.savedVisitId);
       const repeated = withRecords(visit, 1);
@@ -972,7 +967,7 @@ describe("createVisitArchive", () => {
 
     it("is false in robot mode, where local storage is never called", () => {
       const { archive, getArea, area } = setUp({}, 7, "robot");
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       archive.save(visit, "Buds");
       expect(archive.savedCopyLacksRepeats(withRecords(visit, 1))).toBe(false);
       expect(getArea).not.toHaveBeenCalled();
@@ -1017,7 +1012,7 @@ describe("createVisitArchive", () => {
           seed: 7,
           mode: "keep",
         });
-        const visit = visitOf("quick", 5);
+        const visit = visitOf("full", 5);
         archive.save(visit, "Buds");
         const repeated = withRecords(visit, 1);
         expect(archive.savedCopyLacksRepeats(repeated)).toBe(true);
@@ -1047,7 +1042,7 @@ describe("createVisitArchive", () => {
         seed: 7,
         mode: "keep",
       });
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       archive.save(visit, "Buds");
       const text = area.items()[savedVisitsKey];
       const repeated = withRecords(visit, 1);
@@ -1090,7 +1085,7 @@ describe("createVisitArchive", () => {
         seed: 7,
         mode: "keep",
       });
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       const first = savedVisitOf(archive.save(visit, "Buds"));
       const repeated = withRecords(visit, 1);
       dropOnRead = reads + 2;
@@ -1107,7 +1102,7 @@ describe("createVisitArchive", () => {
 
     it("answers exactly whether save would now give savedAgainLine", () => {
       const { archive } = setUp();
-      const visit = visitOf("quick", 5);
+      const visit = visitOf("full", 5);
       const cases: VisitToSave[] = [
         visit,
         withRecords(visit, 1),
@@ -1129,7 +1124,7 @@ describe("createVisitArchive", () => {
   describe("another archive on the same storage", () => {
     it("lists the same visits", () => {
       const { archive, area } = setUp({}, 11);
-      archive.save(visitOf("quick", 1), "A");
+      archive.save(visitOf("full", 1), "A");
       archive.save(visitOf("full", 2), "B");
       const other = createVisitArchive({
         localStorage: () => area,

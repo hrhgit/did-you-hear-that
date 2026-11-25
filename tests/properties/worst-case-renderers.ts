@@ -63,4 +63,6 @@ export const worstCaseRenderers: Readonly<Record<SoundId, RenderFunction>> =
     stairs: worstCaseRenderer("stairs"),
     attic: worstCaseRenderer("attic"),
     calibration: worstCaseRenderer("calibration"),
+    chime: worstCaseRenderer("chime"),
+    snuff: worstCaseRenderer("snuff"),
   });

@@ -1,6 +1,6 @@
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import type { RandomSource } from "../config/seeded-random";
-import type { GhostSoundId, SoundId } from "../config/sound-id";
+import type { GhostSoundId, ListedSoundId, SoundId } from "../config/sound-id";
 import { ghostSoundIds, soundIds } from "../config/sound-id";
 import type { Timer } from "../config/timer";
 import { roomsShortLine } from "../copy/calibration-copy";
@@ -35,7 +35,7 @@ export interface RowPlay {
 
 /** One row of the Sounds section (R19.4, R19.6). */
 export interface SoundRowSnapshot {
-  readonly soundId: SoundId;
+  readonly soundId: ListedSoundId;
   /** The level the next play of this row asks for. */
   readonly levelDb: number;
   /** The lowest level of the row's control: `floorDb`. */

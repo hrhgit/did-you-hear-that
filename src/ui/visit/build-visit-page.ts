@@ -1,4 +1,6 @@
-import { calibrationCopy } from "../../copy/calibration-copy";
+import { ghostSoundIds } from "../../config/sound-id";
+import { referenceVolumeCopy } from "../../copy/calibration-copy";
+import { creatureCopy, oneRoomCopy } from "../../copy/creature-copy";
 import { frontDoorCopy } from "../../copy/front-door-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
 import { leavingCopy } from "../../copy/leaving-copy";
@@ -9,9 +11,14 @@ import { resultPageCopy } from "../../copy/result-page-copy";
 import { siteTitle } from "../../copy/site-title";
 import { swappedRepeatCopy } from "../../copy/swapped-repeat-copy";
 import { visitCopy } from "../../copy/visit-copy";
+import { rhythmCopy } from "../../copy/rhythm-copy";
+import { buildRoomScene, type RoomScene } from "../room/build-room-scene";
+import { drawCreature } from "../room/creature-art";
+import { buildCreatureShelf, type CreatureShelf } from "../room/creature-shelf";
 import { drawSwappedHeadphones } from "./draw-swapped-headphones";
+import { titleLettering } from "./title-lettering";
 
-/** A sheet of text laid over the faint drawing. Only one is shown at a time. */
+/** A sheet of text laid over the faint room. Only one is shown at a time. */
 export interface Sheet {
   readonly element: HTMLElement;
   /** The sheet's heading, which takes the focus when the sheet appears. */
@@ -27,8 +34,10 @@ export type CheckAnswer = "left" | "right" | "bothSides" | "nothingHeard";
  */
 export interface VisitPage {
   readonly root: HTMLElement;
-  /** Where the drawing of the house and its moving layer go. */
-  readonly houseFrame: HTMLElement;
+  /** The picture of the one room, with the lantern that hangs in it. */
+  readonly scene: RoomScene;
+  /** The cards of the creatures, along the foot of the room. */
+  readonly shelf: CreatureShelf;
   readonly stopButton: HTMLButtonElement;
   readonly pauseButton: HTMLButtonElement;
   readonly room: HTMLElement;
@@ -36,34 +45,17 @@ export interface VisitPage {
   readonly roomProgress: HTMLElement;
   readonly answerButtons: Readonly<Record<"left" | "right", HTMLButtonElement>>;
   readonly caption: HTMLElement;
+  /** A second line under the caption, for a creature that has gone home. */
+  readonly captionNote: HTMLElement;
   /** The rest between two rooms: a line and a button, where the caption is. */
   readonly rest: HTMLElement;
   readonly restLine: HTMLElement;
   readonly restButton: HTMLButtonElement;
   readonly frontDoor: Sheet & {
     readonly choiceButtons: Readonly<
-      Record<"quick" | "full" | "replay", HTMLButtonElement>
+      Record<"full" | "replay", HTMLButtonElement>
     >;
     readonly statusLine: HTMLElement;
-  };
-  readonly calibration: Sheet & {
-    /** Holds one paragraph for each line to read before using the control. */
-    readonly introLines: HTMLElement;
-    /** The control and the buttons at its two ends. */
-    readonly dial: HTMLElement;
-    /**
-     * A drawn line with a lit part and a mark on it: how far the sound has got between the two
-     * ends. Set by `--visit-setting`, from 0 to 1.
-     */
-    readonly meter: HTMLElement;
-    /** The slider over the drawn line. Its thumb is where the visitor has put the control. */
-    readonly range: HTMLInputElement;
-    readonly keysLine: HTMLElement;
-    readonly statusLine: HTMLElement;
-    readonly startButton: HTMLButtonElement;
-    readonly quieterButton: HTMLButtonElement;
-    readonly louderButton: HTMLButtonElement;
-    readonly keepButton: HTMLButtonElement;
   };
   readonly headphoneCheck: Sheet & {
     readonly keptLine: HTMLElement;
@@ -121,41 +113,18 @@ export interface VisitPage {
     readonly statusLine: HTMLElement;
     readonly backButton: HTMLButtonElement;
   };
-  /** A room's practice and counting: words beside the house, which stays in full view. */
+  /** The roll call and the counting: words under the lantern, in the room, which stays in full view. */
   readonly practice: {
     readonly element: HTMLElement;
     readonly heading: HTMLElement;
     /** Holds one paragraph for each line. */
     readonly lines: HTMLElement;
+    /** Who is making its sound at the roll call. Never said once it counts. */
+    readonly introLine: HTMLElement;
     /** Said while a practice sound plays. */
     readonly soundLine: HTMLElement;
   };
-  /**
-   * The lantern, the count and the depth scales of a room that counts. The row with the lantern
-   * stands at the top of the practice panel. The two scales stand at the edges of the page.
-   */
-  readonly chase: {
-    /** The row: the count, the lantern, the sounds caught in a row. */
-    readonly row: HTMLElement;
-    /** The lantern as one picture. Its name says how many lights are left. */
-    readonly lantern: HTMLElement;
-    /** Said while the lantern is dark, over the lines of the counting. */
-    readonly darkLine: HTMLElement;
-    readonly caughtLine: HTMLElement;
-    readonly streakLine: HTMLElement;
-    readonly depth: Readonly<
-      Record<
-        "left" | "right",
-        {
-          /** The scale as one picture. Its name says the quietest catch on its side. */
-          readonly element: HTMLElement;
-          readonly mark: HTMLElement;
-          readonly quieterLabel: HTMLElement;
-        }
-      >
-    >;
-  };
-  /** The replay while its sounds play: words beside the house, which stays in full view. */
+  /** The replay while its sounds play: words under the room, which stays in full view. */
   readonly replaying: {
     readonly element: HTMLElement;
     /** What is said of the sound that is playing. Its first sentence stands out. */
@@ -171,7 +140,11 @@ export interface VisitPage {
 type Children = readonly (Node | string)[];
 
 /** Builds the visit's elements inside `main` and returns handles to the ones that change. */
-export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
+export function buildVisitPage(
+  doc: Document,
+  main: HTMLElement,
+  options: { readonly showReplayPreview?: boolean } = {},
+): VisitPage {
   const make = <K extends keyof HTMLElementTagNameMap>(
     tag: K,
     className: string,
@@ -198,6 +171,16 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     }
     return element;
   };
+  // An answer of a headphone check: a tile with a small drawing of the headphones over its word.
+  // The drawing comes from `visit.css`, so the button holds its word alone and can be set as text.
+  const choiceTile = (
+    label: string,
+    answer: CheckAnswer,
+  ): HTMLButtonElement => {
+    const element = button(label, "visit-tile");
+    element.dataset.answer = answer;
+    return element;
+  };
   const heading = (text: string): HTMLHeadingElement => {
     const element = make("h1", "", [text]);
     element.tabIndex = -1;
@@ -216,22 +199,61 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   };
   const controls = (items: Children, extraClass = ""): HTMLElement =>
     make("div", `visit-controls ${extraClass}`.trim(), items);
+  // The steps before the room, drawn over a sheet's heading: those done are lit, the one at hand
+  // glows. Each sheet always stands at the same step, so the row never changes once made.
+  const steps = (current: number): HTMLElement => {
+    const list = make(
+      "ol",
+      "visit-steps",
+      visitCopy.steps.map((name, index) => {
+        const item = make("li", "visit-step", [
+          make("span", "visit-step-dot"),
+          make("span", "visit-step-name", [name]),
+        ]);
+        item.dataset.state =
+          index < current ? "done" : index === current ? "now" : "later";
+        if (index === current) {
+          item.setAttribute("aria-current", "step");
+        }
+        return item;
+      }),
+    );
+    list.setAttribute("aria-label", visitCopy.stepsLabel);
+    return list;
+  };
+  // Puts the row of steps at the top of a sheet, over its heading.
+  const withSteps = (element: HTMLElement, current: number): HTMLElement => {
+    element.firstElementChild?.prepend(steps(current));
+    element.dataset.step = String(current);
+    return element;
+  };
 
   // The bar: stop at the left, the room at the right.
   const stopButton = button(roomCopy.stopButton, "visit-stop");
+  stopButton.dataset.icon = "stop";
   stopButton.hidden = true;
   const roomName = make("span", "visit-room-name");
   const roomProgress = make("span", "visit-room-progress");
   const room = make("p", "visit-room", [roomName, roomProgress]);
   room.hidden = true;
   const pauseButton = button(roomCopy.pauseButton, "visit-stop");
+  pauseButton.dataset.icon = "pause";
   pauseButton.hidden = true;
   const bar = make("div", "visit-bar", [stopButton, pauseButton, room]);
 
-  // The drawing.
-  const houseFrame = make("div", "visit-house");
-  houseFrame.setAttribute("role", "img");
-  houseFrame.setAttribute("aria-label", roomCopy.houseLabel);
+  // The room and the cards of who is in it.
+  const scene = buildRoomScene(doc, {
+    sceneLabel: oneRoomCopy.sceneLabel,
+    comboWord: rhythmCopy.comboWord,
+    scoreWord: rhythmCopy.scoreWord,
+    warmUpWord: rhythmCopy.warmUpWord,
+    judgementWords: rhythmCopy.judgementWords,
+    kickAtNothingWord: rhythmCopy.kickAtNothingWord,
+  });
+  const shelf = buildCreatureShelf(doc, {
+    label: oneRoomCopy.shelfLabel,
+    sideMarks: oneRoomCopy.sideMarks,
+  });
 
   // The answers.
   const answer = (side: "left" | "right"): HTMLButtonElement => {
@@ -253,6 +275,14 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const caption = make("p", "visit-caption");
   caption.setAttribute("role", "status");
   caption.setAttribute("aria-live", "polite");
+  // A second line, for the one time something more happened than a sound: a creature went home.
+  const captionNote = make("p", "visit-caption-note");
+  captionNote.setAttribute("role", "status");
+  captionNote.setAttribute("aria-live", "polite");
+  const captionBlock = make("div", "visit-caption-block", [
+    caption,
+    captionNote,
+  ]);
 
   const restLine = make("p", "visit-rest-line visit-voice");
   const restButton = button(roomCopy.goOnButton, "visit-button-lit");
@@ -261,122 +291,149 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
 
   // The front door.
   const choiceButtons = {
-    quick: button(
-      frontDoorCopy.choices.quick.button,
-      "visit-button-lit",
-      frontDoorCopy.choices.quick.note,
-    ),
     full: button(
       frontDoorCopy.choices.full.button,
-      "",
+      "visit-button-lit",
       frontDoorCopy.choices.full.note,
     ),
     replay: button(
       frontDoorCopy.choices.replay.button,
-      "",
+      "visit-button-quiet",
       frontDoorCopy.choices.replay.note,
     ),
   };
   // The replay has its own spec. Until it is built its door stays shut, but can still be read.
   choiceButtons.replay.setAttribute("aria-disabled", "true");
+  choiceButtons.full.dataset.icon = "door";
+  choiceButtons.replay.dataset.icon = "lock";
   const choices = controls(
     Object.values(choiceButtons),
     "visit-controls-stacked",
   );
   choices.setAttribute("role", "group");
   choices.setAttribute("aria-label", frontDoorCopy.choicesLabel);
-  const frontDoorHeading = heading(siteTitle);
+  // The title is painted lettering. Its words stay in the heading, unseen, so that the heading
+  // still reads as the name of the house to a visitor who cannot see the picture.
+  const frontDoorHeading = make("h1", "visit-front-title", [
+    titleLettering(doc),
+    make("span", "visit-spoken", [siteTitle]),
+  ]);
+  frontDoorHeading.tabIndex = -1;
   const status = (): HTMLElement => {
     const element = make("p", "visit-status visit-quiet");
     element.setAttribute("role", "status");
     return element;
   };
   const frontDoorStatus = status();
+  // The five creatures, standing in the yard with their names at their feet.
+  const roster = make(
+    "ul",
+    "visit-roster",
+    ghostSoundIds.map((id) => {
+      const card = make("li", "visit-roster-card", [
+        make("span", "visit-roster-portrait", [drawCreature(doc, id)]),
+        make("span", "visit-roster-name", [creatureCopy[id].name]),
+      ]);
+      card.dataset.creature = id;
+      return card;
+    }),
+  );
+  roster.setAttribute("aria-label", frontDoorCopy.rosterLabel);
+  const headphonesMark = make("span", "visit-headphones-mark");
+  headphonesMark.setAttribute("aria-hidden", "true");
   const frontDoor = sheet("front", frontDoorHeading, [
-    make("p", "visit-lead", [frontDoorCopy.headphonesLine]),
-    make("p", "visit-voice visit-quiet", [frontDoorCopy.aboutLine]),
+    make("p", "visit-lead visit-front-lead", [
+      headphonesMark,
+      frontDoorCopy.headphonesLine,
+    ]),
+    make("p", "visit-voice visit-quiet visit-front-about", [
+      frontDoorCopy.aboutLine,
+    ]),
+    roster,
     choices,
     frontDoorStatus,
-    make("p", "visit-quiet", [frontDoorCopy.privacyLine]),
-  ]);
-
-  // Calibration: a control that can be dragged, quieter and louder at its two ends, and a button
-  // to keep the setting.
-  const calibrationHeading = heading(visitCopy.calibrationHeading);
-  calibrationHeading.id = "visit-calibration-heading";
-  const introLines = make("div", "visit-calibration-lines", [
-    make("p", "", [calibrationCopy.openLine]),
-  ]);
-  const statusLine = status();
-  const range = make("input", "visit-meter-range");
-  range.type = "range";
-  range.setAttribute("aria-labelledby", calibrationHeading.id);
-  const meter = make("div", "visit-meter", [
-    make("span", "visit-meter-line"),
-    make("span", "visit-meter-fill"),
-    make("span", "visit-meter-mark"),
-    range,
-  ]);
-  const startButton = button(calibrationCopy.startButton, "visit-button-lit");
-  const quieterButton = button(calibrationCopy.quieterButton);
-  const louderButton = button(calibrationCopy.louderButton);
-  const keepButton = button(calibrationCopy.keepButton, "visit-button-lit");
-  const dial = make("div", "visit-dial", [
-    meter,
-    make("div", "visit-dial-ends", [quieterButton, louderButton]),
-  ]);
-  dial.hidden = true;
-  const keysLine = make("p", "visit-keys-line visit-quiet");
-  keysLine.hidden = true;
-  const calibration = sheet("calibration", calibrationHeading, [
-    introLines,
-    dial,
-    keysLine,
-    controls([startButton, keepButton]),
-    statusLine,
+    make("p", "visit-quiet visit-front-privacy", [frontDoorCopy.privacyLine]),
   ]);
 
   // The headphone check.
   const checkHeading = heading(visitCopy.headphoneCheckHeading);
-  const keptLine = make("p", "", [calibrationCopy.keptLine]);
-  const roomsLine = make("p", "visit-quiet");
+  // The two lines about the volume stand at the foot of the sheet, under what there is to do.
+  const keptLine = make("p", "visit-quiet visit-foot-line", [
+    referenceVolumeCopy.keptLine,
+  ]);
+  const roomsLine = make("p", "visit-quiet visit-foot-line");
   const playButton = button(headphoneCheckCopy.playButton, "visit-button-lit");
+  playButton.dataset.icon = "play";
   const question = make("p", "visit-voice", [headphoneCheckCopy.question]);
   const checkAnswers: Record<CheckAnswer, HTMLButtonElement> = {
-    left: button(headphoneCheckCopy.answers.left),
-    right: button(headphoneCheckCopy.answers.right),
-    bothSides: button(headphoneCheckCopy.answers.bothSides),
-    nothingHeard: button(headphoneCheckCopy.answers.nothingHeard),
+    left: choiceTile(headphoneCheckCopy.answers.left, "left"),
+    right: choiceTile(headphoneCheckCopy.answers.right, "right"),
+    bothSides: choiceTile(headphoneCheckCopy.answers.bothSides, "bothSides"),
+    nothingHeard: choiceTile(
+      headphoneCheckCopy.answers.nothingHeard,
+      "nothingHeard",
+    ),
   };
-  const answerList = controls(Object.values(checkAnswers));
+  const answerList = controls(Object.values(checkAnswers), "visit-tiles");
   answerList.setAttribute("role", "group");
   answerList.setAttribute("aria-label", headphoneCheckCopy.question);
   const judgementLine = make("p", "visit-status");
   judgementLine.setAttribute("role", "status");
   const checkGoOnButton = button(visitCopy.goOnButton, "visit-button-lit");
-  const headphoneCheck = sheet("check", checkHeading, [
-    keptLine,
-    roomsLine,
-    controls([playButton]),
-    question,
-    answerList,
-    judgementLine,
-    controls([checkGoOnButton]),
-  ]);
+  const headphoneCheck = withSteps(
+    sheet("check", checkHeading, [
+      controls([playButton]),
+      question,
+      answerList,
+      judgementLine,
+      controls([checkGoOnButton]),
+      keptLine,
+      roomsLine,
+    ]),
+    0,
+  );
 
   // The rules.
   const rulesHeading = heading(rulesCopy.heading);
   const enterButton = button(rulesCopy.enterButton, "visit-button-lit");
-  const rules = sheet("rules", rulesHeading, [
-    make(
-      "ol",
-      "visit-rules",
-      rulesCopy.sentences.map((sentence) => make("li", "", [sentence])),
-    ),
-    make("p", "visit-quiet", [rulesCopy.keyboardLine]),
-    make("p", "visit-quiet", [rulesCopy.touchLine]),
-    controls([enterButton]),
+  enterButton.dataset.icon = "door";
+  // How to answer: the two halves of the screen, each with its keys drawn as key caps. The caps
+  // are a picture of the keyboard line, so the line is read out and not shown beside them; the
+  // line about touching is shown where there is a screen to touch (`visit.css`).
+  const half = (side: "left" | "right"): HTMLElement => {
+    const caps = make(
+      "span",
+      "visit-keycaps",
+      rulesCopy.keyCaps[side].map((key) => make("kbd", "visit-keycap", [key])),
+    );
+    caps.setAttribute("aria-hidden", "true");
+    const element = make("div", `visit-half visit-half-${side}`, [
+      make("span", "visit-half-word", [roomCopy.answers[side].hint]),
+      caps,
+    ]);
+    element.setAttribute("aria-hidden", "true");
+    return element;
+  };
+  const answerGuide = make("section", "visit-answer-guide", [
+    make("div", "visit-halves", [half("left"), half("right")]),
+    make("p", "visit-quiet visit-keyboard-line", [rulesCopy.keyboardLine]),
+    make("p", "visit-quiet visit-touch-line", [rulesCopy.touchLine]),
   ]);
+  answerGuide.setAttribute("aria-label", rulesCopy.answerHeading);
+  const rules = withSteps(
+    sheet("rules", rulesHeading, [
+      make(
+        "ul",
+        "visit-rules",
+        rulesCopy.sentences.map((sentence) =>
+          make("li", "visit-rule", [sentence]),
+        ),
+      ),
+      answerGuide,
+      controls([enterButton]),
+    ]),
+    1,
+  );
 
   // One sheet for everything else the house has to say: paused, stopped, ended, cannot play.
   const noticeHeading = heading(leavingCopy.pauseHeading);
@@ -384,7 +441,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const noticeMoreLines = make("div", "visit-notice-lines");
   const noticeStatus = status();
   const noticeButton = button(leavingCopy.goOnButton, "visit-button-lit");
-  const noticeSecondButton = button("");
+  // The second choice of a notice is the quieter one: the lit button is the way on.
+  const noticeSecondButton = button("", "visit-button-quiet");
   noticeSecondButton.hidden = true;
   const notice = sheet("notice", noticeHeading, [
     noticeLine,
@@ -393,44 +451,21 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     noticeStatus,
   ]);
 
-  // A room's practice and counting. Its words come with each snapshot, so they start empty.
+  // The roll call and the counting. Their words come with each snapshot, so they start empty.
   const practiceHeading = make("p", "visit-practice-heading");
   const practiceLines = make("div", "visit-practice-lines");
+  const introLine = make("p", "room-intro");
+  introLine.setAttribute("role", "status");
+  introLine.setAttribute("aria-live", "polite");
+  introLine.hidden = true;
   const practiceSound = make("p", "visit-practice-sound");
   practiceSound.setAttribute("role", "status");
   practiceSound.setAttribute("aria-live", "polite");
-  // The chase of a room that counts. Its words and its lights come with each snapshot.
-  const lantern = make("div", "visit-lantern");
-  lantern.setAttribute("role", "img");
-  const caughtLine = make("p", "visit-chase-caught");
-  const chaseStreakLine = make("p", "visit-chase-streak");
-  const chaseRow = make("div", "visit-chase", [
-    caughtLine,
-    lantern,
-    chaseStreakLine,
-  ]);
-  chaseRow.hidden = true;
-  const lanternDarkLine = make("p", "visit-lantern-dark");
-  lanternDarkLine.setAttribute("role", "status");
-  lanternDarkLine.setAttribute("aria-live", "polite");
-  const depthScale = (side: "left" | "right") => {
-    const mark = make("span", "visit-depth-mark");
-    const quieterLabel = make("span", "visit-depth-word");
-    const scale = make("span", "visit-depth-scale", [mark]);
-    const element = make("div", `visit-depth visit-depth-${side}`, [
-      scale,
-      quieterLabel,
-    ]);
-    element.setAttribute("role", "img");
-    element.hidden = true;
-    return { element, mark, quieterLabel };
-  };
-  const depth = { left: depthScale("left"), right: depthScale("right") };
 
   const practice = make("div", "visit-practice", [
-    chaseRow,
     practiceHeading,
-    make("div", "visit-practice-words", [practiceLines, lanternDarkLine]),
+    make("div", "visit-practice-words", [practiceLines]),
+    introLine,
     practiceSound,
   ]);
   practice.hidden = true;
@@ -485,12 +520,12 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const swapQuestion = make("p", "visit-voice");
   swapQuestion.id = "visit-swap-question";
   const swapAnswers: Record<CheckAnswer, HTMLButtonElement> = {
-    left: button(""),
-    right: button(""),
-    bothSides: button(""),
-    nothingHeard: button(""),
+    left: choiceTile("", "left"),
+    right: choiceTile("", "right"),
+    bothSides: choiceTile("", "bothSides"),
+    nothingHeard: choiceTile("", "nothingHeard"),
   };
-  const swapAnswerList = controls(Object.values(swapAnswers));
+  const swapAnswerList = controls(Object.values(swapAnswers), "visit-tiles");
   swapAnswerList.setAttribute("role", "group");
   swapAnswerList.setAttribute("aria-labelledby", swapQuestion.id);
   const swapBackButton = button("");
@@ -535,34 +570,33 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   replaying.hidden = true;
 
   main.classList.add("visit");
-  // The drawing starts faint, behind the front door. Set before anything is drawn, so that the
-  // page never opens on a bright house that then fades.
+  // The room starts faint, behind the front door. Set before anything is drawn, so that the
+  // page never opens on a bright room that then fades.
   main.dataset.house = "faint";
   main.tabIndex = -1;
   main.replaceChildren(
-    houseFrame,
+    scene.element,
     // The bar comes first, so that the first press of Tab in a room lands on the stop control.
     bar,
     answerButtons.left,
     answerButtons.right,
-    caption,
-    rest,
     practice,
-    depth.left.element,
-    depth.right.element,
-    replaying,
+    captionBlock,
+    rest,
+    shelf.element,
+    ...(options.showReplayPreview ? [replaying] : []),
     frontDoor,
-    calibration,
     headphoneCheck,
     rules,
     notice,
-    replay,
+    ...(options.showReplayPreview ? [replay] : []),
     swap,
   );
 
   return {
     root: main,
-    houseFrame,
+    scene,
+    shelf,
     stopButton,
     pauseButton,
     room,
@@ -570,6 +604,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     roomProgress,
     answerButtons,
     caption,
+    captionNote,
     rest,
     restLine,
     restButton,
@@ -578,20 +613,6 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       heading: frontDoorHeading,
       choiceButtons,
       statusLine: frontDoorStatus,
-    },
-    calibration: {
-      element: calibration,
-      heading: calibrationHeading,
-      introLines,
-      dial,
-      meter,
-      range,
-      keysLine,
-      statusLine,
-      startButton,
-      quieterButton,
-      louderButton,
-      keepButton,
     },
     headphoneCheck: {
       element: headphoneCheck,
@@ -619,15 +640,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       element: practice,
       heading: practiceHeading,
       lines: practiceLines,
+      introLine,
       soundLine: practiceSound,
-    },
-    chase: {
-      row: chaseRow,
-      lantern,
-      darkLine: lanternDarkLine,
-      caughtLine,
-      streakLine: chaseStreakLine,
-      depth,
     },
     replay: {
       element: replay,

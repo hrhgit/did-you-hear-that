@@ -9,11 +9,16 @@
   inset: 0;
   z-index: 6;
   overflow: hidden auto;
-  background: var(--color-night);
+  background:
+    radial-gradient(120% 70% at 15% 0%, rgb(58 31 69 / 0.55), transparent 60%),
+    radial-gradient(
+      90% 60% at 100% 100%,
+      rgb(90 42 62 / 0.28),
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--color-sky-top), var(--color-night) 70%);
   text-align: left;
-  transition:
-    opacity 0.6s ease,
-    display 0.6s allow-discrete;
+  transition: opacity 0.6s ease;
 }
 
 @starting-style {
@@ -86,67 +91,162 @@ p.result-meta {
   overflow-wrap: anywhere;
 }
 
+p.result-silence {
+  margin-top: 1.1rem;
+  color: var(--color-moonlight);
+  line-height: 1.5;
+}
+
+/* Words that are read out but not shown, beside a shown form that is not read out. */
+.result-spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A room's creature, small, in a round frame of its own colour. */
+.result-badge {
+  --badge-size: 2.25rem;
+
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--badge-size);
+  height: var(--badge-size);
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 62%,
+    color-mix(in srgb, var(--creature-hue) 42%, transparent),
+    color-mix(in srgb, var(--creature-hue) 10%, var(--color-night)) 72%
+  );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--creature-hue) 55%, transparent);
+}
+
+.result-badge > .creature-art {
+  width: 84%;
+  height: 84%;
+}
+
 /*
- * The score of the chase: a small tally under the date, in the lamp's colour, like the lights of
- * the lantern the visitor carried. It counts catches only, never levels.
+ * What stands out: the first thing under the heading, and the only card that glows. Calm when
+ * nothing stands out, warm when something does.
  */
-.result-score {
-  margin-top: 1.25rem;
-  padding-left: 1rem;
-  border-left: 2px solid var(--color-lamp-low);
+.result-focus {
+  position: relative;
+  padding: 1.35rem 1.25rem 1.4rem;
+  border: 1px solid color-mix(in srgb, var(--color-lamp) 50%, transparent);
+  border-radius: 1rem;
+  background:
+    radial-gradient(
+      130% 120% at 0% 0%,
+      color-mix(in srgb, var(--color-lamp) 17%, transparent),
+      transparent 58%
+    ),
+    var(--color-wall);
+  box-shadow: 0 1.4rem 3rem -2rem
+    color-mix(in srgb, var(--color-lamp) 60%, transparent);
 }
 
-.result-score-heading {
-  margin: 0;
-  color: var(--color-lamp);
-  font-size: 1rem;
-  font-style: italic;
-  font-weight: inherit;
+.result-focus[data-kind="close"] {
+  border-color: var(--color-graphite-faint);
+  background:
+    radial-gradient(
+      130% 120% at 0% 0%,
+      color-mix(in srgb, var(--color-moonlight) 9%, transparent),
+      transparent 58%
+    ),
+    var(--color-wall);
+  box-shadow: none;
 }
 
-.result-score-lines {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.5rem;
-  margin-top: 0.25rem;
-  font-variant-numeric: lining-nums tabular-nums;
+/* The label of the card is read out, not shown: its heading already says what stands out. */
+p.result-focus-eyebrow {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.result-score-lines p {
-  margin: 0;
+.result h2.result-focus-heading {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 1.9375rem);
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
-.result-score-total {
-  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
-}
-
-.result-score-row {
-  align-self: flex-end;
-  color: var(--color-graphite);
-}
-
-.result-score-rooms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem 1.25rem;
-  margin: 0.35rem 0 0;
+.result-focus-points {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.1rem 0 0;
   padding: 0;
   list-style: none;
-  color: var(--color-graphite);
-  font-size: 0.9375rem;
-  font-variant-numeric: lining-nums tabular-nums;
 }
 
-p.result-silence {
-  margin-top: 1.25rem;
-  font-size: clamp(1.1875rem, 1.05rem + 0.7vw, 1.4375rem);
-  line-height: 1.4;
+.result-focus-point {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.9rem;
+  padding: 0.55rem 0.8rem 0.6rem 0.55rem;
+  border: 1px solid var(--color-graphite-faint);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--color-night) 55%, transparent);
 }
 
-.result-notice {
-  margin-top: 1.25rem;
-  padding-left: 1rem;
-  border-left: 1px solid var(--color-lamp);
+/* The floor a point is about: it takes the visitor to that floor's words. */
+.result-focus-floor {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.3rem 0.9rem 0.3rem 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--creature-hue) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--creature-hue) 12%, var(--color-night));
+  color: var(--color-moonlight);
+  font: inherit;
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.result-focus-floor:hover {
+  border-color: var(--creature-hue);
+  background: color-mix(in srgb, var(--creature-hue) 22%, var(--color-night));
+}
+
+.result-focus-floor:focus-visible {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 2px;
+}
+
+.result-focus-badge {
+  --badge-size: 2.1rem;
+}
+
+.result p.result-focus-point-line {
+  flex: 1 1 13rem;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 /* After a swapped repeat: the headphones may still be the other way round. */
@@ -164,18 +264,7 @@ p.result-turn-back {
   outline: none;
 }
 
-/* The picture. */
-.result-figure {
-  width: 100%;
-  max-width: 26rem;
-  margin: 0 auto;
-}
-
-.result-section {
-  height: auto;
-  aspect-ratio: 564 / 906;
-}
-
+/* The save control under the picture. */
 .result-figure-controls {
   display: flex;
   flex-wrap: wrap;
@@ -184,99 +273,30 @@ p.result-turn-back {
   margin: 1.25rem 0.4rem 0;
 }
 
-/* The lamps of the rooms the visit entered are on. */
-.result-floor .house-ink {
-  stroke: var(--color-moonlight);
+/* Saving the picture is a wooden sign, like the way in on the front door. */
+.result-figure-controls .visit-button {
+  min-width: 12rem;
+  aspect-ratio: 76 / 20;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: 0;
+  background: url("../visit/art/sign.webp") center / 100% 100% no-repeat;
+  box-shadow: none;
+  color: var(--color-hud);
+  font-size: 1.125rem;
+  text-align: center;
+  text-shadow: 0 0.1rem 0.4rem rgb(0 0 0 / 0.75);
+  transform: rotate(-1deg);
+  transition:
+    transform 0.25s ease,
+    filter 0.25s ease;
 }
 
-.result-floor .house-bulb {
-  fill: var(--color-lamp);
-}
-
-.result-light-near {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.58;
-}
-
-.result-light-far {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.2;
-}
-
-/* Where a wing's light ends. */
-.result-reach {
-  fill: none;
-  stroke: var(--color-lamp);
-  stroke-width: 1.7;
-  stroke-linecap: round;
-}
-
-/* A wing with no level to draw. */
-.result-doubt-line {
-  fill: none;
-  stroke: var(--color-graphite);
-  stroke-width: 1.1;
-  stroke-opacity: 0.75;
-}
-
-/* The outline of an earlier visit: ruled, dashed and faint. */
-.result-earlier {
-  fill: none;
-  stroke: var(--color-moonlight);
-  stroke-width: 1.3;
-  stroke-dasharray: 5 6;
-  stroke-opacity: 0.6;
-  animation: result-appear 0.4s ease both;
-}
-
-/* The line between the two wings, the way a draughtsman marks a centre. */
-.result-centre {
-  fill: none;
-  stroke: var(--color-graphite-faint);
-  stroke-width: 1;
-  stroke-dasharray: 16 5 2 5;
-}
-
-.result-wing-label {
-  fill: var(--color-graphite);
-  font-size: 21px;
-  font-style: italic;
-}
-
-/* The one moment of movement: the light spreads from each lamp to where it ends. */
-.result-section[data-entering="true"] .result-light {
-  transform-box: view-box;
-  transform-origin: 360px 0;
-  animation: result-spread 2.6s cubic-bezier(0.22, 0.7, 0.2, 1) 0.5s both;
-}
-
-.result-section[data-entering="true"] .result-reach,
-.result-section[data-entering="true"] .result-earlier {
-  animation: result-appear 0.9s ease 2.6s both;
-}
-
-.result-section[data-entering="true"] .result-doubt {
-  animation: result-appear 1.6s ease 0.5s both;
-}
-
-@keyframes result-spread {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes result-appear {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+.result-figure-controls .visit-button:hover,
+.result-figure-controls .visit-button:focus-visible {
+  box-shadow: none;
+  filter: brightness(1.15) drop-shadow(0 0 0.9rem rgb(245 140 30 / 0.45));
+  transform: rotate(0.5deg) scale(1.03);
 }
 
 /*
@@ -322,28 +342,146 @@ p.result-turn-back {
   margin-bottom: 0;
 }
 
-/* Each floor in words, from the top of the house down. */
-.result-floors {
+/*
+ * The score of the chase: the game's side of the visit, in the lamp's colour. It counts catches
+ * only, never levels. One strip: the two counts side by side and the rooms under them.
+ */
+.result-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.result h2.result-score-heading {
   margin: 0;
+  color: var(--color-lamp);
+  font-size: 1.0625rem;
+  font-style: italic;
+}
+
+.result-score-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+}
+
+.result p.result-score-tile {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.result-score-number {
+  color: var(--color-lamp);
+  font-size: 1.75rem;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+}
+
+.result-score-label {
+  color: var(--color-graphite);
+  font-size: 0.9375rem;
+  line-height: 1.25;
+}
+
+.result-score-rooms {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin: 0.15rem 0 0;
   padding: 0;
   list-style: none;
 }
 
-.result-floor-words {
-  padding: 1.25rem 0 1.4rem;
-  border-top: 1px solid var(--color-graphite-faint);
+.result-score-room {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-graphite);
+  font-size: 0.875rem;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
-.result-floor-words:last-child {
+.result-score-badge {
+  --badge-size: 1.5rem;
+}
+
+/* Each floor in words, from the top of the house down: a card for each, in its creature's colour. */
+/*
+ * The floors in words: one ledger, a floor to a row. The name and what lies between the two
+ * sides on one line, the two sides under it.
+ */
+.result-floors {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-graphite-faint);
+  list-style: none;
+}
+
+.result-floor-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 1rem;
+  padding: 0.85rem 0.6rem 0.95rem;
   border-bottom: 1px solid var(--color-graphite-faint);
+  outline: none;
+  scroll-margin-block: 2rem;
+  transition:
+    background-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.result-floor-words > * {
+  flex: 1 0 100%;
+}
+
+/* A floor the focus card names. */
+.result-floor-words:not([data-stands-out="none"]) {
+  background: color-mix(in srgb, var(--color-lamp) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-lamp);
+}
+
+.result-floor-words:focus-visible {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 3px;
+}
+
+/* Taken there from the focus card: the row glows for a moment. */
+.result-floor-words[data-called="true"] {
+  animation: result-called 1.8s ease-out;
+}
+
+@keyframes result-called {
+  from {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--color-lamp) 70%, transparent),
+      0 0 2rem color-mix(in srgb, var(--color-lamp) 35%, transparent);
+  }
+}
+
+.result-floor-words > .result-floor-top {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.result-floor-badge {
+  --badge-size: 2rem;
 }
 
 .result-floor-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.75rem;
-  margin: 0 0 0.75rem;
-  font-size: 1.4375rem;
+  gap: 0.1rem 0.6rem;
+  margin: 0;
+  font-size: 1.25rem;
   font-style: italic;
   font-weight: 400;
   line-height: 1.2;
@@ -351,35 +489,142 @@ p.result-turn-back {
 
 .result-floor-pitch {
   color: var(--color-graphite);
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* The two sides, in line with the floor's name. */
 .result-wings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9rem 1.5rem;
+  gap: 0.75rem;
+  padding-left: 2.6rem;
 }
 
-.result-wing-side,
-.result-difference-heading {
-  display: block;
+/* One wing: its side small, its level in the lamp's colour, the note that finishes it small. */
+.result-wing {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 0 0.6rem;
+}
+
+.result-wing > * {
+  grid-column: 2;
+}
+
+.result-wing > .result-wing-side {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: baseline;
   color: var(--color-graphite);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
 
-.result-wing p + p {
-  margin-top: 0.35rem;
-  font-size: 0.9375rem;
+.result p.result-wing-value {
+  color: var(--color-lamp);
+  font-size: 1.125rem;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1.3;
 }
 
-p.result-difference {
-  margin-top: 0.9rem;
+.result-wing-range {
+  display: inline-block;
+  margin-inline-start: 0.35rem;
+  color: var(--color-graphite);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.result-wing:is([data-state="worseThanCap"], [data-state="unreliable"])
+  p.result-wing-value {
+  color: var(--color-moonlight);
+}
+
+.result p.result-wing-note {
+  color: var(--color-graphite);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.result p.result-wing-reason {
+  margin-top: 0.3rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.result-floor-words > p.result-difference {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  margin-left: auto;
   font-variant-numeric: lining-nums;
 }
 
+.result-difference-heading {
+  color: var(--color-graphite);
+  font-size: 0.875rem;
+}
+
+.result-difference-label {
+  display: inline-block;
+  padding: 0.08rem 0.7rem;
+  border: 1px solid var(--color-graphite-faint);
+  border-radius: 999px;
+  font-size: 0.875rem;
+}
+
+/* No difference to give: read out, not shown. Apart: the label says it all without its heading. */
+.result-floor-words > p.result-difference[data-kind="none"],
+.result-difference[data-kind="apart"] .result-difference-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The difference is why the floor stands out. */
+.result-floor-words:is(
+    [data-stands-out="farApart"],
+    [data-stands-out="followsEar"],
+    [data-stands-out="followsEarpiece"],
+    [data-stands-out="repeatUnclear"]
+  )
+  .result-difference-label {
+  border-color: var(--color-lamp);
+  background: color-mix(in srgb, var(--color-lamp) 12%, transparent);
+  color: var(--color-lamp);
+}
+
+.result p.result-floor-line {
+  padding-left: 2.6rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* Said once for every floor, under the list. */
+.result p.result-floors-line {
+  margin-top: 0.85rem;
+  padding-left: 0.6rem;
+}
+
 .result-swap {
-  margin-top: 1.1rem;
+  margin-top: 0.4rem;
+  margin-left: 2.6rem;
+  padding: 0.85rem 0.9rem 0.05rem;
+  border: 1px solid color-mix(in srgb, var(--color-lamp) 35%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--color-lamp) 7%, transparent);
+}
+
+.result-swap .result-controls {
+  margin-top: 0.9rem;
+  margin-bottom: 0.9rem;
 }
 
 p.result-comparison {
@@ -407,6 +652,30 @@ p.result-status {
   display: block;
   font-size: 1.0625rem;
   line-height: 1.5;
+}
+
+/* The field and the control that saves, on one line where there is room. */
+.result-keep-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+  margin: 0.3rem 0 0.6rem;
+}
+
+.result-keep-row .result-name-input {
+  flex: 1 1 12rem;
+  width: auto;
+  margin: 0;
+}
+
+.result-keep-row .result-controls {
+  margin: 0;
+}
+
+.result-keep p.result-status {
+  margin-top: 0.5rem;
+  font-size: 0.9375rem;
 }
 
 /* A field drawn as one ruled line to write on. */
@@ -489,7 +758,37 @@ p.result-name-hint {
   margin-top: 0.5rem;
 }
 
-/* A very narrow screen: one wing under the other. */
+/* A narrow screen: the sides start at the row's edge. A very narrow one: one under the other. */
+@media (max-width: 30rem) {
+  .result-wings,
+  .result p.result-floor-line {
+    padding-left: 0;
+  }
+
+  .result-swap {
+    margin-left: 0;
+  }
+
+  /* Each side's name over its level, so that the level keeps to one line. */
+  .result-wing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-wing > *,
+  .result-wing > .result-wing-side {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .result p.result-wing-value:has(.result-wing-range) {
+    font-size: 1.0625rem;
+  }
+
+  .result-wing-range {
+    margin-inline-start: 0.25rem;
+  }
+}
+
 @media (max-width: 22rem) {
   .result-wings {
     grid-template-columns: minmax(0, 1fr);
@@ -497,14 +796,12 @@ p.result-name-hint {
 }
 
 /*
- * A wide screen: the picture at the left, as tall as the window allows, and everything else in
- * one column at its right. The picture stays in sight while the column scrolls.
+ * A wide screen: the picture is wide and stands across the page under the heading, and the words
+ * go on below it in one column, read from the top down.
  */
 @media (min-width: 56rem) {
   .result-page {
-    grid-template-columns: auto minmax(0, 34rem);
-    column-gap: clamp(2.5rem, 6vw, 5.5rem);
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 34rem) minmax(0, 1fr);
     max-width: none;
     padding: 3rem 2.5rem 5rem;
   }
@@ -514,22 +811,249 @@ p.result-name-hint {
   }
 
   .result-page > .result-figure {
-    position: sticky;
-    top: 2rem;
-    grid-column: 1;
-    grid-row: 1 / span 7;
-    align-self: start;
-    width: clamp(18rem, calc((100dvh - 9.5rem) * 564 / 906), 30rem);
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 52rem, calc((100dvh - 12rem) * 600 / 400));
     max-width: none;
     margin: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .result-section[data-entering="true"] .result-light,
-  .result-section[data-entering="true"] .result-reach,
-  .result-section[data-entering="true"] .result-earlier,
-  .result-section[data-entering="true"] .result-doubt {
-    animation: result-appear 0.4s ease both;
+  .result-curve-column,
+  .result-curve-beam,
+  .result-floor-words,
+  .result-focus-floor {
+    transition: none;
   }
+
+  .result-floor-words[data-called="true"] {
+    animation: none;
+    outline: 2px solid var(--color-lamp);
+    outline-offset: 3px;
+  }
+}
+
+/* The headphone rows (headphone-traits R6): a label, its value, and the reason in small text. */
+.result-traits {
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.result h2.result-traits-heading {
+  margin: 0 0 0.4rem;
+  color: var(--color-lamp);
+  font-size: 1.0625rem;
+  font-style: italic;
+}
+
+.result-traits-rows {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.result-traits-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  column-gap: 0.75rem;
+  align-items: baseline;
+}
+
+.result-traits-label {
+  color: var(--color-graphite);
+  font-size: 0.875rem;
+}
+
+.result-traits-value {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.result .result-traits-note {
+  grid-column: 2;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/*
+ * The yard chart (result-curve, redesign 2026-11-25): the room's night, the creatures on the
+ * ground and the two ears as lights in the sky. Left is a warm round wisp, right a cool square
+ * lantern on a dashed line.
+ */
+.result-curve {
+  --curve-left: #ffb85c;
+  --curve-left-core: #fff1d6;
+  --curve-right: #8fd0ff;
+  --curve-right-core: #e8f6ff;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.result-curve-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #0c061d;
+  box-shadow:
+    var(--panel-shadow),
+    0 0 2.5rem -0.5rem rgb(245 140 30 / 0.22);
+}
+
+.result-curve-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 0.7rem solid transparent;
+  border-image: url("../visit/art/frame.webp") 44 / 1.1rem stretch;
+  pointer-events: none;
+}
+
+.result-curve-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.result-curve-grid {
+  stroke: #c9b8ff;
+  stroke-width: 0.8;
+  stroke-dasharray: 2 5;
+  opacity: 0.28;
+}
+
+.result-curve-tick,
+.result-curve-axis-title,
+.result-curve-key-label,
+.result-curve-pitch {
+  fill: var(--color-graphite);
+  font-size: 17px;
+  font-variant-numeric: lining-nums tabular-nums;
+  paint-order: stroke;
+  stroke: #0b0416;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.result-curve-axis-title {
+  font-size: 16px;
+  font-style: italic;
+}
+
+.result-curve-pitch {
+  fill: var(--color-moonlight);
+  font-size: 17px;
+}
+
+.result-curve-key-label {
+  font-size: 14px;
+}
+
+.result-curve-thread {
+  stroke: var(--creature-hue, var(--color-graphite));
+  stroke-width: 1;
+  stroke-dasharray: 1 6;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+
+.result-curve-shadow {
+  fill: #000;
+  opacity: 0.45;
+}
+
+.result-curve-creature {
+  fill: var(--creature-hue, var(--color-graphite));
+}
+
+.result-curve-now-line,
+.result-curve-earlier-line,
+.result-curve-edge {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.result-curve-now-line,
+.result-curve-edge {
+  filter: url(#result-curve-glow);
+}
+
+.result-curve-line-left {
+  stroke: var(--curve-left);
+}
+
+.result-curve-line-right {
+  stroke: var(--curve-right);
+}
+
+.result-curve-now-line.result-curve-line-right {
+  stroke-dasharray: 7 5;
+}
+
+.result-curve-earlier {
+  opacity: 0.38;
+}
+
+.result-curve-earlier-line {
+  stroke-width: 1.4;
+  stroke-dasharray: 1.5 4;
+}
+
+.result-curve-range {
+  filter: url(#result-curve-glow);
+  opacity: 0.3;
+}
+
+.result-curve-range-left {
+  fill: var(--curve-left);
+}
+
+.result-curve-range-right {
+  fill: var(--curve-right);
+}
+
+.result-curve-unsure {
+  opacity: 0.6;
+}
+
+/*
+ * A moonbeam down one pitch: on the pitches the focus card names, and on the one the visitor
+ * points at or tabs to in the words below, while the others dim.
+ */
+.result-curve-beam {
+  fill: rgb(220 232 255 / 0.09);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.result-curve-column {
+  transition: opacity 0.35s ease;
+}
+
+.result-curve-column[data-standing] .result-curve-beam {
+  opacity: 0.7;
+}
+
+.result-curve-svg[data-picking="true"]
+  .result-curve-column[data-picked="true"]
+  .result-curve-beam {
+  opacity: 1;
+}
+
+.result-curve-svg[data-picking="true"]
+  .result-curve-column:not([data-picked="true"]) {
+  opacity: 0.4;
+}
+
+.result-curve-foot {
+  margin-top: 0.4rem;
+}
+
+.result .result-curve-note {
+  margin: 0.2rem 0 0;
+  color: var(--color-graphite);
+  font-size: 0.75rem;
 }

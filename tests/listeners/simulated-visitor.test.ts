@@ -26,7 +26,7 @@ const stepListener: PsychometricListenerParameters = Object.freeze({
 });
 
 const script: VisitorScript = Object.freeze({
-  visitType: "quick",
+  visitType: "full",
   calibrationTargetDb: -20,
   firstHeadphoneCheckAnswer: "left",
   listener: Object.freeze({

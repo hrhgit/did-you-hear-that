@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createSeededRandom } from "../../../src/config/seeded-random";
+import { roomRuns } from "../visit-flow-harness";
 import {
   balanceLabels,
   guessFromScreen,
@@ -43,10 +44,10 @@ const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
 /**
  * The page changes that fall in a trial's window, from its presentation up to its decision, other
- * than the lantern's.
+ * than the chase.
  */
 function momentsInWindow(record: ScreenRecord, trial: RecordedTrial): number {
-  return withoutLantern(
+  return withoutChase(
     record.moments.filter(
       (moment) =>
         moment.atMs >= trial.presentedAtMs && moment.atMs < trial.decidedAtMs,
@@ -55,93 +56,42 @@ function momentsInWindow(record: ScreenRecord, trial: RecordedTrial): number {
 }
 
 /**
- * The lantern may change between decisions: it follows the visitor's own presses, and the clock
- * (the game layer of 2026-11-16). That its lights come back only `rechargeMs` after a press or
- * after the light before, and that a press costs exactly one, is checked on the flow itself
- * (visit-flow CP3). Here every change of the lantern must be one light, up or down, and nothing
- * else on the page may change with it. The predictor below still sees every change.
+ * The chase may change between decisions: a kick at nothing breaks the combo (the rhythm game of
+ * 2026-11-18), and it follows the visitor's own presses alone. Nothing else on the page may
+ * change with it. The predictor below still sees every change.
  */
-function withoutLantern(moments: readonly ScreenMoment[]): ScreenMoment[] {
-  for (const moment of moments) {
-    if (moment.what === "lantern") {
-      expect(moment.lantern).toBeDefined();
-      const { from, to } = moment.lantern ?? { from: 0, to: 0 };
-      expect(Math.abs(to - from)).toBe(1);
-    }
-  }
-  return moments.filter((moment) => moment.what !== "lantern");
+function withoutChase(moments: readonly ScreenMoment[]): ScreenMoment[] {
+  return moments.filter(
+    (moment) => moment.what !== "chase" && moment.what !== "whiff",
+  );
 }
 
-describe("when the page draws during a visit", () => {
-  it(
-    "draws nothing from one decision to the next in a visit that is left alone",
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          seedArbitrary,
-          seedArbitrary,
-          async (flowSeed, visitorSeed) => {
-            const { record, run } = await recordVisit(
-              flowSeed,
-              visitorScriptOf(visitorSeed, { disturbed: false }),
-            );
-            expect(run.finalStage).toBe("result");
-            expect(record.trials.length).toBeGreaterThan(0);
-            for (const trial of record.trials) {
-              expect(
-                withoutLantern(momentsBeforeDecision(record, trial)),
-              ).toEqual([]);
-            }
-          },
-        ),
-        { numRuns: drawingRuns },
-      );
-    },
-    timeoutMs,
-  );
+/**
+ * True when the trials of the visit's rooms did not come room by room: a trial of one room was
+ * decided after a trial of a later room. That is what the one room is.
+ */
+function tookTurns(record: ScreenRecord): boolean {
+  const rooms = record.trials
+    .filter((trial) => trial.inSwappedRepeat !== true)
+    .map((trial) => trial.roomIndex);
+  return rooms.some((roomIndex, index) => roomIndex < (rooms[index - 1] ?? 0));
+}
 
-  it(
-    "draws nothing while a trial's window is open in a visit that is paused, hidden, interrupted or moved to another device",
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          seedArbitrary,
-          seedArbitrary,
-          async (flowSeed, visitorSeed) => {
-            const { record, run } = await recordVisit(
-              flowSeed,
-              visitorScriptOf(visitorSeed, { disturbed: true }),
-            );
-            expect(run.finalStage).toBe("result");
-            expect(record.trials.length).toBeGreaterThan(0);
-            for (const trial of record.trials) {
-              expect(momentsInWindow(record, trial)).toBe(0);
-            }
-          },
-        ),
-        { numRuns: drawingRuns },
-      );
-    },
-    timeoutMs,
-  );
-});
-
-describe("when the page draws in the swapped repeat", () => {
-  /** The trials of the swapped repeat's room in a record. */
-  const repeatTrials = (record: ScreenRecord): RecordedTrial[] =>
-    record.trials.filter((trial) => trial.inSwappedRepeat === true);
-
+// Every property here holds however the rooms run (one-room design.md, D1): one after another, as
+// before the one room, and with as many searches taking turns in the one room as the shipped site
+// runs together. A site set back to one room at a time has only the first.
+describe.each(roomRuns)("$name", ({ roomsTogetherMaxCount, together }) => {
   /**
-   * Plays visits of one kind with a swapped repeat after the result and checks `holds` on every
-   * trial, those of the visit's rooms and those of the repeat's room. Most visits must reach the
-   * repeat's room, or the property would say nothing about it.
+   * Plays `drawingRuns` visits of one kind and checks `holds` on every trial of each. With rooms
+   * that run together, most visits must have had their creatures take turns, or the property
+   * would say nothing about the one room. One room at a time, none may.
    */
-  async function assertOverRepeats(
+  async function assertOverVisits(
     disturbed: boolean,
     holds: (record: ScreenRecord, trial: RecordedTrial) => void,
   ): Promise<void> {
     let visits = 0;
-    let visitsWithRepeatTrials = 0;
+    let visitsThatTookTurns = 0;
     await fc.assert(
       fc.asyncProperty(
         seedArbitrary,
@@ -149,12 +99,14 @@ describe("when the page draws in the swapped repeat", () => {
         async (flowSeed, visitorSeed) => {
           const { record, run } = await recordVisit(
             flowSeed,
-            visitorScriptOf(visitorSeed, { disturbed, swappedRepeat: true }),
+            visitorScriptOf(visitorSeed, { disturbed }),
+            roomsTogetherMaxCount,
           );
           expect(run.finalStage).toBe("result");
+          expect(record.trials.length).toBeGreaterThan(0);
           visits += 1;
-          if (repeatTrials(record).length > 0) {
-            visitsWithRepeatTrials += 1;
+          if (tookTurns(record)) {
+            visitsThatTookTurns += 1;
           }
           for (const trial of record.trials) {
             holds(record, trial);
@@ -163,112 +115,186 @@ describe("when the page draws in the swapped repeat", () => {
       ),
       { numRuns: drawingRuns },
     );
-    expect(visitsWithRepeatTrials).toBeGreaterThan(visits / 2);
+    if (together) {
+      expect(visitsThatTookTurns).toBeGreaterThan(visits / 2);
+    } else {
+      expect(visitsThatTookTurns).toBe(0);
+    }
   }
 
-  it(
-    "draws nothing from one decision to the next in the repeated room of a visit that is left alone",
-    async () => {
-      await assertOverRepeats(false, (record, trial) => {
-        expect(withoutLantern(momentsBeforeDecision(record, trial))).toEqual(
-          [],
-        );
-      });
-    },
-    timeoutMs,
-  );
-
-  it(
-    "draws nothing while a trial's window is open in a repeated room that is paused, hidden or interrupted",
-    async () => {
-      await assertOverRepeats(true, (record, trial) => {
-        expect(momentsInWindow(record, trial)).toBe(0);
-      });
-    },
-    timeoutMs,
-  );
-});
-
-describe("what a predictor can guess from the screen", () => {
-  let training: ScreenRecord[] = [];
-  let heldOut: ScreenRecord[] = [];
-
-  beforeAll(async () => {
-    const half = predictorVisits / 2;
-    training = [
-      ...(await recordVisits(10_000, half, { disturbed: false })),
-      ...(await recordVisits(20_000, half, { disturbed: true })),
-    ];
-    heldOut = [
-      ...(await recordVisits(30_000, half, { disturbed: false })),
-      ...(await recordVisits(40_000, half, { disturbed: true })),
-    ];
-  }, 2 * timeoutMs);
-
-  /** The samples of every record, each visit with ambient motion of its own. */
-  function samplesOf(
-    records: readonly ScreenRecord[],
-    question: LeakQuestion,
-    firstAmbientSeed: number,
-  ): LeakSample[] {
-    const samples = records.flatMap((record, index) =>
-      leakSamples(record, question, {
-        ambientRandom: createSeededRandom(firstAmbientSeed + index),
-        ambientWatchMs,
-      }),
+  describe("when the page draws during a visit", () => {
+    it(
+      "draws nothing from one decision to the next in a visit that is left alone",
+      async () => {
+        await assertOverVisits(false, (record, trial) => {
+          expect(withoutChase(momentsBeforeDecision(record, trial))).toEqual(
+            [],
+          );
+        });
+      },
+      timeoutMs,
     );
-    // Four trials in five have a sound. In equal numbers, any link between the screen and
-    // whether there was a sound shows.
-    return question === "soundOrNot"
-      ? balanceLabels(samples, createSeededRandom(firstAmbientSeed))
-      : samples;
-  }
 
-  it.each<LeakQuestion>(["soundOrNot", "side"])(
-    "does no better than chance at %s",
-    (question) => {
-      const verdict = guessFromScreen(
-        samplesOf(training, question, 50_000),
-        samplesOf(heldOut, question, 60_000),
-      );
-      // Enough samples for one extra right guess in fifty to show.
-      expect(verdict.heldOutCount).toBeGreaterThan(3000);
-      expect(verdict.limit - verdict.chance).toBeLessThan(0.03);
-      expect(verdict, JSON.stringify(verdict)).toMatchObject({ leaks: false });
-    },
-  );
-
-  it("would catch a page that changed when a sound came, one time in ten", () => {
-    const leaky = (records: readonly ScreenRecord[], seed: number) => {
-      const random = createSeededRandom(seed);
-      return records.map((record) =>
-        recordOfLeakyPage(record, (trial) =>
-          trial.kind === "sound" && random.next() < 0.1 ? 1 : 0,
-        ),
-      );
-    };
-    const verdict = guessFromScreen(
-      samplesOf(leaky(training, 1), "soundOrNot", 50_000),
-      samplesOf(leaky(heldOut, 2), "soundOrNot", 60_000),
+    it(
+      "draws nothing while a trial's window is open in a visit that is paused, hidden, interrupted or moved to another device",
+      async () => {
+        await assertOverVisits(true, (record, trial) => {
+          expect(momentsInWindow(record, trial)).toBe(0);
+        });
+      },
+      timeoutMs,
     );
-    expect(verdict.leaks).toBe(true);
-    expect(verdict.chosenFeatures).toContain(0);
   });
 
-  it("would catch a page that changed for the left side only, one time in ten", () => {
-    const leaky = (records: readonly ScreenRecord[], seed: number) => {
-      const random = createSeededRandom(seed);
-      return records.map((record) =>
-        recordOfLeakyPage(record, (trial) =>
-          trial.ear === "left" && random.next() < 0.1 ? 1 : 0,
+  describe("when the page draws in the swapped repeat", () => {
+    /** The trials of the swapped repeat's room in a record. */
+    const repeatTrials = (record: ScreenRecord): RecordedTrial[] =>
+      record.trials.filter((trial) => trial.inSwappedRepeat === true);
+
+    /**
+     * Plays visits of one kind with a swapped repeat after the result and checks `holds` on every
+     * trial, those of the visit's rooms and those of the repeat's room. Most visits must reach the
+     * repeat's room, or the property would say nothing about it.
+     */
+    async function assertOverRepeats(
+      disturbed: boolean,
+      holds: (record: ScreenRecord, trial: RecordedTrial) => void,
+    ): Promise<void> {
+      let visits = 0;
+      let visitsWithRepeatTrials = 0;
+      await fc.assert(
+        fc.asyncProperty(
+          seedArbitrary,
+          seedArbitrary,
+          async (flowSeed, visitorSeed) => {
+            const { record, run } = await recordVisit(
+              flowSeed,
+              visitorScriptOf(visitorSeed, { disturbed, swappedRepeat: true }),
+              roomsTogetherMaxCount,
+            );
+            expect(run.finalStage).toBe("result");
+            visits += 1;
+            if (repeatTrials(record).length > 0) {
+              visitsWithRepeatTrials += 1;
+            }
+            for (const trial of record.trials) {
+              holds(record, trial);
+            }
+          },
         ),
+        { numRuns: drawingRuns },
       );
-    };
-    const verdict = guessFromScreen(
-      samplesOf(leaky(training, 3), "side", 50_000),
-      samplesOf(leaky(heldOut, 4), "side", 60_000),
+      expect(visitsWithRepeatTrials).toBeGreaterThan(visits / 2);
+    }
+
+    it(
+      "draws nothing from one decision to the next in the repeated room of a visit that is left alone",
+      async () => {
+        await assertOverRepeats(false, (record, trial) => {
+          expect(withoutChase(momentsBeforeDecision(record, trial))).toEqual(
+            [],
+          );
+        });
+      },
+      timeoutMs,
     );
-    expect(verdict.leaks).toBe(true);
-    expect(verdict.chosenFeatures).toContain(0);
+
+    it(
+      "draws nothing while a trial's window is open in a repeated room that is paused, hidden or interrupted",
+      async () => {
+        await assertOverRepeats(true, (record, trial) => {
+          expect(momentsInWindow(record, trial)).toBe(0);
+        });
+      },
+      timeoutMs,
+    );
+  });
+
+  describe("what a predictor can guess from the screen", () => {
+    let training: ScreenRecord[] = [];
+    let heldOut: ScreenRecord[] = [];
+
+    beforeAll(async () => {
+      const half = predictorVisits / 2;
+      const visits = (firstSeed: number, disturbed: boolean) =>
+        recordVisits(firstSeed, half, { disturbed }, roomsTogetherMaxCount);
+      training = [
+        ...(await visits(10_000, false)),
+        ...(await visits(20_000, true)),
+      ];
+      heldOut = [
+        ...(await visits(30_000, false)),
+        ...(await visits(40_000, true)),
+      ];
+    }, 6 * timeoutMs); // Whole visits of five creatures, a good many of them.
+
+    /** The samples of every record, each visit with ambient motion of its own. */
+    function samplesOf(
+      records: readonly ScreenRecord[],
+      question: LeakQuestion,
+      firstAmbientSeed: number,
+    ): LeakSample[] {
+      const samples = records.flatMap((record, index) =>
+        leakSamples(record, question, {
+          ambientRandom: createSeededRandom(firstAmbientSeed + index),
+          ambientWatchMs,
+        }),
+      );
+      // Four trials in five have a sound. In equal numbers, any link between the screen and
+      // whether there was a sound shows.
+      return question === "soundOrNot"
+        ? balanceLabels(samples, createSeededRandom(firstAmbientSeed))
+        : samples;
+    }
+
+    it.each<LeakQuestion>(["soundOrNot", "side"])(
+      "does no better than chance at %s",
+      (question) => {
+        const verdict = guessFromScreen(
+          samplesOf(training, question, 50_000),
+          samplesOf(heldOut, question, 60_000),
+        );
+        // Enough samples for one extra right guess in fifty to show.
+        expect(verdict.heldOutCount).toBeGreaterThan(3000);
+        expect(verdict.limit - verdict.chance).toBeLessThan(0.03);
+        expect(verdict, JSON.stringify(verdict)).toMatchObject({
+          leaks: false,
+        });
+      },
+    );
+
+    it("would catch a page that changed when a sound came, one time in ten", () => {
+      const leaky = (records: readonly ScreenRecord[], seed: number) => {
+        const random = createSeededRandom(seed);
+        return records.map((record) =>
+          recordOfLeakyPage(record, (trial) =>
+            trial.kind === "sound" && random.next() < 0.1 ? 1 : 0,
+          ),
+        );
+      };
+      const verdict = guessFromScreen(
+        samplesOf(leaky(training, 1), "soundOrNot", 50_000),
+        samplesOf(leaky(heldOut, 2), "soundOrNot", 60_000),
+      );
+      expect(verdict.leaks).toBe(true);
+      expect(verdict.chosenFeatures).toContain(0);
+    });
+
+    it("would catch a page that changed for the left side only, one time in ten", () => {
+      const leaky = (records: readonly ScreenRecord[], seed: number) => {
+        const random = createSeededRandom(seed);
+        return records.map((record) =>
+          recordOfLeakyPage(record, (trial) =>
+            trial.ear === "left" && random.next() < 0.1 ? 1 : 0,
+          ),
+        );
+      };
+      const verdict = guessFromScreen(
+        samplesOf(leaky(training, 3), "side", 50_000),
+        samplesOf(leaky(heldOut, 4), "side", 60_000),
+      );
+      expect(verdict.leaks).toBe(true);
+      expect(verdict.chosenFeatures).toContain(0);
+    });
   });
 });

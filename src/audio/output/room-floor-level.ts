@@ -1,7 +1,7 @@
 import { audioOutputConfig } from "../../config/audio-output-config";
 import { hearingMethodConfig } from "../../config/hearing-method-config";
 import type { SoundId } from "../../config/sound-id";
-import { soundIds } from "../../config/sound-id";
+import { everySoundId } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import { gainToDecibels } from "./gain-to-decibels";
 
@@ -20,7 +20,7 @@ export function roomFloorLevelDb(
   soundId: SoundId,
   calibrationGain: number,
 ): number {
-  if (!soundIds.includes(soundId)) {
+  if (!everySoundId.includes(soundId)) {
     throw new RangeError(`There is no sound ${String(soundId)}.`);
   }
   const playableLevelDb = gainToDecibels(

@@ -21,15 +21,15 @@ One exception: the fixed limits statement described below says what the product 
 ## How to describe the product
 
 - It is a "self-check" or "a first listen". It is not a "hearing test" and not a "hearing check".
-- It "finds the quietest sound you caught", it does not "measure your hearing".
+- It estimates a level from the sounds you caught during the game. It does not "measure your hearing".
 - Levels are described as "quieter" and "louder" and drawn as depth of light. If a number is shown it is labelled as relative to the visitor's own calibration.
 
 ## What the result page must always say
 
 In plain words, next to the picture and not hidden behind a link:
 
-1. Headphones differ at every pitch, so floors cannot be compared with each other.
-2. What can be compared is left against right on one floor, and this visit against the visitor's own later visits with the same headphones.
+1. Headphones differ at every pitch, so pitches cannot be compared with each other.
+2. What can be compared is left against right at one pitch, and this visit against the visitor's own later visits with the same headphones.
 3. This is not a diagnosis and has not been checked against clinical equipment.
 4. When to see a hearing professional: a left and right difference that is still there after swapping the headphones, a sudden change, or ringing that does not go away.
 
@@ -42,3 +42,5 @@ In plain words, next to the picture and not hidden behind a link:
 ## Tone
 
 The house speaks in short, calm sentences. It never mocks the visitor for missing a sound. The line for a response on a no-sound trial is "I made no sound that time."
+
+A creature that got away may be pleased with itself in its own voice ("Knock, knock, and off it goes."), with no exclamation mark and nothing about the visitor: the glee is the creature's, never a judgement of the one who missed it (the game layer, 2026-11-17).

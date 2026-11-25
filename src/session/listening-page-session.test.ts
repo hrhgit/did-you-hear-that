@@ -3,7 +3,7 @@ import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { createManualTimer } from "../config/manual-timer";
 import { createSeededRandom } from "../config/seeded-random";
-import type { SoundId } from "../config/sound-id";
+import type { ListedSoundId } from "../config/sound-id";
 import { soundIds } from "../config/sound-id";
 import { soundRulesConfig } from "../config/sound-rules-config";
 import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
@@ -14,12 +14,17 @@ import { createFakeAudioBackend } from "../audio/output/fake-audio-backend";
 import type { ListeningPageSession } from "./listening-page-session";
 import { createListeningPageSession } from "./listening-page-session";
 
-const { calibrationSettingMinDb, calibrationRepeatGapMs } = audioOutputConfig;
+const { calibrationRepeatGapMs } = audioOutputConfig;
 const { floorDb, startingLevelDb, upwardStepDb, capRelativeToAnchorDb } =
   hearingMethodConfig;
 
 /** The lowest supported rate, where the real renderers are quickest. */
 const sampleRateHz = soundRulesConfig.sampleRateMinHz;
+
+/** Where the hiss's calibration starts: the middle of −40…−4 dB, rounded down (audible-start, 2026-11-18). */
+const hissStartDb = -22;
+/** Where the music's calibration starts: the middle of −40…−5 dB, rounded down to the grid. */
+const musicStartDb = -23;
 
 function setup(options: FakeAudioBackendOptions = {}) {
   const backend = createFakeAudioBackend({
@@ -50,7 +55,36 @@ function setup(options: FakeAudioBackendOptions = {}) {
   return { backend, timer, session, advance, waitOutLastSound };
 }
 
-/** Starts sound, calibrates up to `settingDb` with the Louder button, and keeps it. */
+/**
+ * Moves a started hiss calibration from where it starts to `settingDb`, with the Louder or
+ * Quieter button, and waits until the sound plays there.
+ */
+function calibrateTo(
+  session: ListeningPageSession,
+  advance: (durationMs: number) => void,
+  settingDb: number,
+): void {
+  // Quieter steps down from the setting last played, so each press waits until that setting plays.
+  const stepDb = settingDb > hissStartDb ? 1 : -1;
+  let expectedDb = hissStartDb;
+  while (expectedDb !== settingDb) {
+    if (stepDb > 0) {
+      session.louder();
+    } else {
+      session.quieter();
+    }
+    expectedDb += stepDb;
+    for (let repeat = 0; repeat < 30; repeat += 1) {
+      if (session.snapshot().calibration.playedSettingDb === expectedDb) {
+        break;
+      }
+      advance(2_000 + calibrationRepeatGapMs);
+    }
+    expect(session.snapshot().calibration.playedSettingDb).toBe(expectedDb);
+  }
+}
+
+/** Starts sound, calibrates to `settingDb` with the Louder or Quieter button, and keeps it. */
 async function calibrated(
   settingDb: number,
   options: FakeAudioBackendOptions = {},
@@ -59,23 +93,14 @@ async function calibrated(
   const { session, advance } = context;
   await session.start();
   session.startCalibration();
-  for (let press = 0; press < settingDb - calibrationSettingMinDb; press += 1) {
-    session.louder();
-  }
-  for (let repeat = 0; repeat < 30; repeat += 1) {
-    if (session.snapshot().calibration.playedSettingDb === settingDb) {
-      break;
-    }
-    advance(2_000 + calibrationRepeatGapMs);
-  }
-  expect(session.snapshot().calibration.playedSettingDb).toBe(settingDb);
+  calibrateTo(session, advance, settingDb);
   session.keepCalibration();
   expect(session.snapshot().calibration.kept).toMatchObject({ settingDb });
   context.waitOutLastSound();
   return context;
 }
 
-function rowOf(session: ListeningPageSession, soundId: SoundId) {
+function rowOf(session: ListeningPageSession, soundId: ListedSoundId) {
   const row = session.snapshot().rows.find((each) => each.soundId === soundId);
   if (row === undefined) {
     throw new Error(`No row for ${soundId}.`);
@@ -124,7 +149,7 @@ describe("createListeningPageSession", () => {
     });
   });
 
-  it("plays the first calibration repeat at the bottom of the control (R19.5)", async () => {
+  it("plays the first calibration repeat in the middle of the control (R19.5)", async () => {
     const { backend, session } = setup();
     await session.start();
     session.louder();
@@ -132,7 +157,7 @@ describe("createListeningPageSession", () => {
     expect(backend.scheduled()).toHaveLength(1);
     expect(session.snapshot().calibration).toMatchObject({
       playing: true,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: hissStartDb,
       // The fake has no music file: the calibration sound is the hiss.
       calibrationSound: "hiss",
       line: calibrationCopy.hiss.openLine,
@@ -165,10 +190,11 @@ describe("createListeningPageSession", () => {
       playing: true,
       calibrationSound: "music",
       controlTopDb: -5,
-      playedSettingDb: calibrationSettingMinDb,
+      playedSettingDb: musicStartDb,
       line: calibrationCopy.openLine,
     });
-    for (let press = 0; press < 20; press += 1) {
+    // Ten Louder presses take the music from its middle, −23 dB, to −13 dB.
+    for (let press = 0; press < 10; press += 1) {
       session.louder();
     }
     for (let elapsedMs = 0; elapsedMs < 20_000; elapsedMs += 10) {
@@ -176,7 +202,7 @@ describe("createListeningPageSession", () => {
     }
     session.keepCalibration();
     expect(session.snapshot().calibration.kept).toMatchObject({
-      settingDb: calibrationSettingMinDb + 20,
+      settingDb: musicStartDb + 10,
       anchor: "music",
     });
     expect(backend.loopTimeline().at(-1)).toMatchObject({ kind: "stopLoop" });
@@ -198,7 +224,7 @@ describe("createListeningPageSession", () => {
     expect(rows.map((row) => row.soundId)).toEqual(soundIds);
     // The bracketed values of the room-top table in design.md, at the top of the control, with
     // the cap of 5 dB above the anchor (audible-start design.md, "The cap").
-    const expectedHighest: Record<SoundId, number> = {
+    const expectedHighest: Record<ListedSoundId, number> = {
       cellar: 0,
       corridor: 5,
       nursery: 5,
@@ -288,7 +314,8 @@ describe("createListeningPageSession", () => {
     expect(played?.right.every((sample) => Object.is(sample, 0))).toBe(true);
     waitOutLastSound();
 
-    // Three steps up asks for a rise of 15 dB on the left ear, which the shell holds to one step.
+    // Three steps up, a rise of 15 dB on the left ear, is played as asked: the rise limit was
+    // dropped by the owner on 2026-11-17, and the cap of 5 dB above the anchor is not passed.
     for (let press = 0; press < 3; press += 1) {
       session.levelUp("corridor");
     }
@@ -297,19 +324,12 @@ describe("createListeningPageSession", () => {
     expect(outcome).toMatchObject({
       kind: "scheduled",
       requestedLevelDb: startingLevelDb + 3 * upwardStepDb,
-      clampLimit: "rise",
+      clampLimit: null,
     });
     expect(
       outcome?.kind === "scheduled" ? outcome.playedLevelDb : Number.NaN,
-    ).toBeCloseTo(startingLevelDb + upwardStepDb, 6);
-    expect(session.snapshot().clampLog).toMatchObject([
-      {
-        soundId: "corridor",
-        earChoice: "left",
-        purpose: "listening",
-        clampLimit: "rise",
-      },
-    ]);
+    ).toBeCloseTo(startingLevelDb + 3 * upwardStepDb, 6);
+    expect(session.snapshot().clampLog).toEqual([]);
   });
 
   it("shows a refusal when a sound is asked for while another plays", async () => {
@@ -388,15 +408,7 @@ describe("createListeningPageSession", () => {
     session.play("stairs", "right");
     session.startCalibration();
     expect(session.snapshot().rows).toEqual([]);
-    for (let press = 0; press < 41; press += 1) {
-      session.louder();
-    }
-    for (let repeat = 0; repeat < 30; repeat += 1) {
-      if (session.snapshot().calibration.playedSettingDb === -19) {
-        break;
-      }
-      advance(2_000 + calibrationRepeatGapMs);
-    }
+    calibrateTo(session, advance, -19);
     session.keepCalibration();
     expect(rowOf(session, "stairs")).toMatchObject({
       levelDb: startingLevelDb,

@@ -13,7 +13,10 @@ import type {
   PlayRefusal,
 } from "../audio/output/create-audio-output";
 import type { RangeReport } from "../audio/output/range-report";
-import { calibrationTargetSettingDb } from "./calibration-target-setting";
+import {
+  calibrationStartSettingDb,
+  calibrationTargetSettingDb,
+} from "./calibration-target-setting";
 
 /** What the calibration screen shows (design.md, "The calibration controller"). */
 export interface CalibrationSnapshot {
@@ -50,8 +53,7 @@ export interface CalibrationSnapshot {
 
 export interface CalibrationController {
   /**
-   * Begins a calibration in the shell and starts its sound at once, at the bottom of the control
-   * (R16.1): the music while the shell's Calibration_Sound is `music`, the repeats while it is
+   * Begins a calibration in the shell and starts its reference at the starting level: the music while the shell's Calibration_Sound is `music`, the repeats while it is
    * `hiss`. While it is `loading`, the start is remembered and the sound starts when loading ends,
    * if the calibration is still open (audible-start R4.6). Call it from the visitor's press. A
    * calibration under way starts again.
@@ -96,8 +98,9 @@ export function createCalibrationController(options: {
   output: AudioOutput & Partial<CalibrationMusicOutput>;
   timer: Timer;
   random: RandomSource;
+  fixedSettingDb?: number;
 }): CalibrationController {
-  const { output, timer, random } = options;
+  const { output, timer, random, fixedSettingDb } = options;
   const {
     calibrationSettingMinDb,
     calibrationSettingStepDb,
@@ -114,6 +117,11 @@ export function createCalibrationController(options: {
   let waitingForSound = false;
   let handle: TimerHandle | null = null;
   let targetSettingDb = calibrationSettingMinDb;
+  /**
+   * Whether the target is still the start's, the middle of the control, and the visitor has not
+   * moved it. Such a target follows the top when the sound changes, so the start stays central.
+   */
+  let targetIsStart = true;
   let playedSettingDb: number | null = null;
   let playedSound: "music" | "hiss" | null = null;
   let atTop = false;
@@ -208,7 +216,7 @@ export function createCalibrationController(options: {
     if (!playing || output.startCalibrationMusic === undefined) {
       return;
     }
-    const outcome = output.startCalibrationMusic();
+    const outcome = output.startCalibrationMusic(targetSettingDb);
     if (outcome.kind === "refused") {
       if (outcome.reason === "notReady") {
         // The music cannot be played after all: the shell has turned to the hiss.
@@ -292,6 +300,9 @@ export function createCalibrationController(options: {
    * the target moves (audible-start D2), and says whether it was taken. The music follows it.
    */
   const moveTarget = (settingDb: number): boolean => {
+    if (fixedSettingDb !== undefined && settingDb !== fixedSettingDb) {
+      return false;
+    }
     const nextDb = calibrationTargetSettingDb(settingDb, control());
     if (nextDb === null) {
       return false;
@@ -304,7 +315,11 @@ export function createCalibrationController(options: {
   };
 
   output.onCalibrationSoundChange?.(() => {
-    // The top may have moved, from the hiss's to the music's: the target stays within it.
+    // The top may have moved, from the hiss's to the music's. A target the visitor has not moved
+    // stays in the middle of the new control; any other stays within it.
+    if (targetIsStart) {
+      targetSettingDb = fixedSettingDb ?? calibrationStartSettingDb(control());
+    }
     moveTarget(targetSettingDb);
     if (waitingForSound) {
       waitingForSound = false;
@@ -337,7 +352,9 @@ export function createCalibrationController(options: {
       cancelNext();
       stopMusic();
       output.beginCalibration();
-      targetSettingDb = calibrationSettingMinDb;
+      // The diagnostic control starts in the middle. The public visit uses a fixed reference.
+      targetSettingDb = fixedSettingDb ?? calibrationStartSettingDb(control());
+      targetIsStart = true;
       playedSettingDb = null;
       playedSound = null;
       atTop = false;
@@ -352,22 +369,31 @@ export function createCalibrationController(options: {
     },
 
     louder() {
-      moveTarget(
-        Math.max(targetSettingDb, playedSettingDb ?? targetSettingDb) +
-          calibrationSettingStepDb,
-      );
-      notify();
+      if (
+        moveTarget(
+          Math.max(targetSettingDb, playedSettingDb ?? targetSettingDb) +
+            calibrationSettingStepDb,
+        )
+      ) {
+        targetIsStart = false;
+        notify();
+      }
     },
 
     quieter() {
-      moveTarget(
-        (playedSettingDb ?? targetSettingDb) - calibrationSettingStepDb,
-      );
-      notify();
+      if (
+        moveTarget(
+          (playedSettingDb ?? targetSettingDb) - calibrationSettingStepDb,
+        )
+      ) {
+        targetIsStart = false;
+        notify();
+      }
     },
 
     setTarget(settingDb) {
       if (moveTarget(settingDb)) {
+        targetIsStart = false;
         notify();
       }
     },

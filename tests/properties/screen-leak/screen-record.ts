@@ -19,15 +19,26 @@ import type { LeakSample } from "./guess-from-screen";
 export interface ScreenMoment {
   readonly atMs: number;
   /**
-   * `screen`: the screen derived from a snapshot changed, other than its lantern. `lantern`: only
-   * the lantern of the screen changed (the game layer of 2026-11-16). `ripple`, `slipped`, `say`:
+   * `screen`: the screen derived from a snapshot changed, other than its chase. `chase`: only the
+   * chase of the screen changed, its score, combo or Jack's flame (the rhythm game of
+   * 2026-11-18). `ripple`, `slipped`, `say`, `steady`:
    * a reaction to a decided trial, in a room of the visit or in the swapped repeat's room.
-   * `replayRipple`: the ripple of a sound that is played again after the rooms.
+   * `gone`: a search has ended and the house says where its creature went (one-room spec). It
+   * comes in the moment the search's last trial is scored. `replayRipple`: the ripple of a sound
+   * that is played again after the rooms. `cue`: a turn is coming, alike for every turn.
+   * `whiff`: a kick that met no turn.
    */
   readonly what:
-    "screen" | "lantern" | "ripple" | "slipped" | "say" | "replayRipple";
-  /** For `lantern`: the lights before and after the change. */
-  readonly lantern?: { readonly from: number; readonly to: number };
+    | "screen"
+    | "chase"
+    | "ripple"
+    | "slipped"
+    | "say"
+    | "steady"
+    | "cue"
+    | "whiff"
+    | "gone"
+    | "replayRipple";
 }
 
 /** What a recorder is told when a trial's window is set. */
@@ -71,7 +82,7 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
   const moments: ScreenMoment[] = [];
   const trials: RecordedTrial[] = [];
   let lastScreen: string | null = null;
-  let lastCells: number | null = null;
+  let lastChase: string | null = null;
   let anchorMs = now();
   let waiting: (PresentedTrialFacts & { readonly atMs: number }) | null = null;
   let inRepeatRoom = false;
@@ -87,24 +98,16 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
       }
       inRepeatRoom = repeatRoom;
       const shown = screenOfSnapshot(snapshot);
-      const cells = shown.chase?.lantern.cells ?? null;
-      // The screen without its lantern, so that a change of the lantern alone is told apart.
-      const screen = JSON.stringify({
-        ...shown,
-        chase:
-          shown.chase === null ? null : { ...shown.chase, lantern: undefined },
-      });
+      const chase = shown.chase === null ? null : JSON.stringify(shown.chase);
+      // The screen without its chase, so that a change of the chase alone is told apart.
+      const screen = JSON.stringify({ ...shown, chase: shown.chase === null });
       if (screen !== lastScreen) {
         lastScreen = screen;
         moments.push({ atMs: now(), what: "screen" });
-      } else if (cells !== lastCells && lastCells !== null && cells !== null) {
-        moments.push({
-          atMs: now(),
-          what: "lantern",
-          lantern: { from: lastCells, to: cells },
-        });
+      } else if (chase !== lastChase && lastChase !== null && chase !== null) {
+        moments.push({ atMs: now(), what: "chase" });
       }
-      lastCells = cells;
+      lastChase = chase;
     },
     event(event) {
       // A room's counting starts after its practice (audible-start, light plan of 2026-11-16).
@@ -115,6 +118,10 @@ export function createScreenRecorder(now: () => number): ScreenRecorder {
         waiting = null;
       } else if (event.kind === "practiceSoundScored") {
         waiting = null;
+      } else if (event.kind === "reminderSoundScored") {
+        // A reminder's decision is a decision of the visitor's, as a trial's is. The trial it
+        // stood in for is presented after it, so nothing waits yet.
+        anchorMs = now();
       } else if (
         event.kind === "trialScored" ||
         event.kind === "swappedTrialScored"

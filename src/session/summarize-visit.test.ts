@@ -110,7 +110,7 @@ function soundTrial(
     ear: "left" as const,
     requestedLevelDb,
     playedLevelDb,
-    clampLimit: playedLevelDb === requestedLevelDb ? null : "anchorCap",
+    clampLimit: playedLevelDb === requestedLevelDb ? null : "ceiling",
   } as const;
   if (status === "discarded") {
     return { ...common, status: "discarded", discardedAtMs: 2500 };
@@ -127,17 +127,17 @@ function soundTrial(
 }
 
 function makeLog(parts: {
-  readonly visitType?: "quick" | "full";
+  readonly visitType?: "full";
   readonly roomAttempts: readonly LoggedRoomAttempt[];
   readonly trials?: readonly VisitTrial[];
   readonly ignoredAnswers?: readonly LoggedIgnoredAnswer[];
 }): VisitLog {
-  const visitType = parts.visitType ?? "quick";
+  const visitType = parts.visitType ?? "full";
   return {
     formatVersion: 1,
     visitType,
     visitSeed: 42,
-    rooms: visitRooms(visitType),
+    rooms: visitRooms(visitType).slice(0, 3),
     calibrations: [],
     headphoneChecks: [],
     roomAttempts: parts.roomAttempts,
@@ -175,7 +175,9 @@ describe("summarizeVisit", () => {
     expect(summary.rooms.map((room) => [room.left, room.right])).toEqual(
       quietResults.map((result) => [result.left, result.right]),
     );
-    expect(summary.rooms.map((room) => room.room)).toEqual(visitRooms("quick"));
+    expect(summary.rooms.map((room) => room.room)).toEqual(
+      visitRooms("full").slice(0, 3),
+    );
   });
 
   it("gives the pooled counts, the rate and the limit it judged against (R18.4)", () => {

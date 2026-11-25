@@ -43,16 +43,15 @@ const d43Listener: PsychometricListenerParameters = Object.freeze({
 });
 
 const fixedListenerVisitCount: Readonly<Record<VisitType, number>> =
-  Object.freeze({ quick: 2000, full: 1200 });
+  Object.freeze({ full: 1200 });
 
 const attentiveVisitCount = 2000;
 
 const attentiveSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261201,
   full: 20261202,
 });
 
-const visitTypes: readonly VisitType[] = ["quick", "full"];
+const visitTypes: readonly VisitType[] = ["full"];
 
 describe("visit flow CP11. What the visit rule removes and costs (Statistical; R23.4)", () => {
   describe.each([

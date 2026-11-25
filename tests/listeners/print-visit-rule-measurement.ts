@@ -3,7 +3,7 @@
 //
 //   npx tsx tests/listeners/print-visit-rule-measurement.ts
 //
-// Plays whole quick and full visits through the shipped engine with the cases, seeds and visit
+// Plays whole full visits through the shipped engine with the cases, seeds and visit
 // counts of "Measurements", and prints the tables as Markdown. It writes no file and needs no
 // package.json script (D30). The numbers are for the project owner to choose the visit limit
 // from (Q1). The script chooses nothing.
@@ -38,7 +38,7 @@ import {
 /** The candidate limits of R23.2, from loose to strict. */
 const candidateLimits = Object.freeze([0.3, 0.25, 0.2, 0.15]);
 
-const visitTypes: readonly VisitType[] = ["quick", "full"];
+const visitTypes: readonly VisitType[] = ["full"];
 
 /** The listener of threshold-search regression 4 (seed 4040559320). */
 const regressionFourListener: PsychometricListenerParameters = Object.freeze({
@@ -57,11 +57,10 @@ const d43Listener: PsychometricListenerParameters = Object.freeze({
 
 /** Visits per fixed listener ("What the rule removes from the D43 case"). */
 const fixedListenerVisitCount: Readonly<Record<VisitType, number>> =
-  Object.freeze({ quick: 2000, full: 1200 });
+  Object.freeze({ full: 1200 });
 
 /** Seeds and visit counts of the ranges ("What the rule costs"). */
 const rangeSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261201,
   full: 20261202,
 });
 const rangeVisitCount: Readonly<
@@ -95,7 +94,7 @@ const listenerSetMeasures = Object.freeze({
     accurateMinFraction: 0.88,
     flaggedMaxFraction: 0.1,
   },
-  visitsPerSet: { quick: 134, full: 80 } as Readonly<Record<VisitType, number>>,
+  visitsPerSet: { full: 80 } as Readonly<Record<VisitType, number>>,
 });
 
 const percent = (fraction: number, decimals = 1): string =>
@@ -279,32 +278,27 @@ function printRanges(): void {
 
   for (const range of ranges) {
     console.log(
-      `### ${range.name === "attentive" ? "Attentive_Range" : "Plausible_Range"}: ${String(rangeVisitCount[range.name])} visits per visit type, seeds ${String(rangeSeed.quick)} (quick) and ${String(rangeSeed.full)} (full)\n`,
+      `### ${range.name === "attentive" ? "Attentive_Range" : "Plausible_Range"}: ${String(rangeVisitCount[range.name])} visits per visit type, seed ${String(rangeSeed.full)}\n`,
     );
     const rows: string[][] = [];
     for (let index = 0; index <= candidateLimits.length; index += 1) {
-      const quick = of(range, "quick").rows[index];
       const full = of(range, "full").rows[index];
       rows.push([
-        limitLabel(quick.limitFraction),
-        percent(quick.visitsMarkedFraction),
+        limitLabel(full.limitFraction),
         percent(full.visitsMarkedFraction),
-        afw(quick),
         afw(full),
       ]);
     }
     table(
       [
         "Visit limit",
-        "Visits marked (quick)",
         "Visits marked (full)",
-        "Accurate / Flagged / Wrong (quick)",
         "Accurate / Flagged / Wrong (full)",
       ],
       rows,
     );
     console.log(
-      `A room marked by the per-room rule: ${percent(roomMarkedShare(of(range, "quick").visits))} of quick and ${percent(roomMarkedShare(of(range, "full").visits))} of full visits.\n`,
+      `A room marked by the per-room rule: ${percent(roomMarkedShare(of(range, "full").visits))} of full visits.\n`,
     );
     if (range.name === "plausible") {
       for (const visitType of visitTypes) {
@@ -384,7 +378,7 @@ function printListenerSets(): void {
       }
     }
     console.log(
-      `### ${group.name}: ${String(group.sets.length)} sets from fast-check seed ${String(group.seed)}, ${String(listenerSetMeasures.visitsPerSet.quick)} quick or ${String(listenerSetMeasures.visitsPerSet.full)} full visits per set; limit: ${group.limitText}\n`,
+      `### ${group.name}: ${String(group.sets.length)} sets from fast-check seed ${String(group.seed)}, ${String(listenerSetMeasures.visitsPerSet.full)} full visits per set; limit: ${group.limitText}\n`,
     );
     table(["Visit", "Visit limit", "Sets below the limit", "Lowest set"], rows);
   }

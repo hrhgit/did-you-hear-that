@@ -5,7 +5,6 @@ import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { createSeededRandom } from "../../src/config/seeded-random";
 import type { SoundId } from "../../src/config/sound-id";
 import { soundRulesConfig } from "../../src/config/sound-rules-config";
-import { decibelsToGain } from "../../src/audio/synth/decibels-to-gain";
 import { soundRenderers } from "../../src/audio/synth/sound-renderers";
 import type { BackendEvent } from "../../src/audio/output/audio-backend";
 import type { PlayRequest } from "../../src/audio/output/create-audio-output";
@@ -32,7 +31,7 @@ const { ghostSoundMaxDurationMs } = audioSafetyConfig;
 /** The rate used to build a buffer when the request's own rate is not supported. */
 const fallbackSampleRateHz = 44100;
 
-/** The longest buffer `preparePlayback` accepts at a rate. */
+/** The longest buffer the arbitraries draw at a rate: as long as the longest ghost sound. */
 export function longestSampleCount(sampleRateHz: number): number {
   return Math.floor((ghostSoundMaxDurationMs * sampleRateHz) / 1000);
 }
@@ -251,43 +250,6 @@ export const calibrationGainArbitrary: fc.Arbitrary<number> = fc.oneof(
   },
 );
 
-/** The previous gain on one ear, before it is turned into a number. */
-export type PreviousGainSpec =
-  | null
-  /** This many dB below the request's capped gain: positive is a rise, negative a fall. */
-  | { readonly kind: "relative"; readonly riseDb: number }
-  | { readonly kind: "absolute"; readonly gain: number };
-
-const previousGainSpecArbitrary: fc.Arbitrary<PreviousGainSpec> = fc.oneof(
-  fc.constant(null),
-  fc.record({
-    kind: fc.constant("relative" as const),
-    riseDb: fc.oneof(
-      fc.double({ min: -20, max: 30, noNaN: true }),
-      fc.constantFrom(
-        hearingMethodConfig.upwardStepDb,
-        hearingMethodConfig.upwardStepDb - 1e-9,
-        hearingMethodConfig.upwardStepDb + 1e-6,
-      ),
-    ),
-  }),
-  fc.record({
-    kind: fc.constant("absolute" as const),
-    gain: validCalibrationGainArbitrary,
-  }),
-);
-
-export type PreviousGainsSpec = null | Readonly<Record<Ear, PreviousGainSpec>>;
-
-export const previousGainsSpecArbitrary: fc.Arbitrary<PreviousGainsSpec> =
-  fc.oneof(
-    fc.constant(null),
-    fc.record({
-      left: previousGainSpecArbitrary,
-      right: previousGainSpecArbitrary,
-    }),
-  );
-
 export const earChoiceArbitrary: fc.Arbitrary<EarChoice> = fc.constantFrom(
   "left",
   "right",
@@ -312,7 +274,6 @@ export interface RequestSpec {
   readonly earChoice: EarChoice;
   readonly requestedLevelDb: number;
   readonly calibrationGain: number;
-  readonly previous: PreviousGainsSpec;
 }
 
 /** A request spec with every field drawn from the given arbitraries. */
@@ -332,7 +293,6 @@ export function requestSpecArbitrary(
     earChoice: options.earChoice ?? earChoiceArbitrary,
     requestedLevelDb: options.requestedLevelDb ?? levelArbitrary,
     calibrationGain: options.calibrationGain ?? calibrationGainArbitrary,
-    previous: previousGainsSpecArbitrary,
   });
 }
 
@@ -340,27 +300,7 @@ export function requestSpecArbitrary(
 export const anyRequestSpecArbitrary: fc.Arbitrary<RequestSpec> =
   requestSpecArbitrary({ buffer: wildBufferSpecArbitrary });
 
-function previousGain(
-  spec: PreviousGainSpec,
-  request: RequestSpec,
-): number | null {
-  if (spec === null) {
-    return null;
-  }
-  if (spec.kind === "absolute") {
-    return spec.gain;
-  }
-  const cappedLevelDb = Math.min(
-    request.requestedLevelDb,
-    capRelativeToAnchorDb,
-  );
-  return request.calibrationGain * decibelsToGain(cappedLevelDb - spec.riseDb);
-}
-
-/**
- * Builds the request a spec describes. A relative previous gain that comes out as zero, not
- * finite or negative (because the level or the gain itself is not valid) is passed on as it is.
- */
+/** Builds the request a spec describes. */
 export function materializeRequest(spec: RequestSpec): PlaybackRequest {
   return {
     samples: materializeBuffer(spec.buffer, spec.sampleRateHz),
@@ -369,13 +309,6 @@ export function materializeRequest(spec: RequestSpec): PlaybackRequest {
     earChoice: spec.earChoice,
     requestedLevelDb: spec.requestedLevelDb,
     calibrationGain: spec.calibrationGain,
-    previousAppliedGain:
-      spec.previous === null
-        ? null
-        : {
-            left: previousGain(spec.previous.left, spec),
-            right: previousGain(spec.previous.right, spec),
-          },
   };
 }
 

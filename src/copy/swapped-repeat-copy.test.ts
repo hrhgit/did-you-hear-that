@@ -87,7 +87,7 @@ describe("the swapped repeat's fixed copy", () => {
       stopButton: "Stop the sounds",
       instructionLines: [
         "Take the headphones off and put them on the other way round: the left earpiece on your right ear, and the right earpiece on your left ear.",
-        "Leave your system volume where it is now. The house keeps every sound below its limit only if you do not turn the volume up.",
+        "From here on, do not turn the volume up.",
         "When they are on, the house plays a hiss in one earpiece, so that you can check the swap.",
       ],
       againLine:
@@ -138,7 +138,7 @@ describe("the swapped repeat's fixed copy", () => {
       },
       turnBackLine:
         "If the headphones are still swapped, turn them back now, so that the left earpiece is on your left ear.",
-      comparisonHeading: "This room both ways round",
+      comparisonHeading: "Both ways round",
       runLabels: {
         asMarked: "Headphones as marked",
         swapped: "Headphones swapped",
@@ -220,7 +220,7 @@ const professionalSentence = limitsStatement.sentences[3];
 describe("the swapped repeat's lines", () => {
   it("gives the ready lines of the design", () => {
     expect(readyLines("stairs", 4000)).toEqual([
-      "Stairs, 4 kHz. The room runs again just as it did before.",
+      "Scritch, 4 kHz. The room runs again just as it did before.",
       "Say on which side you hear each sound, as you did the first time. The side is your own ear, whichever earpiece is on it.",
     ]);
     expect(Object.isFrozen(readyLines("stairs", 4000))).toBe(true);
@@ -273,7 +273,7 @@ describe("the swapped repeat's lines", () => {
         unclearReason: null,
       }),
     ).toBe(
-      "Stairs, 4 kHz. Headphones as marked: left ear with the left earpiece, the quietest sound you caught here was 40 dB quieter than your calibration; right ear with the right earpiece, the quietest sound you caught here was 20 dB quieter than your calibration; 20 dB quieter on the left. Headphones swapped: left ear with the right earpiece, the quietest sound you caught here was 40 dB quieter than your calibration; right ear with the left earpiece, the quietest sound you caught here was 20 dB quieter than your calibration; 20 dB quieter on the left. " +
+      "Scritch, 4 kHz. Headphones as marked: left ear with the left earpiece, the estimated level here is 40 dB quieter than your calibration; right ear with the right earpiece, the estimated level here is 20 dB quieter than your calibration; 20 dB quieter on the left. Headphones swapped: left ear with the right earpiece, the estimated level here is 40 dB quieter than your calibration; right ear with the left earpiece, the estimated level here is 20 dB quieter than your calibration; 20 dB quieter on the left. " +
         outcomeLines("followsEar", null).join(" "),
     );
   });

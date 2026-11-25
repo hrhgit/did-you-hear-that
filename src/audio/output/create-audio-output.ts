@@ -5,6 +5,7 @@ import type { RandomSource } from "../../config/seeded-random";
 import type { SoundId } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import type { Timer, TimerHandle } from "../../config/timer";
+import { renderBeatBar } from "../synth/beat-bar";
 import { decibelsToGain } from "../synth/decibels-to-gain";
 import type {
   AudioBackend,
@@ -141,10 +142,36 @@ export interface PlayRequest {
   readonly levelDb: number;
   readonly purpose: Extract<
     Purpose,
-    "trial" | "practice" | "replay" | "listening"
+    | "trial"
+    | "practice"
+    | "replay"
+    | "listening"
+    | "reminder"
+    | "chime"
+    | "miss"
   >;
   readonly random: RandomSource;
+  /**
+   * The audio clock time the sound should start at, for a sound that lands on the room's beat
+   * (the rhythm game, 2026-11-18). Never earlier than the scheduling lead allows: a time already
+   * too close is moved to the earliest start. Left out, the sound starts as soon as it can.
+   */
+  readonly startAtMs?: number;
 }
+
+/** What `startBeat` returns. Times are on the audio clock. */
+export type BeatOutcome =
+  | {
+      readonly kind: "refused";
+      readonly reason: "notRunning" | "notCalibrated" | "unsupported";
+    }
+  | {
+      readonly kind: "started";
+      /** When the first beat of the first bar sounds. */
+      readonly startMs: number;
+      readonly beatMs: number;
+      readonly beatsPerBar: number;
+    };
 
 /** The Output_Shell (design.md, "The output shell"). */
 export interface AudioOutput {
@@ -169,8 +196,37 @@ export interface AudioOutput {
   rangeReport(): RangeReport | null;
   playHeadphoneCheck(random: RandomSource): PlayOutcome;
 
-  beginRoom(): void;
+  /**
+   * Marks the start of a room. It began a span of the rise limit (audio-safety rule 4) until the
+   * owner dropped that rule on 2026-11-17, and now does nothing; the options are kept so that
+   * callers need not change.
+   */
+  beginRoom(options?: BeginRoomOptions): void;
   play(request: PlayRequest): PlayOutcome;
+  /**
+   * Fades the sound under way to exact zero over the stop fade, without stopping the output and
+   * without telling any stop listener, so the next sound may start once the fade has ended. Does
+   * nothing while no sound plays, while the calibration music plays, or when the output is not
+   * running. The room uses it to cut a caught sound short (the game layer, 2026-11-17).
+   */
+  fadeOutSound(): void;
+  /**
+   * Starts the room's beat in both ears at `levelDb` relative to the anchor, looping until
+   * `stopBeat` or any stop (the rhythm game, 2026-11-18). The beat never makes another sound
+   * `busy`, and `fadeOutSound` leaves it going. A beat already going is replaced.
+   */
+  startBeat(request: {
+    readonly levelDb: number;
+    readonly beatMs: number;
+    readonly beatsPerBar: number;
+    /**
+     * How far under its level the beat sinks while a sound plays, so that the sound has the
+     * room to itself. Absent: the beat plays on at its level under every sound.
+     */
+    readonly duckDb?: number;
+  }): BeatOutcome;
+  /** Fades the beat out. Does nothing while no beat plays. */
+  stopBeat(): void;
 
   clampLog(): readonly ClampLogEntry[];
   timestampPair(): TimestampPair | null;
@@ -195,10 +251,11 @@ export interface CalibrationMusicOutput {
   /** The Control_Top of the sound in use: the music's once it is `music`, the hiss's otherwise. */
   calibrationControlTopDb(): number;
   /**
-   * Starts the music looping in both ears at the bottom of the control, fading in from exact
-   * zero. While it plays, every other sound is refused `busy`.
+   * Starts the music looping in both ears at `startSettingDb` (the bottom of the control when none
+   * is given), fading in from exact zero. The setting is held to the control and rounded down to
+   * its grid. While it plays, every other sound is refused `busy`.
    */
-  startCalibrationMusic(): CalibrationMusicOutcome;
+  startCalibrationMusic(startSettingDb?: number): CalibrationMusicOutcome;
   /** Where the music's level moves to, a step at a time. NaN changes nothing. */
   setCalibrationMusicTarget(settingDb: number): void;
   /** The Played_Setting the music has reached, or null when the music is not playing. */
@@ -212,6 +269,21 @@ export interface CalibrationMusicOutput {
   stopCalibrationMusic(): void;
 }
 
+/** The public visit uses a fixed reference level and plays the music as its theme. */
+export interface OpeningAudioOutput {
+  usePresetLevel(): Extract<KeepOutcome, { kind: "kept" }>;
+  startTheme(options: { readonly repeat: boolean }): void;
+  stopTheme(): void;
+}
+
+/** What `beginRoom` takes. Nothing of it has an effect since the rise limit was dropped. */
+export interface BeginRoomOptions {
+  readonly riseLimitPer?: RiseLimitScope;
+}
+
+/** See `BeginRoomOptions`. */
+export type RiseLimitScope = "ear" | "sound";
+
 interface SoundToSchedule {
   readonly soundId: SoundId;
   readonly earChoice: EarChoice;
@@ -219,6 +291,7 @@ interface SoundToSchedule {
   readonly calibrationGain: number;
   readonly purpose: Purpose;
   readonly random: RandomSource;
+  readonly startAtMs?: number;
 }
 
 type ScheduleResult =
@@ -273,7 +346,7 @@ const refused = <Reason extends string>(
 export function createAudioOutput(options: {
   backend: AudioBackend;
   timer: Timer;
-}): AudioOutput & CalibrationMusicOutput {
+}): AudioOutput & CalibrationMusicOutput & OpeningAudioOutput {
   const { backend, timer } = options;
   const {
     scheduleLeadMs,
@@ -294,8 +367,9 @@ export function createAudioOutput(options: {
   let keptSettingDb: number | null = null;
   let calibrating = false;
   let lastRepeatSettingDb: number | null = null;
-  let previousGain: Record<Ear, number | null> = { left: null, right: null };
   let busyEndMs: number | null = null;
+  let beatPlaying = false;
+  let beatDuckGain: number | null = null;
   const clampEntries: ClampLogEntry[] = [];
   const stopListeners = new Set<(event: StopEvent) => void>();
   const unsupportedListeners = new Set<(event: UnsupportedEvent) => void>();
@@ -312,6 +386,7 @@ export function createAudioOutput(options: {
   const soundListeners = new Set<(sound: CalibrationSound) => void>();
   const stepListeners = new Set<(settingDb: number) => void>();
   let musicPlaying = false;
+  let themeEndMs: number | null = null;
   let musicTargetDb = calibrationSettingMinDb;
   /** The setting the last level ramp ends at, or the start's while no ramp has run. */
   let musicPlayedDb = calibrationSettingMinDb;
@@ -357,7 +432,6 @@ export function createAudioOutput(options: {
     keptSettingDb = null;
     lastRepeatSettingDb = null;
     lastMusicSettingDb = null;
-    previousGain = { left: null, right: null };
   };
 
   const setSound = (next: CalibrationSound): void => {
@@ -488,6 +562,25 @@ export function createAudioOutput(options: {
   const musicTopDb = (): number =>
     sound === "music" && music !== null ? music.controlTopDb : topSettingDb;
 
+  const startMusicLoop = (
+    ready: ReadyMusic,
+    startMs: number,
+    settingDb: number,
+    repeat = true,
+  ): void => {
+    backend.startLoop(
+      {
+        left: ready.samples,
+        right: ready.samples,
+        sampleRateHz: ready.sampleRateHz,
+      },
+      startMs,
+      musicLevelGain(ready, settingDb),
+      outputFadeMs,
+      repeat,
+    );
+  };
+
   /** The Played_Setting reached: during a level ramp, the lower of its two ends. */
   const reachedMusicSettingDb = (): number =>
     musicRampEndMs !== null && backend.currentTimeMs() < musicRampEndMs
@@ -586,6 +679,7 @@ export function createAudioOutput(options: {
   ): ActivateResult => {
     cancelPendingSuspend();
     endMusic();
+    themeEndMs = null;
     forgetCalibration();
     calibrating = false;
     rateHz = null;
@@ -604,9 +698,14 @@ export function createAudioOutput(options: {
     if (state.kind === "inactive" || state.kind === "unsupported") {
       return;
     }
-    // The fade stops the music's loop too (R5.6).
+    // The fade stops the music's loop too (R5.6). The beat has a path of its own.
     backend.fadeToSilence(stopFadeMs);
+    if (beatPlaying) {
+      backend.stopBeat(stopFadeMs);
+      beatPlaying = false;
+    }
     endMusic();
+    themeEndMs = null;
     if (busyEndMs !== null) {
       busyEndMs = Math.min(busyEndMs, backend.currentTimeMs() + stopFadeMs);
     }
@@ -710,15 +809,21 @@ export function createAudioOutput(options: {
     return null;
   };
 
+  const soundBusyAt = (startMs: number): boolean =>
+    (busyEndMs !== null && startMs < busyEndMs) ||
+    (themeEndMs !== null && startMs < themeEndMs);
+
   /** Steps 2 to 7 of "Playing a sound", shared by every kind of sound. */
   const schedule = (sound: SoundToSchedule): ScheduleResult => {
     const sampleRateHz = rateHz;
     if (sampleRateHz === null) {
       return refused("notRunning");
     }
+    const wantedStartMs = sound.startAtMs ?? Number.NEGATIVE_INFINITY;
     if (
-      busyEndMs !== null &&
-      backend.currentTimeMs() + scheduleLeadMs < busyEndMs
+      soundBusyAt(
+        Math.max(backend.currentTimeMs() + scheduleLeadMs, wantedStartMs),
+      )
     ) {
       return refused("busy");
     }
@@ -737,28 +842,23 @@ export function createAudioOutput(options: {
       earChoice: sound.earChoice,
       requestedLevelDb: sound.levelDb,
       calibrationGain: sound.calibrationGain,
-      // A replay, and a calibration repeat, which follows the control (the owner, 2026-11-16),
-      // are not held to the rise limit.
-      previousAppliedGain:
-        sound.purpose === "replay" || sound.purpose === "calibration"
-          ? null
-          : { ...previousGain },
     });
     if (prepared.kind === "refused") {
       return refused(prepared.reason);
     }
     // Read again: rendering took time, and a later start can only end the busy interval later.
-    const startMs = backend.currentTimeMs() + scheduleLeadMs;
+    const startMs = Math.max(
+      backend.currentTimeMs() + scheduleLeadMs,
+      wantedStartMs,
+    );
     const endMs = startMs + (prepared.left.length / sampleRateHz) * 1000;
     backend.schedule(
       { left: prepared.left, right: prepared.right, sampleRateHz },
       startMs,
     );
     busyEndMs = endMs;
-    const earsPlayed: readonly Ear[] =
-      sound.earChoice === "both" ? ["left", "right"] : [sound.earChoice];
-    for (const ear of earsPlayed) {
-      previousGain[ear] = prepared.appliedGain;
+    if (beatPlaying && beatDuckGain !== null) {
+      backend.duckBeat(startMs, endMs, beatDuckGain);
     }
     if (prepared.clampLimit !== null) {
       clampEntries.push(
@@ -783,7 +883,21 @@ export function createAudioOutput(options: {
     });
   };
 
-  const output: AudioOutput & CalibrationMusicOutput = {
+  const keepSetting = (
+    settingDb: number,
+  ): Extract<KeepOutcome, { kind: "kept" }> => {
+    keptSettingDb = settingDb;
+    calibrating = false;
+    lastRepeatSettingDb = null;
+    lastMusicSettingDb = null;
+    return Object.freeze({
+      kind: "kept",
+      settingDb,
+      rangeReport: rangeReport(decibelsToGain(settingDb)),
+    });
+  };
+
+  const output: AudioOutput & CalibrationMusicOutput & OpeningAudioOutput = {
     state: () => state,
     activate,
     stopAll: () => stop("control"),
@@ -869,15 +983,49 @@ export function createAudioOutput(options: {
         endMusic();
         busyEndMs = backend.currentTimeMs() + stopFadeMs;
       }
-      keptSettingDb = settingDb;
-      calibrating = false;
-      lastRepeatSettingDb = null;
-      lastMusicSettingDb = null;
-      return Object.freeze({
-        kind: "kept",
-        settingDb: keptSettingDb,
-        rangeReport: rangeReport(decibelsToGain(keptSettingDb)),
-      });
+      return keepSetting(settingDb);
+    },
+
+    usePresetLevel: () => keepSetting(audioOutputConfig.calibrationReferenceDb),
+
+    startTheme({ repeat }) {
+      if (
+        state.kind !== "running" ||
+        music === null ||
+        music.sampleRateHz !== rateHz ||
+        themeEndMs !== null
+      ) {
+        return;
+      }
+      // Let the final game sound finish before the theme starts.
+      const startMs = Math.max(
+        backend.currentTimeMs() + scheduleLeadMs,
+        busyEndMs ?? 0,
+      );
+      if (!Number.isFinite(startMs)) {
+        return;
+      }
+      startMusicLoop(
+        music,
+        startMs,
+        audioOutputConfig.calibrationReferenceDb,
+        repeat,
+      );
+      themeEndMs = repeat
+        ? Number.POSITIVE_INFINITY
+        : startMs + (music.samples.length / music.sampleRateHz) * 1000;
+    },
+
+    stopTheme() {
+      if (themeEndMs === null) {
+        return;
+      }
+      backend.stopLoop(stopFadeMs);
+      themeEndMs = null;
+      busyEndMs = Math.max(
+        busyEndMs ?? 0,
+        backend.currentTimeMs() + stopFadeMs,
+      );
     },
 
     rangeReport: () =>
@@ -914,7 +1062,9 @@ export function createAudioOutput(options: {
 
     calibrationControlTopDb: musicTopDb,
 
-    startCalibrationMusic(): CalibrationMusicOutcome {
+    startCalibrationMusic(
+      startSettingDb: number = calibrationSettingMinDb,
+    ): CalibrationMusicOutcome {
       const stateRefusal = refusalForState();
       if (stateRefusal !== null) {
         return refused(
@@ -935,23 +1085,18 @@ export function createAudioOutput(options: {
       }
       if (
         musicPlaying ||
-        (busyEndMs !== null &&
-          backend.currentTimeMs() + scheduleLeadMs < busyEndMs)
+        soundBusyAt(backend.currentTimeMs() + scheduleLeadMs)
       ) {
         return refused("busy");
       }
       const startMs = backend.currentTimeMs() + scheduleLeadMs;
-      const settingDb = calibrationSettingMinDb;
-      backend.startLoop(
-        {
-          left: ready.samples,
-          right: ready.samples,
-          sampleRateHz: ready.sampleRateHz,
-        },
-        startMs,
-        musicLevelGain(ready, settingDb),
-        outputFadeMs,
+      const settingDb = onGridDb(
+        Math.min(
+          Math.max(startSettingDb, calibrationSettingMinDb),
+          musicTopDb(),
+        ),
       );
+      startMusicLoop(ready, startMs, settingDb);
       musicPlaying = true;
       musicTargetDb = settingDb;
       musicPlayedDb = settingDb;
@@ -997,7 +1142,19 @@ export function createAudioOutput(options: {
     },
 
     beginRoom() {
-      previousGain = { left: null, right: null };
+      // Nothing to begin since the rise limit was dropped (the owner, 2026-11-17).
+    },
+
+    fadeOutSound() {
+      if (state.kind !== "running" || musicPlaying || busyEndMs === null) {
+        return;
+      }
+      const nowMs = backend.currentTimeMs();
+      if (busyEndMs <= nowMs) {
+        return;
+      }
+      backend.fadeToSilence(stopFadeMs);
+      busyEndMs = Math.min(busyEndMs, nowMs + stopFadeMs);
     },
 
     play(request): PlayOutcome {
@@ -1015,7 +1172,58 @@ export function createAudioOutput(options: {
         calibrationGain: decibelsToGain(keptSettingDb),
         purpose: request.purpose,
         random: request.random,
+        ...(request.startAtMs === undefined
+          ? {}
+          : { startAtMs: request.startAtMs }),
       });
+    },
+
+    startBeat(request): BeatOutcome {
+      const stateRefusal = refusalForState();
+      if (stateRefusal !== null) {
+        return Object.freeze({
+          kind: "refused",
+          reason: stateRefusal === "unsupported" ? "unsupported" : "notRunning",
+        } as const);
+      }
+      if (keptSettingDb === null || rateHz === null) {
+        return refused("notCalibrated");
+      }
+      const bar = renderBeatBar(rateHz, request.beatMs, request.beatsPerBar);
+      let peak = 0;
+      for (const sample of bar) {
+        peak = Math.max(peak, Math.abs(sample));
+      }
+      // Held under the ceiling like every other sound.
+      const wantedGain =
+        decibelsToGain(keptSettingDb) * decibelsToGain(request.levelDb);
+      const levelGain =
+        peak > 0
+          ? Math.min(wantedGain, audioSafetyConfig.ceilingFraction / peak)
+          : wantedGain;
+      const startMs = backend.currentTimeMs() + scheduleLeadMs;
+      backend.startBeat(
+        { left: bar, right: bar, sampleRateHz: rateHz },
+        startMs,
+        levelGain,
+      );
+      beatPlaying = true;
+      beatDuckGain =
+        request.duckDb === undefined ? null : decibelsToGain(request.duckDb);
+      return Object.freeze({
+        kind: "started",
+        startMs,
+        beatMs: (Math.round((request.beatMs * rateHz) / 1000) / rateHz) * 1000,
+        beatsPerBar: request.beatsPerBar,
+      });
+    },
+
+    stopBeat() {
+      if (!beatPlaying) {
+        return;
+      }
+      beatPlaying = false;
+      backend.stopBeat(stopFadeMs);
     },
 
     clampLog: () => Object.freeze([...clampEntries]),

@@ -22,16 +22,19 @@ const address = `http://localhost:${devServer.port}${devServer.listeningPagePath
 const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 
 const { ceilingFraction } = audioSafetyConfig;
-const {
-  calibrationSettingMinDb,
-  calibrationSettingKeepMinDb,
-  outputFadeMs,
-  stopFadeMs,
-} = audioOutputConfig;
+const { calibrationSettingKeepMinDb, outputFadeMs, stopFadeMs } =
+  audioOutputConfig;
 const { referenceRmsFraction } = soundRulesConfig;
 
 /** The level tolerance of the ghost-sounds spec, the one R21.2 asks for. */
 const rmsToleranceDb = 0.01;
+
+/**
+ * The setting the calibration music starts at (R19.5): the middle of its control, from −40 dB to
+ * its top of −5 dB (calibration-music-top.test.ts), which is −22.5 dB, rounded down to the 1 dB
+ * grid: −23 dB (calibration-target-setting.ts).
+ */
+const calibrationMusicStartDb = -23;
 
 // The headless browser is muted. The checks read what the page hands to Web Audio and what an
 // offline render of the output graph produces, which muting does not change (D49).
@@ -319,20 +322,28 @@ async function pressStart(page: Page): Promise<void> {
   await expect(part(page, "sample-rate")).toBeVisible();
 }
 
-/** Calibrates up to the Keep_Minimum with the Louder button and keeps it. */
+/**
+ * Calibrates down to the Keep_Minimum with the Quieter button and keeps it. The music starts in the
+ * middle of its control, −23 dB, so this steps down 4 dB. Each press steps down from the setting
+ * last played, so the test waits for each step to play before it presses again.
+ */
 async function calibrateAndKeep(page: Page): Promise<void> {
   await part(page, "calibration-start").click();
-  for (
-    let press = 0;
-    press < calibrationSettingKeepMinDb - calibrationSettingMinDb;
-    press += 1
-  ) {
-    await part(page, "louder").click();
-  }
   await expect(part(page, "played-setting")).toHaveText(
-    calibrationSettingLine(calibrationSettingKeepMinDb),
+    calibrationSettingLine(calibrationMusicStartDb),
     { timeout: 20_000 },
   );
+  for (
+    let setting = calibrationMusicStartDb - 1;
+    setting >= calibrationSettingKeepMinDb;
+    setting -= 1
+  ) {
+    await part(page, "quieter").click();
+    await expect(part(page, "played-setting")).toHaveText(
+      calibrationSettingLine(setting),
+      { timeout: 20_000 },
+    );
+  }
   await part(page, "keep").click();
   await expect(part(page, "calibration-line")).toHaveText(
     calibrationCopy.keptLine,
@@ -386,7 +397,7 @@ test.describe(`listening page on the development server (${address})`, () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("hands Web Audio only buffers within the ceiling, the first the calibration music at the bottom of the control, one-ear sounds with an exactly silent other channel (R21.2)", async ({
+  test("hands Web Audio only buffers within the ceiling, the first the calibration music in the middle of the control, one-ear sounds with an exactly silent other channel (R21.2)", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -430,13 +441,13 @@ test.describe(`listening page on the development server (${address})`, () => {
           .contexts[0]?.sampleRate,
     );
 
-    // The first buffer is the calibration music's loop, in both ears, starting at the bottom of
+    // The first buffer is the calibration music's loop, in both ears, starting in the middle of
     // the control: the music is handed over as it is, and its level gain brings its RMS there
     // (audible-start Q34, "Playing").
     const first = buffers[0];
     expect(first?.channelsEqual).toBe(true);
     expect(counts.loops).toHaveLength(1);
-    expectLoopAtBottom(buffers, counts.loops[0]);
+    expectLoopAtStart(buffers, counts.loops[0]);
 
     // No sample that reaches the ears is beyond the ceiling; every buffer is at the context's
     // rate. The music's loop is handed over as it was decoded and its level gain sets what plays,
@@ -654,11 +665,11 @@ test.describe(`listening page on the development server (${address})`, () => {
 
     await part(page, "calibration-start").click();
     await waitForStarts(page, 2);
-    // The calibration starts again at the bottom of the control.
+    // The calibration starts again in the middle of the control.
     const buffers = await bufferSummaries(page);
     const { loops } = await probeCounts(page);
     expect(loops).toHaveLength(2);
-    expectLoopAtBottom(buffers, loops[1]);
+    expectLoopAtStart(buffers, loops[1]);
     expect(pageErrors).toEqual([]);
   });
 
@@ -719,11 +730,11 @@ test.describe(`listening page on the development server (${address})`, () => {
 });
 
 /**
- * Checks that a loop of the calibration music starts at the bottom of the control: its buffer
- * holds the music in both ears, and its RMS times its level gain is the RMS of the bottom setting,
- * to the tolerance of R21.2.
+ * Checks that a loop of the calibration music starts at its middle setting, −23 dB: its buffer
+ * holds the music in both ears, and its RMS times its level gain is the RMS of that setting, to the
+ * tolerance of R21.2.
  */
-function expectLoopAtBottom(
+function expectLoopAtStart(
   buffers: readonly BufferSummary[],
   loop: { bufferIndex: number; levelGain: number } | undefined,
 ): void {
@@ -733,7 +744,7 @@ function expectLoopAtBottom(
   const levelGain = loop?.levelGain ?? Number.NaN;
   expect(levelGain).toBeGreaterThan(0);
   const expectedRms =
-    referenceRmsFraction * 10 ** (calibrationSettingMinDb / 20);
+    referenceRmsFraction * 10 ** (calibrationMusicStartDb / 20);
   for (const channel of buffer?.channels ?? []) {
     expect(
       rmsDifferenceDb((channel?.rms ?? 0) * levelGain, expectedRms),

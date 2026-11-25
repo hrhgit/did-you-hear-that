@@ -39,8 +39,7 @@ const monthNames: readonly string[] = Object.freeze([
 ]);
 
 const visitTypeNames: Readonly<Record<VisitType, string>> = Object.freeze({
-  quick: "Short visit",
-  full: "Long visit",
+  full: "Full visit",
 });
 
 const saveRefusedLines: Readonly<

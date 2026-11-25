@@ -272,8 +272,8 @@ export const comparisonAllowedForms: readonly RegExp[] = Object.freeze([
   /\d+ dB quieter on the left/g,
   /\d+ dB quieter on the right/g,
   /more than \d+(?:\.\d+)? percent of the times I made no sound/g,
-  /The quietest sounds you caught/g,
-  /The quietest sound you caught here/g,
+  /Your listening estimates/g,
+  /The estimated level here/g,
   /the loudest sound the house may play here/g,
   /as many as the house keeps/g,
 ]);

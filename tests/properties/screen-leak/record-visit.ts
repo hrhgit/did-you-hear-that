@@ -26,14 +26,20 @@ export interface RecordedVisit {
   readonly run: VisitorRun;
 }
 
-/** Plays one visit of `script` on a flow seeded with `flowSeed` and records the screen. */
+/**
+ * Plays one visit of `script` on a flow seeded with `flowSeed` and records the screen.
+ * `roomsTogetherMaxCount` is how many rooms' searches take turns in one room run (one-room
+ * design.md, D1): 1 for the rooms one after another, the shipped count for the one room.
+ */
 export async function recordVisit(
   flowSeed: number,
   script: VisitorScript,
+  roomsTogetherMaxCount: number,
 ): Promise<RecordedVisit> {
   const harness = createVisitHarness({
     seed: flowSeed,
     performanceOffsetMs: 0,
+    roomsTogetherMaxCount,
   });
   const recorder = createScreenRecorder(() => harness.now());
   // The same three things the page's entry does, in the same order: events, then snapshots,
@@ -50,7 +56,9 @@ export async function recordVisit(
     // A practice sound is not a trial: the page may show that it is playing, since nothing of it
     // counts (audible-start, light plan). Its side is still never shown, which `screenOfSnapshot`
     // keeps to.
-    if (trial.practice === true) {
+    // A reminder after a long quiet (the game layer, 2026-11-17) is no trial either: what it
+    // draws at its decision is the visitor's own answer to a sound they heard.
+    if (trial.practice === true || trial.reminder === true) {
       return;
     }
     recorder.presented({
@@ -136,7 +144,7 @@ export function visitorScriptOf(
       }
     : {};
   return {
-    visitType: "quick",
+    visitType: "full",
     calibrationTargetDb,
     firstHeadphoneCheckAnswer: "left",
     listener: {
@@ -195,11 +203,15 @@ function swappedRepeatOf(
   };
 }
 
-/** Plays `count` visits, numbered from `firstSeed`, and joins their records into one. */
+/**
+ * Plays `count` visits, numbered from `firstSeed`, with `roomsTogetherMaxCount` rooms taking turns
+ * in one room run, and gives their records.
+ */
 export async function recordVisits(
   firstSeed: number,
   count: number,
   options: VisitorScriptOptions,
+  roomsTogetherMaxCount: number,
 ): Promise<ScreenRecord[]> {
   const records: ScreenRecord[] = [];
   for (let index = 0; index < count; index += 1) {
@@ -207,6 +219,7 @@ export async function recordVisits(
     const visit = await recordVisit(
       seed,
       visitorScriptOf(seed + 1_000_000, options),
+      roomsTogetherMaxCount,
     );
     records.push(visit.record);
   }

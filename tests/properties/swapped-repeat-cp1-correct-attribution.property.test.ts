@@ -51,7 +51,7 @@ const stepDb = hearingMethodConfig.upwardStepDb;
 const limitDb = hearingMethodConfig.swappedRepeatDifferenceDb;
 
 /** The floor of every case: the first room of a quick visit. */
-const room = visitRooms("quick")[0]!;
+const room = visitRooms("full")[0]!;
 
 /** Plays one run of the floor with the earpieces in this arrangement, until the search finishes. */
 function playRun(
@@ -116,7 +116,7 @@ const loggedResult = (result: RoomResult): LoggedRoomResult => ({
 function firstRunSummary(result: RoomResult, searchCapDb: number): RoomSummary {
   const log: VisitLog = {
     formatVersion: 1,
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 0,
     rooms: [room],
     calibrations: [],

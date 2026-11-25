@@ -10,7 +10,6 @@ export const swappedRepeatCopy = Object.freeze({
   stopButton: "Stop the sounds",
   instructionLines: Object.freeze([
     "Take the headphones off and put them on the other way round: the left earpiece on your right ear, and the right earpiece on your left ear.",
-    // "Leave your system volume where it is now. The house keeps every sound below its limit only if you do not turn the volume up."
     calibrationCopy.keptLine,
     "When they are on, the house plays a hiss in one earpiece, so that you can check the swap.",
   ]),
@@ -60,7 +59,7 @@ export const swappedRepeatCopy = Object.freeze({
   }),
   turnBackLine:
     "If the headphones are still swapped, turn them back now, so that the left earpiece is on your left ear.",
-  comparisonHeading: "This room both ways round",
+  comparisonHeading: "Both ways round",
   /** The keys are the arrangements. */
   runLabels: Object.freeze({
     asMarked: "Headphones as marked",

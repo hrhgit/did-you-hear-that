@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { oneRoomCopy } from "../../src/copy/creature-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { roomCopy } from "../../src/copy/room-copy";
@@ -11,8 +11,10 @@ import type {
 } from "../../src/session/visit-flow-types";
 import type { ReplaySheet } from "../../src/ui/visit/start-replay-sheet";
 import { devServer } from "./dev-server";
+import { expectDrawn, expectFeatured, expectRingsFrom } from "./scene-record";
 import {
   expectNoHorizontalScroll,
+  expectNoSeriousAccessibilityProblem,
   openPage,
   readSoundSources,
 } from "./page-checks";
@@ -44,34 +46,6 @@ async function show(page: Page, snapshot: VisitSnapshot): Promise<void> {
 const requests = (page: Page): Promise<string[]> =>
   page.evaluate(() => (window as unknown as SheetWindow).replaySheet.requests);
 
-/** Waits until every fade has ended. */
-async function settle(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        .map((animation) => animation.finished.catch(() => undefined)),
-    ),
-  );
-}
-
-async function expectNoSeriousAccessibilityProblem(page: Page): Promise<void> {
-  await settle(page);
-  const results = await new AxeBuilder({ page }).analyze();
-  const serious = results.violations.filter(
-    (violation) =>
-      violation.impact === "serious" || violation.impact === "critical",
-  );
-  expect(
-    serious.map(
-      (violation) =>
-        `${violation.id}: ${violation.help} (${violation.nodes
-          .map((node) => node.target.join(" "))
-          .join(", ")})`,
-    ),
-  ).toEqual([]);
-}
-
 const button = (page: Page, name: string): Locator =>
   page.getByRole("button", { name, exact: true });
 const sheet = (page: Page): Locator => page.locator(".visit-sheet-swap");
@@ -95,7 +69,7 @@ async function expectFrame(page: Page): Promise<void> {
     page.getByRole("heading", { name: swappedRepeatCopy.heading, level: 1 }),
   ).toBeVisible();
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText(
-    "Stairs",
+    "Scritch",
   );
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText("4 kHz");
   await expect(sheet(page).locator(".visit-swap-floor")).toContainText(
@@ -253,7 +227,7 @@ test.describe("the swapped repeat of a floor", () => {
     expect(record.otherOriginRequests).toEqual([]);
   });
 
-  test("leads into the room, which is lit, answered and paused like every other room", async ({
+  test("leads into the room, which is lit, answered and paused like the one room of the visit", async ({
     page,
   }) => {
     const record = await openPage(page, address);
@@ -272,16 +246,24 @@ test.describe("the swapped repeat of a floor", () => {
     await button(page, swappedRepeatCopy.startButton).click();
     expect(await requests(page)).toEqual(["startSwappedRoom"]);
 
-    // Inside the room the sheet is gone and the house is in full view.
+    // Inside the room the sheet is gone and the room is in full view. The bar names the floor
+    // and its pitch. Nothing is scored here, so the room shows no score, and it has no cards along its foot. Nobody is in a doorway.
     await show(page, moments.room);
     await expect(sheet(page)).toBeHidden();
     await expect(page.locator("main")).toHaveAttribute("data-house", "full");
-    await expect(page.locator(".visit-room-name")).toHaveText("Stairs");
+    await expect(
+      page.getByRole("img", { name: oneRoomCopy.sceneLabel }),
+    ).toBeVisible();
+    await expect(page.locator(".visit-room-name")).toHaveText("Scritch");
     await expect(page.locator(".visit-room-progress")).toHaveText("4 kHz");
-    await expect(page.locator(".house-room[data-state='lit']")).toHaveAttribute(
-      "data-room",
-      "stairs",
-    );
+    await expect(page.locator(".rhythm-hud")).toBeHidden();
+    await expect(page.locator("main")).toHaveAttribute("data-shelf", "none");
+    await expect(
+      page.getByRole("list", { name: oneRoomCopy.shelfLabel }),
+    ).toBeHidden();
+    await expectFeatured(page, null);
+    await expectDrawn(page, "none");
+    await expectRingsFrom(page, null);
     await expect(stopButton(page)).toBeVisible();
     await expect(button(page, swappedRepeatCopy.pauseButton)).toBeVisible();
     for (const half of await page.locator(".visit-answer").all()) {
@@ -309,6 +291,10 @@ test.describe("the swapped repeat of a floor", () => {
     await expect(page.locator(".visit-caption")).toHaveText(
       "You caught it on your left, through the right earpiece.",
     );
+    // The creature of the floor shows in the doorway of the ear that heard it, with rings, and
+    // nothing shows at the other side.
+    await expectDrawn(page, "caught", "left", "stairs");
+    await expectRingsFrom(page, "left");
 
     await button(page, swappedRepeatCopy.pauseButton).click();
     await stopButton(page).click();

@@ -16,7 +16,7 @@ function fields(
     savedVisitId,
     savedAtEpochMs: 1795180800000,
     savedOnLocalDate: "2026-11-20",
-    visitType: "quick",
+    visitType: "full",
     headphoneName: "White earbuds",
     payloadJson: `{"payloadOf":"${savedVisitId}"}`,
     ...change,
@@ -405,6 +405,41 @@ describe("createVisitStore", () => {
         );
       },
     );
+
+    it("reads an entry saved as the dropped quick visit as a full visit, by its stored checksum", () => {
+      const stored = {
+        ...first,
+        visitType: "quick",
+      } as unknown as StoreEntryFields;
+      const { store } = storeOver(valueText([entry(stored), entry(second)]));
+      expect(store.read()).toEqual({
+        status: "ready",
+        entries: [first, second],
+        unreadableCount: 0,
+      });
+    });
+
+    it("keeps an entry saved as the dropped quick visit readable after its name or payload changes", () => {
+      const stored = {
+        ...first,
+        visitType: "quick",
+      } as unknown as StoreEntryFields;
+      const { store } = storeOver(valueText([entry(stored)]));
+      expect(store.changeName(first.savedVisitId, "Renamed")).toEqual({
+        ok: true,
+      });
+      expect(store.read()).toMatchObject({
+        entries: [{ ...first, headphoneName: "Renamed" }],
+        unreadableCount: 0,
+      });
+      expect(store.changePayload(first.savedVisitId, "{}")).toEqual({
+        ok: true,
+      });
+      expect(store.read()).toMatchObject({
+        entries: [{ ...first, headphoneName: "Renamed", payloadJson: "{}" }],
+        unreadableCount: 0,
+      });
+    });
 
     it("reads the first of two entries with the same id and counts the later one as unreadable", () => {
       const twin = fields(first.savedVisitId, { headphoneName: "Twin" });

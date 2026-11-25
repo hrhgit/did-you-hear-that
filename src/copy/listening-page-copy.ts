@@ -26,7 +26,7 @@ export const listeningPageCopy = Object.freeze({
 });
 
 /** The limits that can set a played level, as the output stage names them. */
-export type ClampLimitName = "anchorCap" | "rise" | "ceiling";
+export type ClampLimitName = "ceiling";
 
 /** Formats decibels to one decimal place with a sign, such as "−25.0 dB" or "+5.0 dB". */
 function formatDecibels(valueDb: number): string {
@@ -50,15 +50,11 @@ export function clampLine(limit: ClampLimitName | null): string {
   switch (limit) {
     case null:
       return "Played as asked.";
-    case "anchorCap":
-      return "Played lower than asked: the house's upper limit (anchorCap).";
-    case "rise":
-      return "Played lower than asked: at most one step above the last sound in this ear (rise).";
     case "ceiling":
       return "Played lower than asked: the loudest sample the house allows (ceiling).";
     default:
       throw new RangeError(
-        `A limit must be anchorCap, rise, ceiling or null, but got ${String(limit)}.`,
+        `A limit must be ceiling or null, but got ${String(limit)}.`,
       );
   }
 }

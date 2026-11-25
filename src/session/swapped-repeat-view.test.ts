@@ -191,7 +191,7 @@ describe("swappedRepeatView in every phase", () => {
       const view = swappedRepeatView(input);
       expect(view).toMatchObject({
         heading: swappedRepeatCopy.heading,
-        roomName: "Stairs",
+        roomName: "Scritch",
         pitchLabel: "4 kHz",
         firstDifferenceLabel: differenceLabel(20),
         earpieces: input.earpieces,
@@ -322,7 +322,7 @@ describe("swappedRepeatView in ready", () => {
     expect(view.judgementLine).toBe(swappedRepeatCopy.judgementLines.confirmed);
     expect(view.lines).toEqual(readyLines("stairs", 4000));
     expect(view.lines[0]).toBe(
-      "Stairs, 4 kHz. The room runs again just as it did before.",
+      "Scritch, 4 kHz. The room runs again just as it did before.",
     );
     expect(view.startLabel).toBe("Go into the room");
   });

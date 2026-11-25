@@ -25,6 +25,34 @@ export interface VisitFlowConfig {
    * then one upward step louder each time, never above the room's search cap.
    */
   readonly practiceSoundsPerEarMaxCount: number;
+  /**
+   * How many rooms' searches take turns in one room run at most (one-room design.md, D1). At 1 the
+   * rooms run one after another, each with its own practice and a rest before the next, as they did
+   * before the one-room spec. From the room count of the longest visit up, every sound of a visit
+   * is searched in one room: one practice for all of them, then their trials in no order.
+   */
+  readonly roomsTogetherMaxCount: number;
+  /**
+   * After this long with no catch, the room plays a reminder sound before the next trial: louder
+   * than its creature was last caught at, and counting for nothing (the game layer, 2026-11-17).
+   * Measured from the start of the counting, the last catch or the last reminder.
+   */
+  readonly reminderAfterQuietMs: number;
+  /** How far above the last catch of its creature on its ear a reminder plays. */
+  readonly reminderAboveCaughtDb: number;
+  /** How far above the caught sound the chime after a catch plays (the game layer, 2026-11-17). */
+  readonly chimeAboveCaughtDb: number;
+  /** The loudest the chime ever plays, relative to the anchor. */
+  readonly chimeMaxLevelDb: number;
+  /** The level of the puff when a creature gets to Jack, relative to the anchor (2026-11-20). */
+  readonly missLevelDb: number;
+  /**
+   * How long the counting of the room may last, from the end of the practice, with pauses left
+   * out (2026-11-20). When it is up, a creature whose search is not over goes home with a result
+   * of `unreliable` for that ear, and the room ends. A creature may go home sooner: its search
+   * ends when it has enough evidence to estimate a level.
+   */
+  readonly roomTimeLimitMs: number;
 }
 
 /** Freezes a value and everything reachable from it, so no field can change at run time. */
@@ -49,4 +77,20 @@ export const visitFlowConfig: VisitFlowConfig = deepFreeze({
   practiceGapMs: 2000,
   // The anchor, then one step louder (+5 dB, the rise limit), then the not-heard notice.
   practiceSoundsPerEarMaxCount: 2,
+  // One room for the whole visit: the five sounds of the full visit (one-room design.md, D1).
+  roomsTogetherMaxCount: 5,
+  // The game layer of 2026-11-17, decided by the owner after playing: long silences with nothing
+  // to answer made the visitor lose patience.
+  reminderAfterQuietMs: 12000,
+  reminderAboveCaughtDb: 10,
+  // The owner chose "follow the caught sound" and, on 2026-11-20, a louder chime: under the
+  // beat, at -20 dB, it could hardly be heard. Now 30 dB above the caught sound, never above 6 dB
+  // below the anchor, so that a catch is plainly heard over the beat.
+  chimeAboveCaughtDb: 30,
+  chimeMaxLevelDb: -6,
+  missLevelDb: -10,
+  // The owner, after playing on 2026-11-20: the game grows dull when it runs as long as the
+  // searches need, so its length is fixed instead of the work to be done. Five minutes to begin
+  // with; the owner may change it after more playing.
+  roomTimeLimitMs: 5 * 60 * 1000,
 });

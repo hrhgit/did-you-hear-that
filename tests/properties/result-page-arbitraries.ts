@@ -79,7 +79,7 @@ const dayMs = 86_400_000;
 export const seedArbitrary = fc.integer({ min: 0, max: 0xffffffff });
 
 export const visitTypeArbitrary: fc.Arbitrary<VisitType> = fc.constantFrom(
-  "quick",
+  "full",
   "full",
 );
 
@@ -332,7 +332,7 @@ function levelNotAsAskedTrial(
     ear: "left",
     requestedLevelDb: plan.searchCapDb,
     playedLevelDb: plan.searchCapDb - levelGridStepDb,
-    clampLimit: "anchorCap",
+    clampLimit: "ceiling",
     status: "scored",
     response: "left",
     outcome: "caught",
@@ -783,7 +783,7 @@ export const unreadableEntryArbitrary: fc.Arbitrary<unknown> = fc.oneof(
         savedVisitId,
         savedAtEpochMs: 1_800_000_000_000,
         savedOnLocalDate,
-        visitType: "quick",
+        visitType: "full",
         headphoneName: null,
         payloadJson,
       }),
@@ -1144,7 +1144,7 @@ const fieldValue: fc.Arbitrary<unknown> = fc.oneof(
     -1,
     1.5,
     "",
-    "quick",
+    "full",
     "full",
     "2026-02-30",
     "ABCDEF12",

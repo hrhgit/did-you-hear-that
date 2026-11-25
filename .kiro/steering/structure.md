@@ -14,7 +14,7 @@ src/
     synth/    Pure functions that turn parameters into sample buffers
     output/   The only code that touches Web Audio. Level cap, channel routing, calibration gain
   session/    The visit as a state machine: entry, calibration, rooms, last door, replay, result, swap repeat
-  ui/         Drawing and input. House cross-section, ambient motion, ripples, result page, replay mode
+  ui/         Drawing and input. The yard of the visit, the result yard, result page, replay mode
   storage/    Reading and writing past results in local storage
   copy/       Every string the visitor can read
   robot/      Test-only hooks that let an automated listener play the house

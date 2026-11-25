@@ -1,14 +1,19 @@
 import type { RandomSource } from "../config/seeded-random";
+import { createAdaptiveEarSearch } from "./adaptive-ear-search";
 import { atMostFraction } from "./fraction-comparisons";
 import { classifyResponse } from "./classify-response";
 import { createEarSearch, type EarSearch } from "./ear-search";
 import { finalizeEarResult } from "./finalize-ear-result";
+import { createQuickEarSearch } from "./quick-ear-search";
 import { createNoSoundSchedule } from "./no-sound-schedule";
 import type {
+  CatchGrade,
   Ear,
+  HearingSearchMethod,
   NoSoundOutcome,
   NoSoundTrial,
   RoomResult,
+  SearchEvidence,
   SearchStep,
   SoundOutcome,
   SoundTrial,
@@ -34,6 +39,7 @@ const earOrder = ["left", "right"] as const satisfies readonly Ear[];
 export function createThresholdSearch(options: {
   settings: ThresholdSearchSettings;
   random: RandomSource;
+  method?: HearingSearchMethod;
 }): ThresholdSearch {
   const settings = validateSearchSettings(options.settings);
   const { random } = options;
@@ -47,9 +53,15 @@ export function createThresholdSearch(options: {
     );
   }
 
+  const method = options.method ?? "staircase";
+  const createSearch = {
+    staircase: createEarSearch,
+    quick: createQuickEarSearch,
+    adaptive: createAdaptiveEarSearch,
+  }[method];
   const ears: Readonly<Record<Ear, EarSearch>> = Object.freeze({
-    left: createEarSearch("left", settings),
-    right: createEarSearch("right", settings),
+    left: createSearch("left", settings),
+    right: createSearch("right", settings),
   });
   const schedule = createNoSoundSchedule(settings);
   const records: TrialRecord[] = [];
@@ -87,6 +99,7 @@ export function createThresholdSearch(options: {
         presentations: ears[ear].presentations(),
         falseAlarmRateAboveLimit,
         settings,
+        method,
       });
     };
     return Object.freeze({
@@ -168,7 +181,35 @@ export function createThresholdSearch(options: {
   return Object.freeze({
     current: (): SearchStep => step,
 
-    respond: (response: VisitorResponse): SearchStep => {
+    earEstimate: (ear: Ear): number | null => {
+      if (step.kind === "finished") {
+        const result = step.result[ear];
+        return result.state === "found" ? result.thresholdDb : null;
+      }
+      const ending = ears[ear].ending();
+      return ending?.kind === "found" ? ending.thresholdDb : null;
+    },
+
+    cutOff: () => {
+      if (step.kind === "finished") {
+        return step;
+      }
+      for (const earSearch of Object.values(ears)) {
+        earSearch.cutOff();
+      }
+      const finished = Object.freeze({
+        kind: "finished" as const,
+        result: buildResult(),
+      });
+      step = finished;
+      return finished;
+    },
+
+    respond: (
+      response: VisitorResponse,
+      grade?: CatchGrade,
+      evidence?: SearchEvidence,
+    ): SearchStep => {
       if (step.kind === "finished") {
         throw new Error("The room has finished, so no response is expected.");
       }
@@ -180,7 +221,7 @@ export function createThresholdSearch(options: {
       if (trial.kind === "sound") {
         const soundOutcome = outcome as SoundOutcome;
         records.push(Object.freeze({ trial, response, outcome: soundOutcome }));
-        ears[trial.ear].record(soundOutcome);
+        ears[trial.ear].record(soundOutcome, grade, evidence);
         soundTrialCount += 1;
       } else {
         const noSoundOutcome = outcome as NoSoundOutcome;

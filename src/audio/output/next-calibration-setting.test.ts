@@ -6,22 +6,24 @@ import { nextCalibrationSettingDb } from "./next-calibration-setting";
 const { calibrationSettingMinDb, calibrationRiseMaxDb } = audioOutputConfig;
 
 describe("nextCalibrationSettingDb", () => {
-  it("plays the first repeat at the bottom of the control whatever is asked (R16.1)", () => {
-    for (const requestedDb of [
-      -40,
-      -30,
-      0,
-      20,
-      -100,
-      Number.NaN,
-      Number.POSITIVE_INFINITY,
-      Number.NEGATIVE_INFINITY,
-    ]) {
-      expect(
-        nextCalibrationSettingDb(requestedDb, null),
-        String(requestedDb),
-      ).toBe(calibrationSettingMinDb);
-    }
+  it("plays the first repeat where it is asked, held to the control (R16.1)", () => {
+    const topDb = calibrationSettingTopDb();
+    const middleDb =
+      calibrationSettingMinDb +
+      Math.floor((topDb - calibrationSettingMinDb) / 2);
+    expect(nextCalibrationSettingDb(middleDb, null)).toBe(middleDb);
+    expect(nextCalibrationSettingDb(-37.2, null)).toBe(-38);
+    expect(nextCalibrationSettingDb(20, null)).toBe(topDb);
+    expect(nextCalibrationSettingDb(Number.POSITIVE_INFINITY, null)).toBe(
+      topDb,
+    );
+    expect(nextCalibrationSettingDb(-100, null)).toBe(calibrationSettingMinDb);
+    expect(nextCalibrationSettingDb(Number.NEGATIVE_INFINITY, null)).toBe(
+      calibrationSettingMinDb,
+    );
+    expect(nextCalibrationSettingDb(Number.NaN, null)).toBe(
+      calibrationSettingMinDb,
+    );
   });
 
   it("rounds a request down to the 1 dB grid (R16.2)", () => {
@@ -70,7 +72,7 @@ describe("nextCalibrationSettingDb", () => {
 
   it("climbs from the bottom to the top in one repeat after the first", () => {
     const topDb = calibrationSettingTopDb();
-    const played = [nextCalibrationSettingDb(topDb, null)];
+    const played = [nextCalibrationSettingDb(calibrationSettingMinDb, null)];
     while (played[played.length - 1] < topDb) {
       played.push(nextCalibrationSettingDb(topDb, played[played.length - 1]));
     }

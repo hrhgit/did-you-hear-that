@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
+import {
+  creatureCopy,
+  creatureOtherSideLine,
+  creatureReminderCaughtLine,
+  creatureSlippedLine,
+} from "../../copy/creature-copy";
 import { practiceCopy } from "../../copy/practice-copy";
 import { roomCopy } from "../../copy/room-copy";
+import { ghostSoundIds } from "../../config/sound-id";
 import type {
   PracticeSoundScoredEvent,
+  ReminderSoundScoredEvent,
   ReplaySound,
   ScoredVisitTrial,
   SwappedTrialScoredEvent,
@@ -52,14 +60,14 @@ function scored(
 
 describe("reactionOfEvent", () => {
   it.each(["left", "right"] as const)(
-    "draws a ripple from the %s in the room of a sound that is played again, with no line",
+    "draws rings from the %s for a sound that is played again, with its creature and no line",
     (ear) => {
       const sound: ReplaySound = {
         position: 2,
         positionLabel: "Sound 2 of 5",
         trialOrder: 31,
         room,
-        roomName: "Nursery",
+        roomName: "Tink",
         pitchLabel: "2 kHz",
         ear,
         missedLevelDb: -40,
@@ -80,14 +88,15 @@ describe("reactionOfEvent", () => {
   );
 
   it.each(["left", "right"] as const)(
-    "draws a ripple from the %s for a caught sound, with its pitch and level",
+    "shows the creature of a caught sound on the %s, and says who, the pitch and the level",
     (ear) => {
       expect(
         reactionOfEvent(scored(soundTrial(ear, "caught"), "ripple")),
       ).toEqual({
         kind: "ripple",
         side: ear,
-        line: `You caught it on your ${ear}. 2 kHz, 15 dB quieter than your calibration.`,
+        roomId: "nursery",
+        line: `You caught Tink on your ${ear}. 2 kHz, 15 dB quieter than your calibration.`,
       });
     },
   );
@@ -109,17 +118,35 @@ describe("reactionOfEvent", () => {
       ).toEqual({
         kind: "slipped",
         side: ear,
-        line: `One went by on your ${ear}.`,
+        roomId: "nursery",
+        line: creatureSlippedLine("nursery", ear),
       });
       expect(
         reactionOfEvent(scored(soundTrial(ear, "wrongSide"), "otherSide")),
       ).toEqual({
         kind: "slipped",
         side: ear,
-        line: `That one was on your ${ear}.`,
+        roomId: "nursery",
+        line: creatureOtherSideLine("nursery", ear),
       });
     },
   );
+
+  it("names the creature of the sound, whichever room the event is for", () => {
+    for (const roomId of ghostSoundIds) {
+      const event: TrialScoredEvent = {
+        kind: "trialScored",
+        room: { roomIndex: 0, roomId, frequencyHz: 1000 },
+        trial: soundTrial("left", "caught"),
+        reaction: "ripple",
+      };
+      const reaction = reactionOfEvent(event);
+      expect(reaction).toMatchObject({ kind: "ripple", roomId });
+      expect(
+        reaction !== null && "line" in reaction && reaction.line,
+      ).toContain(`You caught ${creatureCopy[roomId].name} on your left.`);
+    }
+  });
 
   it("says the house's line for an answer to silence", () => {
     const silence = {
@@ -137,6 +164,25 @@ describe("reactionOfEvent", () => {
     expect(reactionOfEvent(scored(silence, "noSoundLine"))).toEqual({
       kind: "say",
       line: roomCopy.noSoundLine,
+    });
+  });
+
+  it("says that nothing came once a silence that went unanswered is scored (the game layer)", () => {
+    const silence = {
+      ...common,
+      kind: "noSound",
+      ear: null,
+      requestedLevelDb: null,
+      playedLevelDb: null,
+      clampLimit: null,
+      response: "none",
+      outcome: "noResponse",
+      answeredAtMs: null,
+      responseTimeMs: null,
+    } as unknown as ScoredVisitTrial;
+    expect(reactionOfEvent(scored(silence, "nothingCame"))).toEqual({
+      kind: "say",
+      line: roomCopy.nothingCameLine,
     });
   });
 
@@ -169,7 +215,12 @@ describe("reactionOfEvent", () => {
           reactionOfEvent(
             swapped(soundTrial(ear, "caught"), "ripple", "The event's words."),
           ),
-        ).toEqual({ kind: "ripple", side: ear, line: "The event's words." });
+        ).toEqual({
+          kind: "ripple",
+          side: ear,
+          roomId: "nursery",
+          line: "The event's words.",
+        });
       },
     );
 
@@ -202,11 +253,26 @@ describe("reactionOfEvent", () => {
     });
   });
 
-  it("shows nothing when a room starts or finishes", () => {
+  it("shows nothing when a room starts", () => {
     expect(
       reactionOfEvent({ kind: "roomStarted", room, attempt: 1 }),
     ).toBeNull();
-    expect(reactionOfEvent({ kind: "roomFinished", room })).toBeNull();
+  });
+
+  it("says where a creature went when its search is over, and names no side", () => {
+    expect(reactionOfEvent({ kind: "roomFinished", room })).toEqual({
+      kind: "gone",
+      roomId: "nursery",
+      line: "Tink has gone back to the nursery.",
+    });
+    for (const roomId of ghostSoundIds) {
+      const reaction = reactionOfEvent({
+        kind: "roomFinished",
+        room: { roomIndex: 0, roomId, frequencyHz: 1000 },
+      });
+      expect(reaction).toMatchObject({ kind: "gone", roomId });
+      expect(JSON.stringify(reaction)).not.toMatch(/left|right/i);
+    }
   });
 });
 
@@ -252,6 +318,7 @@ describe("reactionOfEvent for a practice sound (audible-start, light plan)", () 
     expect(reactionOfEvent(practiceEvent("right", "caught"))).toEqual({
       kind: "ripple",
       side: "right",
+      roomId: "nursery",
       line: practiceCopy.caughtLine,
     });
   });
@@ -263,5 +330,49 @@ describe("reactionOfEvent for a practice sound (audible-start, light plan)", () 
 
   it("shows nothing when the counting starts", () => {
     expect(reactionOfEvent({ kind: "countingStarted", room })).toBeNull();
+  });
+});
+
+describe("reactionOfEvent for a reminder sound (the game layer, 2026-11-17)", () => {
+  const reminderEvent = (
+    ear: "left" | "right",
+    outcome: "caught" | "missed",
+  ): ReminderSoundScoredEvent => ({
+    kind: "reminderSoundScored",
+    room,
+    trial: {
+      order: 1,
+      roomIndex: 1,
+      attempt: 1,
+      ear,
+      requestedLevelDb: -20,
+      playedLevelDb: -20,
+      clampLimit: null,
+      gapBeforeMs: 1000,
+      presentedAtMs: 40_000,
+      windowStartMs: 40_050,
+      status: "scored",
+      response: outcome === "caught" ? ear : "none",
+      outcome,
+      answeredAtMs: outcome === "caught" ? 40_900 : null,
+      responseTimeMs: outcome === "caught" ? 850 : null,
+      scoredAtMs: 41_000,
+    },
+    reaction: outcome === "caught" ? "ripple" : "none",
+    line:
+      outcome === "caught" ? creatureReminderCaughtLine("nursery", ear) : null,
+  });
+
+  it("shows the creature of a caught reminder on its side, with its line", () => {
+    expect(reactionOfEvent(reminderEvent("left", "caught"))).toEqual({
+      kind: "ripple",
+      side: "left",
+      roomId: "nursery",
+      line: creatureReminderCaughtLine("nursery", "left"),
+    });
+  });
+
+  it("shows nothing for a reminder that went by", () => {
+    expect(reactionOfEvent(reminderEvent("right", "missed"))).toBeNull();
   });
 });

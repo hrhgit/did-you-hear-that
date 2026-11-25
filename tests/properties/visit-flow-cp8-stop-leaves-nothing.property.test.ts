@@ -12,7 +12,11 @@ import {
   scriptSpanMs,
   visitRunArbitrary,
 } from "./visit-flow-arbitraries";
-import { createVisitHarness, type VisitHarness } from "./visit-flow-harness";
+import {
+  createVisitHarness,
+  roomRuns,
+  type VisitHarness,
+} from "./visit-flow-harness";
 import {
   observeVisit,
   type ActionEntry,
@@ -21,9 +25,9 @@ import {
 
 // CP8. Stop leaves nothing (Universal; visit-flow design.md, CP8; R14). Every script here has an
 // ending: the stop control or a left page at any time of the visit. One that comes before the
-// result leaves the house; one that comes later meets the replay or the result, where stop
-// silences and shows the result. The visits render with the worst-case renderers (D26,
-// audio-output D43).
+// result leaves the house. On the result, stop silences and stays there. The visits render with the worst-case renderers (D26,
+// audio-output D43). The property holds however the rooms run (one-room design.md, D1): one after
+// another, and taking turns in one room.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -58,7 +62,7 @@ const endingArbitrary: fc.Arbitrary<VisitorEnding> = fc.record({
 
 /** A short visit to start after the front door: no answers, no rests, no disturbances. */
 const nextVisitScript = (script: VisitorScript): VisitorScript => ({
-  visitType: "quick",
+  visitType: "full",
   calibrationTargetDb: script.calibrationTargetDb,
   firstHeadphoneCheckAnswer: "left",
   listener: { kind: "extreme", name: "neverAnswers", seed: 0 },
@@ -87,9 +91,9 @@ const handedOut = (harness: VisitHarness) => ({
 });
 
 describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
-  it(
-    "leaves the house at a stop or a left page before the result, with nothing kept and nothing after, and shows the result at a later stop",
-    async () => {
+  it.each(roomRuns)(
+    "leaves the house at a stop or a left page before the result, with nothing kept and nothing after, and shows the result at a later stop ($name)",
+    async ({ roomsTogetherMaxCount }) => {
       await fc.assert(
         fc.asyncProperty(
           visitRunArbitrary(),
@@ -99,6 +103,7 @@ describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
             const harness = createVisitHarness({
               seed: visitRun.seed,
               performanceOffsetMs: visitRun.performanceOffsetMs,
+              roomsTogetherMaxCount,
               spyOnOutput: true,
             });
             const timeline = observeVisit(harness);
@@ -159,18 +164,11 @@ describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
               return;
             }
 
-            // The ending came at the replay or later.
             expect(final.stage).toBe("result");
             if (final.stage !== "result") {
               return;
             }
-            if (endingEntry?.kind === "action") {
-              expect(endingEntry.snapshotBefore.stage).toBe(
-                "missedSoundReplay",
-              );
-              expect(endingEntry.snapshotAfter.stage).toBe("result");
-              expect(stoppedAllIn(harness, endingEntry)).toBe(true);
-            }
+            expect(endingEntry).toBeUndefined();
 
             // Stop on the result silences and stays.
             flow.stop();

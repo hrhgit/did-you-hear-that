@@ -103,11 +103,28 @@ describe("visit flow regressions", () => {
   // third room's first attempt starts at 213 533 ms and presents its first counted trial at
   // 223 893 ms; the first device change is set at 232 000 ms, in its counting; attempt 2 starts at
   // 241 974 ms and would play its first practice sound at 243 974 ms, so the second device change
-  // is set at 242 900 ms. The case asserts that order first, so that it cannot quietly stop
-  // covering two device changes in a row.
+  // is set at 242 900 ms.
+  //
+  // The gaps of 0.8 s to 1.6 s and the chime after a catch (the game layer, 2026-11-17) moved them
+  // again. The third room's first attempt starts at 216 126 ms and presents its first counted
+  // trial at 222 180 ms; the first device change is set at 230 000 ms, in its counting; attempt 2
+  // starts at 241 993 ms and would play its first practice sound at 243 993 ms, so the second
+  // device change stays at 242 900 ms.
+  //
+  // The beat of the rhythm game (2026-11-18), on which every sound now starts, moved them again,
+  // and so did the headphone check that a device change sends the visit to. The first change at
+  // 230 000 ms sends it there, and attempt 2 starts at 235 321 ms, not about 3 s after the change as
+  // the figures of 2026-11-18 assumed. Attempt 2 plays its first practice sound at 237 341 ms, so
+  // the second device change is set at 236 300 ms, after the start and before that sound. The case
+  // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
+  //
+  // The timing offset and the easy turns (headphone-traits, 2026-11-25) moved them again. The
+  // third room's first attempt presents its first counted trial at 222 630 ms, so the first device
+  // change is set at 240 000 ms, in its counting; attempt 2 starts at 260 062 ms and plays its first
+  // practice sound at 262 082 ms, so the second device change is set at 261 000 ms.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
-      visitType: "quick",
+      visitType: "full",
       calibrationTargetDb: -27,
       firstHeadphoneCheckAnswer: "left",
       listener: {
@@ -121,8 +138,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 232_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 242_900, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 240_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 261_000, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };
@@ -152,6 +169,12 @@ describe("visit flow regressions", () => {
       "roomStarted 2:3",
       "first sound 2:3",
       "first trial 2:3",
+      "roomStarted 3:1",
+      "first sound 3:1",
+      "first trial 3:1",
+      "roomStarted 4:1",
+      "first sound 4:1",
+      "first trial 4:1",
     ]);
     checkPausesDiscardAndRepeat(harness, timeline.entries, run);
   });

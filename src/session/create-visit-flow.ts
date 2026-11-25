@@ -1,13 +1,25 @@
+import { adaptiveHearingConfig } from "../config/adaptive-hearing-config";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
-import { lanternConfig } from "../config/lantern-config";
+import { beatMsOf, rhythmConfig } from "../config/rhythm-config";
 import type { VisitType } from "../config/hearing-method-config";
 import type { RandomSource } from "../config/seeded-random";
 import { createSeededRandom } from "../config/seeded-random";
 import type { GhostSoundId } from "../config/sound-id";
 import { ghostSoundIds } from "../config/sound-id";
 import type { Timer, TimerHandle } from "../config/timer";
-import { calibrationCopy, roomsShortLine } from "../copy/calibration-copy";
+import { visitFlowConfig } from "../config/visit-flow-config";
+import {
+  calibrationCopy,
+  referenceVolumeCopy,
+  roomsShortLine,
+} from "../copy/calibration-copy";
+import {
+  creatureReminderCaughtLine,
+  rollCallCaughtLine,
+  rollCallCopy,
+  rollCallNotHeardLines,
+} from "../copy/creature-copy";
 import { headphoneCheckCopy } from "../copy/headphone-check-copy";
 import { notHeardLines, practiceCopy } from "../copy/practice-copy";
 import { swappedRepeatCopy } from "../copy/swapped-repeat-copy";
@@ -15,6 +27,7 @@ import type { AudioBackend } from "../audio/output/audio-backend";
 import type {
   AudioOutput,
   CalibrationMusicOutput,
+  KeepOutcome,
   KeepRefusal,
   PlayRefusal,
 } from "../audio/output/create-audio-output";
@@ -24,11 +37,10 @@ import type {
   UnsupportedReason,
 } from "../audio/output/output-types";
 import { createWebAudioBackend } from "../audio/output/web-audio-backend";
-import type { RoomResult } from "../engine/search-types";
+import type { HearingSearchMethod, RoomResult } from "../engine/search-types";
 import { createThresholdSearch } from "../engine/threshold-search";
 import { createCalibrationController } from "./calibration-controller";
-import type { MissedSoundReplayController } from "./create-missed-sound-replay";
-import { createMissedSoundReplay } from "./create-missed-sound-replay";
+import { calibrationStartSettingDb } from "./calibration-target-setting";
 import type {
   FlowPresentedTrial,
   SwappedRepeatController,
@@ -38,14 +50,18 @@ import type {
   HeadphoneCheckAnswer,
   HeadphoneCheckJudgement,
 } from "./judge-headphone-check";
-import { answerTimeMs } from "./answer-time";
 import { judgeHeadphoneCheck } from "./judge-headphone-check";
-import type { Lantern } from "./lantern";
-import { createLantern } from "./lantern";
-import type { PractisedRoomRunner } from "./practised-room-runner";
-import { createPractisedRoomRunner } from "./practised-room-runner";
-import type { LatestOffset, PresentedTrial } from "./room-runner";
-import { createRoomRunner } from "./room-runner";
+import type { BeatClock, BeatTiming } from "./beat-clock";
+import { createBeatClock } from "./beat-clock";
+import type { RhythmScore } from "./rhythm-score";
+import { createRhythmScore, judgementOf } from "./rhythm-score";
+import type {
+  PractisedRoom,
+  PractisedRoomRunner,
+} from "./practised-room-runner";
+import { createPractisedRoomsRunner } from "./practised-room-runner";
+import type { LatestOffset, PresentedTrial, RoomTrack } from "./room-runner";
+import { createMixedRoomRunner } from "./room-runner";
 import { roomSearchCapDb } from "./room-search-cap";
 import { roomSearchFloorDb } from "./room-search-floor";
 import {
@@ -54,13 +70,22 @@ import {
   type ChaseTally,
 } from "./chase-score";
 import { summarizeVisit } from "./summarize-visit";
+import { turnSeedOf } from "./turn-seed";
+import {
+  createTimingOffsetTracker,
+  quantile,
+  type TimingOffsetTracker,
+} from "./output-delay";
+import { createEasyTurnPacer } from "./easy-turn-pacer";
+import { headphoneTraitsConfig } from "../config/headphone-traits-config";
 import type {
+  CalibrationAnchor,
   EarpieceState,
   EntrySnapshot,
   ExitReason,
   LoggedCalibration,
-  MissedSoundReplay,
   PauseReason,
+  RoomCreature,
   RoomPractice,
   ScoredVisitTrial,
   SnapshotBase,
@@ -97,6 +122,25 @@ export type VisitFlowTestOptions = {
    * listener typed for `PresentedTrial` still fits it.
    */
   readonly onTrialPresented?: (trial: FlowPresentedTrial) => void;
+  /**
+   * In place of `visitFlowConfig.roomsTogetherMaxCount`: how many rooms' searches take turns in one
+   * room run at most. 1 runs the rooms one after another, as before the one-room spec.
+   */
+  readonly roomsTogetherMaxCount?: number;
+  /**
+   * In place of `visitFlowConfig.roomTimeLimitMs`: how long the counting of a room run may last.
+   * `null` sets no limit, so that a test can let every search run to its end.
+   */
+  readonly roomTimeLimitMs?: number | null;
+  /** Lets historical tests reproduce visits made with the staircase method. */
+  readonly searchMethod?: HearingSearchMethod;
+  /** The adjustable control used by earlier calibration tests. */
+  readonly adjustableCalibration?: boolean;
+  /**
+   * Keeps the Timing_Offset at 0 for the whole visit, for tests that answer on the edges of the
+   * grades (headphone-traits R1). The estimate from the log is not affected.
+   */
+  readonly fixedTimingOffset?: boolean;
 } & (
   | { readonly backend: AudioBackend }
   | {
@@ -113,7 +157,13 @@ const drawSeed = (source: RandomSource): number =>
 
 const emptyRooms: readonly VisitRoom[] = Object.freeze([]);
 
-const visitTypes: readonly VisitType[] = Object.freeze(["quick", "full"]);
+const zeroTimingOffset: TimingOffsetTracker = Object.freeze({
+  noteSeen: () => undefined,
+  noteHeard: () => undefined,
+  offsetMs: () => 0,
+});
+
+const visitTypes: readonly VisitType[] = Object.freeze(["full"]);
 
 const entryChoices: EntrySnapshot["choices"] = Object.freeze(
   visitTypes.map((visitType) =>
@@ -155,11 +205,30 @@ function reactionTo(entry: ScoredVisitTrial): TrialReaction {
   if (entry.kind === "sound" && entry.outcome === "wrongSide") {
     return "otherSide";
   }
+  if (entry.kind === "noSound" && entry.outcome === "noResponse") {
+    return "nothingCame";
+  }
   return "none";
 }
 
-/** The chase of the room under way, as the flow keeps it (`RoomChase`). */
+/** The chase of the room run under way, as the flow keeps it (`RoomChase`). */
 interface Chase extends ChaseTally {
+  readonly topLevelDb: number;
+  readonly floorLevelDb: number;
+}
+
+/** One room of the run under way, with the number of its run. */
+interface Member {
+  readonly room: VisitRoom;
+  readonly attempt: number;
+}
+
+/** What the flow keeps of one room from its last run on (`RoomCreature`). */
+interface Creature {
+  /** True once its search has finished. */
+  gone: boolean;
+  /** The chase of its last run alone. */
+  readonly tally: ChaseTally;
   readonly topLevelDb: number;
   readonly floorLevelDb: number;
 }
@@ -201,10 +270,15 @@ interface Visit {
   readonly soundRandom: RandomSource;
   readonly recorder: VisitLogRecorder;
   readonly latestOffset: LatestOffset;
+  /** The Timing_Offset of the visit (headphone-traits R1, D1). */
+  readonly timingOffset: TimingOffsetTracker;
+  /** Answer times of loud catches, each adjusted by the offset it was graded with. */
+  readonly loudNetAnswersMs: number[];
   /** The timer callbacks of the visit's room runs that have not run. */
   readonly timerHandles: Set<TimerHandle>;
   readonly timer: Timer;
-  finishedRoomCount: number;
+  /** The rooms whose search has finished, by room index. */
+  readonly finishedRooms: Map<number, RoomResult>;
   rulesShown: boolean;
   /** True once a calibration of this visit follows a device change. */
   calibrationAgain: boolean;
@@ -212,23 +286,23 @@ interface Visit {
   calibrationFresh: boolean;
   keepRefusal: KeepRefusal | null;
   lastCalibration: LoggedCalibration | null;
+  openingThemeAllowed: boolean;
   awaitingAnswer: boolean;
   playRefusal: PlayRefusal | null;
   judgement: HeadphoneCheckJudgement | null;
-  /** The run of the room under way: its practice, then its search. */
+  /** The room run under way: its practice, then the searches of its rooms. */
   runner: PractisedRoomRunner | null;
-  /** The lantern of the room under way, from the start of its counting, or null. */
-  lantern: Lantern | null;
-  /** True while the room's run waits for the dark lantern to get one cell back. */
-  lanternHold: boolean;
-  /** The chase of the room under way, from the start of its counting, or null. */
+  /** The rhythm score of the room run under way, from the start of its counting, or null. */
+  rhythm: RhythmScore | null;
+  /** The room's beat while it plays, or null (the rhythm game, 2026-11-18). */
+  beatClock: BeatClock | null;
+  /** The chase of the room run under way, over all its rooms, from the start of its counting, or null. */
   chase: Chase | null;
-  /** The room of the last run started: the room of the `room` stage. */
-  activeRoomIndex: number;
-  attempt: number;
+  /** The rooms of the last room run started, in visit order. The first is the room of the `room` stage. */
+  members: readonly Member[];
+  /** What the flow keeps of each room that has begun a run, by room index. */
+  readonly creatures: Map<number, Creature>;
   log: VisitLog | null;
-  /** The missed-sound replay, made when the rooms are over (missed-sound-replay design.md). */
-  replay: MissedSoundReplayController | null;
   summary: VisitSummary | null;
   swappedRoom: VisitRoom | null;
   /** The timer's time when the visit began: the zero of the visit log's clock. */
@@ -241,6 +315,13 @@ interface Visit {
   repeatRunCount: number;
   /** The Repeat_Controller of the swapped repeat stage, or null outside it. */
   repeat: SwappedRepeatController | null;
+}
+
+function quickBaselineMs(visit: Visit): number | undefined {
+  return visit.loudNetAnswersMs.length >=
+    adaptiveHearingConfig.baselineCatchesMinCount
+    ? quantile(visit.loudNetAnswersMs, headphoneTraitsConfig.quickFraction)
+    : undefined;
 }
 
 /**
@@ -261,18 +342,49 @@ export function createVisitFlow(
 ): VisitFlow {
   const flowRandom = createSeededRandom(options.seed);
   const { timer } = options;
+  const roomsTogetherMaxCount =
+    ("roomsTogetherMaxCount" in options
+      ? options.roomsTogetherMaxCount
+      : undefined) ?? visitFlowConfig.roomsTogetherMaxCount;
+  if (!Number.isInteger(roomsTogetherMaxCount) || roomsTogetherMaxCount < 1) {
+    throw new RangeError(
+      `The rooms that run together must be a whole number from 1 up, but got ${String(roomsTogetherMaxCount)}.`,
+    );
+  }
+  const roomTimeLimitMs =
+    "roomTimeLimitMs" in options && options.roomTimeLimitMs !== undefined
+      ? options.roomTimeLimitMs
+      : visitFlowConfig.roomTimeLimitMs;
+  if (
+    roomTimeLimitMs !== null &&
+    (!Number.isFinite(roomTimeLimitMs) || roomTimeLimitMs <= 0)
+  ) {
+    throw new RangeError(
+      `The time limit of a room must be above 0 and finite, or null, but got ${String(roomTimeLimitMs)}.`,
+    );
+  }
+  const searchMethod =
+    ("searchMethod" in options ? options.searchMethod : undefined) ??
+    "adaptive";
+  /** Whether several rooms' searches take turns in one room (one-room design.md, D1). */
+  const together = roomsTogetherMaxCount > 1;
   const onTrialPresented =
     "onTrialPresented" in options ? options.onTrialPresented : undefined;
-  const output: AudioOutput & Partial<CalibrationMusicOutput> =
-    "output" in options
-      ? options.output
-      : createAudioOutput({
-          backend:
-            "backend" in options
-              ? options.backend
-              : createWebAudioBackend(options.window),
-          timer,
-        });
+  // Browser visits own the full output. The listening and simulation tools keep their
+  // explicit calibration controls.
+  const { output, opening } = (() => {
+    if ("output" in options) {
+      return { output: options.output, opening: null };
+    }
+    const output = createAudioOutput({
+      backend:
+        "backend" in options
+          ? options.backend
+          : createWebAudioBackend(options.window),
+      timer,
+    });
+    return { output, opening: "window" in options ? output : null };
+  })();
 
   let visit: Visit | null = null;
   // The random source of the controller, which lives as long as the flow, forwards to the sound
@@ -289,14 +401,22 @@ export function createVisitFlow(
   output.onUnsupported((event) =>
     step(() => showUnsupported(event.reason, event.sampleRateHz)),
   );
+  const fixedTimingOffset =
+    "fixedTimingOffset" in options && options.fixedTimingOffset === true;
+  const fixedSettingDb =
+    "adjustableCalibration" in options && options.adjustableCalibration
+      ? undefined
+      : audioOutputConfig.calibrationReferenceDb;
   const calibration = createCalibrationController({
     output,
     timer,
     random: forwardingRandom,
+    fixedSettingDb,
   });
   const controlBottomDb = audioOutputConfig.calibrationSettingMinDb;
 
-  let stage: VisitStage = "entry";
+  type LiveVisitStage = Exclude<VisitStage, "missedSoundReplay">;
+  let stage: LiveVisitStage = "entry";
   /** Raised at every stage entry, so a late activation can tell that the stage moved on (D35). */
   let stageToken = 0;
   let pause: VisitPause | null = null;
@@ -331,7 +451,6 @@ export function createVisitFlow(
         return visit.judgement === "correct";
       case "rules":
       case "betweenRooms":
-      case "missedSoundReplay":
       case "swappedRepeat":
         return true;
       default:
@@ -345,7 +464,7 @@ export function createVisitFlow(
     stage: snapshotStage,
     visitType: visit?.visitType ?? null,
     rooms: visit?.rooms ?? emptyRooms,
-    finishedRoomCount: visit?.finishedRoomCount ?? 0,
+    finishedRoomCount: visit?.finishedRooms.size ?? 0,
     canProceed: canProceed(),
     pause,
     activationRefused,
@@ -393,14 +512,19 @@ export function createVisitFlow(
         const controller = calibration.snapshot();
         const fresh = current.calibrationFresh;
         const calibrationSound = controller.calibrationSound;
-        // The music's lines while it loads, the hiss's where it could not be loaded (audible-start
-        // design.md, "The calibration copy").
-        const lines =
-          calibrationSound === "hiss" ? calibrationCopy.hiss : calibrationCopy;
+        const fixed = fixedSettingDb !== undefined;
+        const hiss = calibrationSound === "hiss";
+        const lines = fixed
+          ? referenceVolumeCopy
+          : hiss
+            ? calibrationCopy.hiss
+            : calibrationCopy;
+        const instruction =
+          fixed && hiss ? referenceVolumeCopy.hissLine : lines.openLine;
         const freshLine =
           calibrationSound === "loading"
             ? calibrationCopy.loadingLine
-            : lines.openLine;
+            : instruction;
         return Object.freeze({
           ...base("calibration"),
           again: current.calibrationAgain,
@@ -410,21 +534,24 @@ export function createVisitFlow(
           // −5 dB with the music, −4 dB with the hiss and while the music loads (D7).
           controlTopDb: controller.controlTopDb,
           atTop: fresh ? false : controller.atTop,
-          line: fresh ? freshLine : controller.line,
+          line: fresh || fixed ? freshLine : controller.line,
           keepRefusal: current.keepRefusal,
-          // The bottom until the visitor first starts the sound: `open` puts the target there
-          // (audible-start R3.5, R3.6, D3).
-          targetSettingDb: fresh ? controlBottomDb : controller.targetSettingDb,
+          // Report the opening reference before the sound has started.
+          targetSettingDb: fresh
+            ? (fixedSettingDb ??
+              calibrationStartSettingDb({
+                bottomDb: controlBottomDb,
+                topDb: controller.controlTopDb,
+                stepDb: audioOutputConfig.calibrationSettingStepDb,
+              }))
+            : controller.targetSettingDb,
           calibrationSound,
           heading: current.calibrationAgain
             ? lines.againHeading
             : lines.heading,
-          introLines: Object.freeze([
-            lines.openLine,
-            calibrationCopy.whyLine,
-            lines.riseLine,
-            calibrationCopy.keysLine,
-          ]),
+          introLines: Object.freeze(
+            fixed ? [instruction] : [instruction, calibrationCopy.keysLine],
+          ),
         });
       }
       case "headphoneCheck":
@@ -444,14 +571,18 @@ export function createVisitFlow(
       case "room":
         return Object.freeze({
           ...base("room"),
-          room: roomAt(current, current.activeRoomIndex),
+          room: current.members[0]?.room ?? roomAt(current, 0),
+          together,
+          creatures: creaturesOf(current),
           practice: roomPracticeOf(current),
-          lantern:
-            current.lantern === null
+          rhythm: current.rhythm?.standing() ?? null,
+          beat:
+            current.beatClock === null
               ? null
               : Object.freeze({
-                  cells: current.lantern.cells(),
-                  cellCount: lanternConfig.cellCount,
+                  firstBeatAtMs: current.beatClock.firstBeatPageMs,
+                  beatMs: current.beatClock.beatMs,
+                  beatsPerBar: current.beatClock.beatsPerBar,
                 }),
           chase:
             current.chase === null
@@ -466,14 +597,8 @@ export function createVisitFlow(
       case "betweenRooms":
         return Object.freeze({
           ...base("betweenRooms"),
-          finishedRoom: roomAt(current, current.finishedRoomCount - 1),
-          nextRoom: roomAt(current, current.finishedRoomCount),
-        });
-      case "missedSoundReplay":
-        return Object.freeze({
-          ...base("missedSoundReplay"),
-          visitLog: logOf(current),
-          replay: replayViewOf(current),
+          finishedRoom: roomAt(current, current.finishedRooms.size - 1),
+          nextRoom: roomAt(current, current.finishedRooms.size),
         });
       case "result":
         return Object.freeze({
@@ -503,27 +628,67 @@ export function createVisitFlow(
     }
   };
 
-  /** What the room's screen says about its practice (audible-start, light plan). */
+  /**
+   * What the room's screen says about its practice (audible-start, light plan). Where several
+   * rooms run together the practice is the roll call, with its own lines (one-room design.md).
+   */
   function roomPracticeOf(current: Visit): RoomPractice {
     const state = current.runner?.practice() ?? null;
     const phase = state?.phase ?? "practice";
-    const practising = phase !== "counting";
+    const inPractice = phase !== "counting";
     const soundPlaying = state?.soundPlaying === true && pause === null;
     const notHeardEars = state?.notHeardEars ?? [];
+    const notHeard = state?.notHeard ?? [];
+    const copy = together ? rollCallCopy : practiceCopy;
+    const noLines: readonly string[] = Object.freeze([]);
+    const notHeardNotice =
+      phase !== "notHeard" || notHeard.length === 0
+        ? noLines
+        : together
+          ? rollCallNotHeardLines(
+              notHeard.map(({ room, ear }) => ({
+                roomId: room.roomId,
+                side: ear,
+              })),
+            )
+          : notHeardLines(notHeardEars);
     return Object.freeze({
       phase,
       soundPlaying,
-      heading: practising ? practiceCopy.heading : null,
-      lines: practising ? practiceCopy.lines : practiceCopy.countingLines,
+      soundEar: soundPlaying ? (state?.soundEar ?? null) : null,
+      heading: inPractice ? copy.heading : null,
+      lines: inPractice ? copy.lines : copy.countingLines,
       soundPlayingLine: soundPlaying ? practiceCopy.soundPlayingLine : null,
       notHeardEars: Object.freeze([...notHeardEars]),
-      notHeardLines:
-        phase === "notHeard" && notHeardEars.length > 0
-          ? notHeardLines(notHeardEars)
-          : Object.freeze([]),
+      notHeardLines: notHeardNotice,
       tryAgainLabel: practiceCopy.tryAgainLabel,
       goOnLabel: practiceCopy.goOnLabel,
+      practising: state?.practising ?? null,
+      notHeard: Object.freeze([...notHeard]),
     });
+  }
+
+  /** Every room that has begun a run, in visit order, as the room's screen keeps it. */
+  function creaturesOf(current: Visit): readonly RoomCreature[] {
+    return Object.freeze(
+      current.rooms.flatMap((room) => {
+        const creature = current.creatures.get(room.roomIndex);
+        return creature === undefined
+          ? []
+          : [
+              Object.freeze({
+                room,
+                state: creature.gone ? ("gone" as const) : ("about" as const),
+                caughtCount: creature.tally.caughtCount,
+                deepestCaughtDb: Object.freeze({
+                  ...creature.tally.deepestCaughtDb,
+                }),
+                topLevelDb: creature.topLevelDb,
+                floorLevelDb: creature.floorLevelDb,
+              }),
+            ];
+      }),
+    );
   }
 
   function repeatOf(current: Visit): SwappedRepeatController {
@@ -548,21 +713,6 @@ export function createVisitFlow(
       throw new Error("The visit log is assembled when the rooms are over.");
     }
     return current.log;
-  }
-
-  function replayOf(current: Visit): MissedSoundReplayController {
-    if (current.replay === null) {
-      throw new Error("The replay is made when the rooms are over.");
-    }
-    return current.replay;
-  }
-
-  /** The replay's view, with the reason of the pause that holds (missed-sound-replay D21). */
-  function replayViewOf(current: Visit): MissedSoundReplay {
-    const reason = pause?.reason ?? null;
-    return replayOf(current).view(
-      reason === "hidden" || reason === "interrupted" ? reason : null,
-    );
   }
 
   function summaryOf(current: Visit): VisitSummary {
@@ -639,16 +789,99 @@ export function createVisitFlow(
     pendingEvents.push(Object.freeze(event));
   };
 
-  const enterStage = (next: VisitStage): void => {
+  const enterStage = (next: LiveVisitStage): void => {
+    if (stage === "result" && next !== "result") {
+      opening?.stopTheme();
+    }
     stage = next;
     stageToken += 1;
   };
 
-  /** Puts out the lantern of a room run that is over, with its chase. */
-  const dropLantern = (current: Visit): void => {
-    current.lantern?.stop();
-    current.lantern = null;
-    current.lanternHold = false;
+  const enterHeadphoneCheck = (current: Visit): void => {
+    current.awaitingAnswer = false;
+    current.playRefusal = null;
+    current.judgement = null;
+    current.earpieces = "unknown";
+    enterStage("headphoneCheck");
+  };
+
+  const recordLevel = (
+    current: Visit,
+    outcome: Extract<KeepOutcome, { kind: "kept" }>,
+    anchor: Exclude<CalibrationAnchor, "hands">,
+  ): void => {
+    const roomTopLevelDb = Object.fromEntries(
+      ghostSoundIds.map((id) => [id, outcome.rangeReport.rooms[id].topLevelDb]),
+    ) as Record<GhostSoundId, number>;
+    const roomFloorLevelDb = Object.fromEntries(
+      ghostSoundIds.map((id) => [
+        id,
+        outcome.rangeReport.rooms[id].floorLevelDb,
+      ]),
+    ) as Record<GhostSoundId, number>;
+    current.lastCalibration = current.recorder.calibrationKept({
+      settingDb: outcome.settingDb,
+      roomTopLevelDb,
+      roomFloorLevelDb,
+      keptAtMs: timer.now(),
+      anchor,
+    });
+  };
+
+  const startOpeningTheme = (): void => {
+    if (
+      stage === "headphoneCheck" &&
+      pause === null &&
+      visit?.openingThemeAllowed
+    ) {
+      opening?.startTheme({ repeat: true });
+    }
+  };
+
+  /** Starts the room's beat, or keeps none if the output stage refuses it (the rhythm game). */
+  const startBeat = (current: Visit): void => {
+    const askedAtPageMs = timer.now();
+    const outcome = output.startBeat({
+      levelDb: rhythmConfig.beatLevelDb,
+      duckDb: rhythmConfig.beatDuckDb,
+      beatMs: beatMsOf(rhythmConfig),
+      beatsPerBar: rhythmConfig.beatsPerBar,
+    });
+    current.beatClock =
+      outcome.kind === "started"
+        ? createBeatClock({
+            startAudioMs: outcome.startMs,
+            beatMs: outcome.beatMs,
+            beatsPerBar: outcome.beatsPerBar,
+            pair: output.timestampPair(),
+            askedAtPageMs,
+            scheduleLeadMs: audioOutputConfig.scheduleLeadMs,
+          })
+        : null;
+  };
+
+  /** Stops the room's beat. The turns that follow wait their gaps alone until it starts again. */
+  const stopBeat = (current: Visit): void => {
+    if (current.beatClock !== null) {
+      output.stopBeat();
+      current.beatClock = null;
+    }
+  };
+
+  /** How the runners of a room run put their turns on the beat. */
+  const beatTimingOf = (current: Visit): BeatTiming =>
+    Object.freeze({
+      clock: () => current.beatClock,
+      cueLeadMs: rhythmConfig.cueLeadBeats * beatMsOf(rhythmConfig),
+      cued: (atMs: number) => {
+        emit({ kind: "turnCued", atMs, beatMs: beatMsOf(rhythmConfig) });
+      },
+    });
+
+  /** Ends the game of a room run that is over: its beat, its score and its chase. */
+  const endRoomGame = (current: Visit): void => {
+    stopBeat(current);
+    current.rhythm = null;
     current.chase = null;
   };
 
@@ -686,7 +919,7 @@ export function createVisitFlow(
     current.timerHandles.clear();
     current.runner?.abandon();
     current.runner = null;
-    dropLantern(current);
+    endRoomGame(current);
     // A swapped repeat under way plays nothing more and gives no record (visit-flow D35).
     current.repeat?.leave();
     current.repeat = null;
@@ -760,6 +993,16 @@ export function createVisitFlow(
 
   // ─── Pauses ────────────────────────────────────────────────────────────────────────────
 
+  /** The rooms of the run under way whose search has not finished, in visit order. */
+  const unfinishedMembers = (current: Visit): readonly Member[] =>
+    current.members.filter(
+      ({ room }) => !current.finishedRooms.has(room.roomIndex),
+    );
+
+  /** The room a pause or an answer that names no trial is logged against. */
+  const memberNow = (current: Visit): Member | null =>
+    unfinishedMembers(current)[0] ?? current.members[0] ?? null;
+
   const abandonAttempt = (current: Visit): void => {
     const runner = current.runner;
     if (runner === null) {
@@ -767,14 +1010,17 @@ export function createVisitFlow(
     }
     runner.abandon();
     current.runner = null;
-    dropLantern(current);
-    current.recorder.attemptEnded({
-      roomIndex: current.activeRoomIndex,
-      attempt: current.attempt,
-      endedAtMs: timer.now(),
-      ending: "abandoned",
-      result: null,
-    });
+    endRoomGame(current);
+    // A room whose search had finished keeps its result. The others begin again.
+    for (const { room, attempt } of unfinishedMembers(current)) {
+      current.recorder.attemptEnded({
+        roomIndex: room.roomIndex,
+        attempt,
+        endedAtMs: timer.now(),
+        ending: "abandoned",
+        result: null,
+      });
+    }
   };
 
   /** Begins a pause, or gives a pause that holds the reason `deviceChanged` (R12, R13.1). */
@@ -794,9 +1040,9 @@ export function createVisitFlow(
       stage,
       roomIndex:
         stage === "room"
-          ? current.activeRoomIndex
+          ? (memberNow(current)?.room.roomIndex ?? 0)
           : stage === "betweenRooms"
-            ? current.finishedRoomCount - 1
+            ? current.finishedRooms.size - 1
             : null,
       startedAtMs: timer.now(),
     });
@@ -805,16 +1051,19 @@ export function createVisitFlow(
         abandonAttempt(current);
       } else {
         current.runner?.pause();
-        // A pause fills the lantern, so the room goes on at once when the pause ends.
-        current.lantern?.fill();
-        current.lanternHold = false;
+        stopBeat(current);
       }
     }
     calibration.close();
   };
 
-  /** Moves to calibration after a device change, with the room that was due still due (R13.2). */
+  /** Checks the new output before restarting the room that was due. */
   const calibrateAgain = (current: Visit): void => {
+    if (opening !== null) {
+      current.lastCalibration = null;
+      enterHeadphoneCheck(current);
+      return;
+    }
     current.calibrationAgain = true;
     current.calibrationFresh = true;
     current.keepRefusal = null;
@@ -834,19 +1083,20 @@ export function createVisitFlow(
       repeatOf(current).resume();
       return;
     }
-    if (stage === "missedSoundReplay") {
-      // A pause of the replay is not written to the log, which was assembled when the rooms
-      // ended (missed-sound-replay R11.3, D18).
-      pause = null;
-      replayOf(current).resume();
-      return;
-    }
     current.recorder.pauseEnded(timer.now());
     pause = null;
+    if (stage === "headphoneCheck" && opening !== null) {
+      if (holding.reason === "deviceChanged") {
+        calibrateAgain(current);
+      }
+      startOpeningTheme();
+      return;
+    }
     const calibrated = output.rangeReport() !== null;
     switch (stage) {
       case "room":
         if (calibrated && current.runner !== null) {
+          startBeat(current);
           current.runner.resume();
         } else {
           calibrateAgain(current);
@@ -868,44 +1118,6 @@ export function createVisitFlow(
         return;
     }
   };
-
-  /**
-   * What a stop report of the output shell does in the missed-sound replay (missed-sound-replay
-   * design.md, "What the flow does", R11.2 to R11.6, R12.1). A pause here sets the snapshot's pause
-   * field only and writes nothing to the log (D18).
-   */
-  function replayStopped(reason: StopReason): void {
-    const current = visit;
-    if (current === null || stage !== "missedSoundReplay") {
-      return;
-    }
-    const replay = replayOf(current);
-    switch (reason) {
-      case "control":
-        // The flow caused it (stop, skip).
-        return;
-      case "pageLeft":
-        replay.cancel();
-        pause = null;
-        summaryOf(current);
-        enterStage("result");
-        return;
-      case "deviceChanged": {
-        const phase = replay.phase();
-        if (phase === "announcing" || phase === "playing") {
-          replay.end("deviceChanged");
-          pause = null;
-        }
-        return;
-      }
-      case "hidden":
-      case "interrupted":
-        if (pause === null && replay.cut()) {
-          pause = Object.freeze({ reason });
-        }
-        return;
-    }
-  }
 
   /**
    * Leaves the swapped repeat for the result (swapped-repeat R9.1, R11.3, R14.2, R14.7, D5, D15):
@@ -968,10 +1180,6 @@ export function createVisitFlow(
       repeatStopped(reason);
       return;
     }
-    if (stage === "missedSoundReplay") {
-      replayStopped(reason);
-      return;
-    }
     if (
       reason === "control" ||
       visit === null ||
@@ -983,50 +1191,56 @@ export function createVisitFlow(
       leave("pageLeft");
       return;
     }
+    if (opening !== null && stage === "headphoneCheck") {
+      visit.awaitingAnswer = false;
+    }
     beginPause(reason);
   }
 
   calibration.onChange(() => step(() => undefined));
+  opening?.onCalibrationSoundChange(startOpeningTheme);
 
   // ─── Rooms ─────────────────────────────────────────────────────────────────────────────
 
-  const finishRoom =
-    (current: Visit, roomIndex: number) =>
-    (result: RoomResult): void => {
+  /** One room's search has finished: its run is closed, and the room is finished. */
+  const roomFinished =
+    (current: Visit) =>
+    (track: RoomTrack, result: RoomResult): void => {
+      const { room, attempt } = track;
       current.recorder.attemptEnded({
-        roomIndex,
-        attempt: current.attempt,
+        roomIndex: room.roomIndex,
+        attempt,
         endedAtMs: timer.now(),
         ending: "finished",
         result,
       });
-      current.runner = null;
-      dropLantern(current);
-      emit({ kind: "roomFinished", room: roomAt(current, roomIndex) });
-      current.finishedRoomCount += 1;
-      if (current.finishedRoomCount < current.rooms.length) {
-        enterStage("betweenRooms");
-        return;
+      const creature = current.creatures.get(room.roomIndex);
+      if (creature !== undefined) {
+        creature.gone = true;
       }
-      // The replay is a span of its own for the rise limit (R16.1).
-      output.beginRoom();
-      const log = current.recorder.log();
-      current.log = log;
-      // The draw after the render seed and the engine seeds, so it equals replayRenderSeed(log)
-      // (missed-sound-replay R14.2, D2).
-      const renderSeed = drawSeed(current.source);
-      current.replay = createMissedSoundReplay({
-        output,
-        timer: current.timer,
-        log,
-        random: createSeededRandom(renderSeed),
-        emit,
-        notRunning: (reason) => replayStopped(reason),
-      });
-      enterStage("missedSoundReplay");
+      current.finishedRooms.set(room.roomIndex, result);
+      emit({ kind: "roomFinished", room });
     };
 
-  /** Starts a run of the room that is due (R6). */
+  /** Every search of the room run has finished: the rest, or the end of the rooms. */
+  const roomRunFinished = (current: Visit) => (): void => {
+    current.runner = null;
+    endRoomGame(current);
+    if (current.finishedRooms.size < current.rooms.length) {
+      enterStage("betweenRooms");
+      return;
+    }
+    current.log = current.recorder.log();
+    // Reserve the old replay draw so swappedRepeatEngineSeed still reproduces existing runs.
+    drawSeed(current.source);
+    enterStage("result");
+    opening?.startTheme({ repeat: false });
+  };
+
+  /**
+   * Starts a run of the rooms that are due (R6): the first unfinished room, or, where rooms run
+   * together, the first `roomsTogetherMaxCount` of them (one-room design.md, "The flow").
+   */
   const startRoom = (): void => {
     const current = currentVisit();
     if (output.rangeReport() === null) {
@@ -1043,46 +1257,73 @@ export function createVisitFlow(
         calibrateAgain(current);
         return;
       }
-      const roomIndex = current.finishedRoomCount;
-      const room = roomAt(current, roomIndex);
-      output.beginRoom();
-      const roomRange = report.rooms[room.roomId];
-      const searchCapDb = roomSearchCapDb(
-        roomRange.topLevelDb,
-        hearingMethodConfig,
-      );
-      // The search asks for nothing below the room's playable floor (audible-start R12.5).
-      const searchFloorDb = roomSearchFloorDb(
-        roomRange.floorLevelDb,
-        hearingMethodConfig,
-      );
-      const engineSeed = drawSeed(current.source);
-      const search = createThresholdSearch({
-        settings: {
-          ...hearingMethodConfig,
-          capRelativeToAnchorDb: searchCapDb,
-          floorDb: searchFloorDb,
-          // Held at or above the floor, as every start of the search must be. At a setting from
-          // the audible-start Keep_Minimum (−27 dB, D25) up the floor lies below the fixed start
-          // and this changes nothing; below it, it keeps the search valid. Each ear's own start
-          // from practice replaces it (audible-start task 11).
-          startingLevelDb: Math.max(
-            hearingMethodConfig.startingLevelDb,
-            searchFloorDb,
-          ),
-        },
-        random: createSeededRandom(engineSeed),
-      });
-      const attempt = current.recorder.attemptStarted({
-        roomIndex,
-        engineSeed,
-        calibrationIndex: keptCalibration.calibrationIndex,
-        searchCapDb,
-        searchFloorDb,
-        startedAtMs: timer.now(),
-      });
-      current.activeRoomIndex = roomIndex;
-      current.attempt = attempt;
+      const due = current.rooms
+        .filter((room) => !current.finishedRooms.has(room.roomIndex))
+        .slice(0, roomsTogetherMaxCount);
+      if (due.length === 0) {
+        throw new Error("No room of the visit is due.");
+      }
+      if (together) {
+        // Several sounds take turns: each is held to its own last level on an ear, not to another
+        // sound's (one-room design.md, D4).
+        output.beginRoom({ riseLimitPer: "sound" });
+      } else {
+        output.beginRoom();
+      }
+      const tracks: RoomTrack[] = [];
+      const practised: PractisedRoom[] = [];
+      const members: Member[] = [];
+      const engineSeeds: number[] = [];
+      for (const room of due) {
+        const roomRange = report.rooms[room.roomId];
+        const searchCapDb = roomSearchCapDb(
+          roomRange.topLevelDb,
+          hearingMethodConfig,
+        );
+        // The search asks for nothing below the room's playable floor (audible-start R12.5).
+        const searchFloorDb = roomSearchFloorDb(
+          roomRange.floorLevelDb,
+          hearingMethodConfig,
+        );
+        // One draw for each room run, in room order, and no other draw from this source here: the
+        // seeds found again by counting the room runs of the log depend on it (D19).
+        const engineSeed = drawSeed(current.source);
+        const search = createThresholdSearch({
+          method: searchMethod,
+          settings: {
+            ...hearingMethodConfig,
+            capRelativeToAnchorDb: searchCapDb,
+            floorDb: searchFloorDb,
+            // Held at or above the floor, as every start of the search must be. At a setting from
+            // the audible-start Keep_Minimum (−27 dB, D25) up the floor lies below the fixed start
+            // and this changes nothing; below it, it keeps the search valid.
+            startingLevelDb: Math.max(
+              hearingMethodConfig.startingLevelDb,
+              searchFloorDb,
+            ),
+          },
+          random: createSeededRandom(engineSeed),
+        });
+        const attempt = current.recorder.attemptStarted({
+          roomIndex: room.roomIndex,
+          engineSeed,
+          calibrationIndex: keptCalibration.calibrationIndex,
+          searchCapDb,
+          searchFloorDb,
+          startedAtMs: timer.now(),
+        });
+        tracks.push({ search, room, attempt, searchCapDb, searchFloorDb });
+        practised.push({ room, attempt, searchCapDb });
+        members.push({ room, attempt });
+        engineSeeds.push(engineSeed);
+        current.creatures.set(room.roomIndex, {
+          gone: false,
+          tally: emptyChaseTally(),
+          topLevelDb: searchCapDb,
+          floorLevelDb: searchFloorDb,
+        });
+      }
+      current.members = Object.freeze(members);
       const presented =
         onTrialPresented === undefined
           ? {}
@@ -1109,91 +1350,185 @@ export function createVisitFlow(
         output.stopAll();
         leave("soundRefused");
       };
-      const counting = createRoomRunner({
+      const counting = createMixedRoomRunner({
         output,
         timer: current.timer,
-        search,
-        room,
-        attempt,
+        tracks,
+        // Whose turn it is comes from the engine seeds, never from the visit's source (D5).
+        turnRandom: createSeededRandom(turnSeedOf(engineSeeds)),
         soundRandom: current.soundRandom,
         recorder: current.recorder,
         latestOffset: current.latestOffset,
-        scored: (entry) => {
+        timingOffsetMs: () => current.timingOffset.offsetMs(),
+        baselineMs: () => quickBaselineMs(current),
+        earlierRooms: Array.from(
+          current.finishedRooms,
+          ([roomIndex, result]) => ({
+            frequencyHz: roomAt(current, roomIndex).frequencyHz,
+            result,
+          }),
+        ),
+        scored: (entry, { room }) => {
+          if (
+            entry.kind === "sound" &&
+            entry.outcome === "caught" &&
+            entry.responseTimeMs !== null &&
+            entry.playedLevelDb >= headphoneTraitsConfig.loudLevelMinDb
+          ) {
+            current.loudNetAnswersMs.push(
+              entry.responseTimeMs - (entry.timingOffsetMs ?? 0),
+            );
+            current.timingOffset.noteHeard(entry.responseTimeMs);
+          }
           if (current.chase !== null) {
             countIntoChase(current.chase, entry);
           }
-          // A caught sound gives its cell back, so only an answer at nothing costs light.
-          if (entry.kind === "sound" && entry.outcome === "caught") {
-            current.lantern?.giveBack();
+          const creature = current.creatures.get(room.roomIndex);
+          if (creature !== undefined) {
+            countIntoChase(creature.tally, entry);
           }
+          // Count the game score after the search used the same timing grade.
+          const judgement = current.rhythm?.judge(entry) ?? judgementOf(entry);
           emit({
             kind: "trialScored",
             room,
             trial: entry,
             reaction: reactionTo(entry),
+            judgement,
+            ...(current.rhythm === null
+              ? {}
+              : { standing: current.rhythm.standing() }),
           });
         },
-        finished: finishRoom(current, roomIndex),
+        trackFinished: roomFinished(current),
+        finished: roomRunFinished(current),
+        ...(roomTimeLimitMs === null ? {} : { timeLimitMs: roomTimeLimitMs }),
         pauseFromOutput,
         soundRefused,
+        // The game layer of 2026-11-17: a chime after a catch, and a broken combo for an answer
+        // that decided nothing. On the beat there is no reminder (the rhythm game, 2026-11-18).
+        beat: beatTimingOf(current),
+        game: {
+          reminderAfterQuietMs: visitFlowConfig.reminderAfterQuietMs,
+          reminderAboveCaughtDb: visitFlowConfig.reminderAboveCaughtDb,
+          reminderUncaughtLevelDb: hearingMethodConfig.startingLevelDb,
+          chimeAboveCaughtDb: visitFlowConfig.chimeAboveCaughtDb,
+          chimeMaxLevelDb: visitFlowConfig.chimeMaxLevelDb,
+          missLevelDb: visitFlowConfig.missLevelDb,
+          reminderScored: (entry, { room }) => {
+            const caught = entry.outcome === "caught";
+            // Only an easy turn is plainly audible; a reminder after a quiet may be near the edge
+            // of hearing, where answers grow slow (headphone-traits design.md "The estimate").
+            if (
+              caught &&
+              entry.easy === true &&
+              entry.responseTimeMs !== null
+            ) {
+              current.loudNetAnswersMs.push(
+                entry.responseTimeMs - (entry.timingOffsetMs ?? 0),
+              );
+              current.timingOffset.noteHeard(entry.responseTimeMs);
+            }
+            // An easy turn is a turn of the game: it counts in the combo and the points (R2.4).
+            if (entry.easy === true) {
+              current.rhythm?.judge(entry);
+            }
+            emit({
+              kind: "reminderSoundScored",
+              room,
+              trial: entry,
+              reaction: caught ? "ripple" : "none",
+              line: caught
+                ? creatureReminderCaughtLine(room.roomId, entry.ear)
+                : null,
+            });
+          },
+          easyTurns: {
+            pacer: createEasyTurnPacer(),
+            // Its own source, so the turn draw of one-room D5 stays where it was.
+            random: createSeededRandom(
+              (turnSeedOf(engineSeeds) ^ 0x5eed) >>> 0,
+            ),
+            aboveCaughtDb: headphoneTraitsConfig.easyAboveCaughtDb,
+            uncaughtLevelDb: hearingMethodConfig.startingLevelDb,
+          },
+          answerIgnored: (side) => {
+            current.rhythm?.kickAtNothing();
+            emit({
+              kind: "kickedAtNothing",
+              side,
+              standing: current.rhythm?.standing() ?? null,
+            });
+          },
+        },
         ...presented,
       });
-      // Practice first: each ear hears the room's sound until it catches it, and nothing of it
-      // counts. Then the search above runs as before (audible-start, light plan of 2026-11-16).
-      const runner = createPractisedRoomRunner({
+      // Practice first: each ear hears each room's sound until it catches it, and nothing of it
+      // counts. Then the searches above run (audible-start, light plan of 2026-11-16).
+      const runner = createPractisedRoomsRunner({
         output,
         timer: current.timer,
-        room,
-        attempt,
+        rooms: practised,
         soundRandom: current.soundRandom,
         recorder: current.recorder,
         latestOffset: current.latestOffset,
-        searchCapDb,
         counting,
+        beat: beatTimingOf(current),
         practiceScored: (entry) => {
+          const room = roomAt(current, entry.roomIndex);
           const caught = entry.outcome === "caught";
+          // A seen catch: the creature was on screen from the presentation (design.md "The delay").
+          if (caught && entry.answeredAtMs !== null) {
+            current.timingOffset.noteSeen(
+              entry.answeredAtMs - entry.presentedAtMs,
+            );
+          }
+          const caughtLine = together
+            ? rollCallCaughtLine(room.roomId)
+            : practiceCopy.caughtLine;
           emit({
             kind: "practiceSoundScored",
             room,
             trial: entry,
             reaction: caught ? "ripple" : "none",
-            line: caught ? practiceCopy.caughtLine : null,
+            line: caught ? caughtLine : null,
+            judgement: judgementOf(entry),
           });
         },
         countingStarted: () => {
-          // The lantern is lit when the room begins to count (the game layer, 2026-11-16).
-          current.lantern = createLantern({
-            timer: current.timer,
-            cameBack: (wasDark) => {
-              if (
-                wasDark &&
-                current.lanternHold &&
-                pause === null &&
-                stage === "room"
-              ) {
-                current.lanternHold = false;
-                current.runner?.resume();
-              }
-            },
-          });
-          current.lanternHold = false;
+          // The score, the combo and Jack's flame start when the room begins to count.
+          current.rhythm = createRhythmScore();
           current.chase = {
             ...emptyChaseTally(),
-            topLevelDb: searchCapDb,
-            floorLevelDb: searchFloorDb,
+            // The scale of the room run holds every level any of its rooms may play.
+            topLevelDb: Math.max(
+              ...practised.map(({ searchCapDb }) => searchCapDb),
+            ),
+            floorLevelDb: Math.min(
+              ...members.map(
+                ({ room }) =>
+                  current.creatures.get(room.roomIndex)?.floorLevelDb ?? 0,
+              ),
+            ),
           };
-          emit({ kind: "countingStarted", room });
+          for (const { room } of members) {
+            emit({ kind: "countingStarted", room });
+          }
         },
         notHeard: () => {
           beginPause("practiceNotHeard");
         },
+        continueAfterMisses: opening !== null,
         pauseFromOutput,
         soundRefused,
         ...presented,
       });
       current.runner = runner;
       enterStage("room");
-      emit({ kind: "roomStarted", room, attempt });
+      for (const { room, attempt } of members) {
+        emit({ kind: "roomStarted", room, attempt });
+      }
+      startBeat(current);
       runner.start();
     });
   };
@@ -1241,29 +1576,34 @@ export function createVisitFlow(
           recorder: createVisitLogRecorder({
             visitType,
             visitSeed,
+            searchMethod,
             rooms,
             startedAtMs: timer.now(),
           }),
           latestOffset: { latestOffsetMs: 0 },
+          timingOffset: fixedTimingOffset
+            ? zeroTimingOffset
+            : createTimingOffsetTracker(),
           timerHandles,
           timer: visitTimer(timerHandles, () => current),
-          finishedRoomCount: 0,
+          loudNetAnswersMs: [],
+          finishedRooms: new Map(),
           rulesShown: false,
           calibrationAgain: false,
           calibrationFresh: true,
           keepRefusal: null,
           lastCalibration: null,
+          openingThemeAllowed: opening !== null,
           awaitingAnswer: false,
           playRefusal: null,
           judgement: null,
           runner: null,
-          lantern: null,
-          lanternHold: false,
+          rhythm: null,
+          beatClock: null,
           chase: null,
-          activeRoomIndex: 0,
-          attempt: 0,
+          members: Object.freeze([]),
+          creatures: new Map(),
           log: null,
-          replay: null,
           summary: null,
           swappedRoom: null,
           startedAtMs: timer.now(),
@@ -1274,8 +1614,8 @@ export function createVisitFlow(
         };
         visit = current;
         activationRefused = false;
-        enterStage("calibration");
-        withSound(() => undefined);
+        enterStage(opening === null ? "calibration" : "headphoneCheck");
+        withSound(startOpeningTheme);
       });
     },
 
@@ -1332,39 +1672,16 @@ export function createVisitFlow(
           current.keepRefusal = outcome.reason;
           return;
         }
-        const roomTopLevelDb = Object.fromEntries(
-          ghostSoundIds.map((soundId) => [
-            soundId,
-            outcome.rangeReport.rooms[soundId].topLevelDb,
-          ]),
-        ) as Record<GhostSoundId, number>;
-        // Every ghost room's Playable_Floor with this calibration (audible-start R12.3).
-        const roomFloorLevelDb = Object.fromEntries(
-          ghostSoundIds.map((soundId) => [
-            soundId,
-            outcome.rangeReport.rooms[soundId].floorLevelDb,
-          ]),
-        ) as Record<GhostSoundId, number>;
         const kept = calibration.snapshot().kept;
         if (kept === null) {
           throw new Error(
             "A kept calibration has no record in the controller.",
           );
         }
-        current.lastCalibration = current.recorder.calibrationKept({
-          settingDb: outcome.settingDb,
-          roomTopLevelDb,
-          roomFloorLevelDb,
-          keptAtMs: timer.now(),
-          // How the anchor was set: with the music, or with the hiss (audible-start R8.4).
-          anchor: kept.anchor,
-        });
+        recordLevel(current, outcome, kept.anchor);
         current.keepRefusal = null;
         current.calibrationFresh = false;
-        current.awaitingAnswer = false;
-        current.playRefusal = null;
-        current.judgement = null;
-        enterStage("headphoneCheck");
+        enterHeadphoneCheck(current);
       });
     },
 
@@ -1374,9 +1691,14 @@ export function createVisitFlow(
         if (current === null) {
           return;
         }
+        current.openingThemeAllowed = false;
+        opening?.stopTheme();
         withSound(() => {
           if (pause !== null) {
             return;
+          }
+          if (opening !== null && output.rangeReport() === null) {
+            recordLevel(current, opening.usePresetLevel(), "preset");
           }
           const outcome = output.playHeadphoneCheck(current.soundRandom);
           if (outcome.kind === "refused") {
@@ -1434,12 +1756,6 @@ export function createVisitFlow(
           case "betweenRooms":
             startRoom();
             return;
-          case "missedSoundReplay":
-            // Skips the replay, or goes on once it has finished (missed-sound-replay R10.2, R13.3).
-            replayOf(current).skip();
-            summaryOf(current);
-            enterStage("result");
-            return;
           case "swappedRepeat":
             // Back to the picture, silencing a sound that may be under way (swapped-repeat R11.3, D15).
             if (repeatOf(current).mayBeSounding()) {
@@ -1460,34 +1776,9 @@ export function createVisitFlow(
         }
         const current = inVisit("room");
         if (current !== null) {
-          const lantern = current.lantern;
-          if (lantern === null) {
-            // The practice: an answer costs nothing.
-            current.runner?.answer(side, pressedAtMs);
-            return;
-          }
-          // Every answer spends one cell, and a dark lantern takes no answer.
-          if (!lantern.spend()) {
-            // Logged as every answer is that decides nothing (R8.1).
-            current.recorder.answerIgnored({
-              atMs: answerTimeMs(pressedAtMs, timer.now()),
-              side,
-              roomIndex: current.activeRoomIndex,
-              attempt: current.attempt,
-            });
-            return;
-          }
+          // Every answer counts. The rhythm game only follows how they went: the runner breaks the
+          // combo for an answer that decided nothing.
           current.runner?.answer(side, pressedAtMs);
-          // A catch has given its cell back by now. With the lantern dark the room waits: it
-          // presents nothing that could not be answered.
-          if (
-            current.lantern === lantern &&
-            lantern.cells() === 0 &&
-            current.runner !== null
-          ) {
-            current.runner.pause();
-            current.lanternHold = true;
-          }
           return;
         }
         // The room of the swapped repeat: the side is the visitor's own ear.
@@ -1549,6 +1840,7 @@ export function createVisitFlow(
             calibrateAgain(current);
             return;
           }
+          startBeat(current);
           current.runner.goOn();
         });
       });
@@ -1566,13 +1858,6 @@ export function createVisitFlow(
           return;
         }
         switch (stage) {
-          case "missedSoundReplay":
-            // Silenced above; the replay plays nothing more (missed-sound-replay R11.1).
-            replayOf(current).cancel();
-            pause = null;
-            summaryOf(current);
-            enterStage("result");
-            return;
           case "swappedRepeat":
             // Silenced above; a run under way ends without a record (swapped-repeat R14.2).
             leaveRepeat(current);
@@ -1637,6 +1922,12 @@ export function createVisitFlow(
             return engineSeed;
           },
           latestOffset: current.latestOffset,
+          ...(log.searchMethod === "adaptive"
+            ? {
+                timingOffsetMs: () => current.timingOffset.offsetMs(),
+                baselineMs: () => quickBaselineMs(current),
+              }
+            : {}),
           emit,
           notRunning: (reason) => repeatStopped(reason),
           recorded: (run) => {
@@ -1651,27 +1942,6 @@ export function createVisitFlow(
           current.earpieces = "unknown";
         }
         enterStage("swappedRepeat");
-      });
-    },
-
-    startReplay() {
-      step(() => {
-        const current = inVisit("missedSoundReplay");
-        if (current === null || replayOf(current).phase() !== "announcing") {
-          return;
-        }
-        // A press: it may start sound, so activate is called within the call (R6.3, R6.4, D8).
-        withSound(() => {
-          const replay = replayOf(current);
-          if (
-            visit === current &&
-            stage === "missedSoundReplay" &&
-            pause === null &&
-            replay.phase() === "announcing"
-          ) {
-            replay.start();
-          }
-        });
       });
     },
 

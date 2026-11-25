@@ -4,22 +4,19 @@
  */
 export const frontDoorCopy = Object.freeze({
   headphonesLine: "Put on headphones. Turn off noise cancelling.",
-  aboutLine:
-    "A house that gets quieter each time you catch it. A first listen to the quietest sound you can catch, on your left and on your right.",
+  aboutLine: "Catch each creature by ear. Every catch makes it quieter.",
   choicesLabel: "Ways in",
   choices: Object.freeze({
-    quick: Object.freeze({
-      button: "Enter for about 7 minutes",
-      note: "Three rooms.",
-    }),
     full: Object.freeze({
-      button: "Enter for about 12 minutes",
-      note: "Five rooms.",
+      button: "Enter the house",
+      note: "Up to 5 min + setup",
     }),
     replay: Object.freeze({
       button: "Watch a 60 second replay",
-      note: "No headphones needed. This door is not open yet.",
+      note: "Not open yet",
     }),
   }),
-  privacyLine: "Nothing you do here leaves this browser.",
+  privacyLine: "Nothing leaves this browser.",
+  /** The name of the row of the five creatures, for a visitor who cannot see them. */
+  rosterLabel: "The five creatures of the house",
 });

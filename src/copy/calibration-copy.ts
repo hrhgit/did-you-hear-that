@@ -1,10 +1,10 @@
 /**
  * What the calibration screen says (audible-start design.md, "The calibration copy"). The visitor
  * sets a piece of music to a comfortable listening volume; where the music cannot be loaded, the
- * calibration sound is a hiss, whose lines are in `hiss`. `whyLine`, `keysLine`, `loadingLine`,
- * `keptLine` and the button labels serve both sounds. Starting text, to be reviewed by the project
- * owner. No line advises raising the system volume (audio-output D9, Q2), and no line mentions
- * hands.
+ * calibration sound is a hiss, whose lines are in `hiss`. `keysLine`, `loadingLine`, `keptLine`
+ * and the button labels serve both sounds. The screen says what to do in one short line and
+ * leaves the rest to the control (the owner asked for less text on 2026-11-24). No line advises
+ * raising the system volume (audio-output D9, Q2), and no line mentions hands.
  */
 export const calibrationCopy = Object.freeze({
   /** The heading of the calibration screen. */
@@ -13,15 +13,9 @@ export const calibrationCopy = Object.freeze({
   againHeading: "Set the music again",
   /** Shown when calibration opens: what to do. */
   openLine:
-    "Move the control until the music is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The music starts very quietly.",
-  /** Why the house asks for it. */
-  whyLine:
-    "This tells the house how loud is safe on these headphones at this volume, and gives your result a level to be measured from.",
-  /** How the sound follows the control. */
-  riseLine: "The music follows the control as you move it.",
+    "As loud as you would play music in a quiet room. Leave your system volume alone.",
   /** The keys that move the control, as the visit page handles them. */
-  keysLine:
-    "On a keyboard, the arrow keys move the control one step. Shift with an arrow, Page Up or Page Down move it five steps. Home and End go to the ends. Enter keeps the setting.",
+  keysLine: "Arrow keys move the control. Enter keeps the setting.",
   /** Shown while the setting is at the top of the control (audio-output R16.7). */
   atTopLine:
     "This is as loud as the music goes here. If it still sounds too quiet, keep this setting.",
@@ -31,8 +25,7 @@ export const calibrationCopy = Object.freeze({
   /** Shown while the music is still loading. */
   loadingLine: "The music is on its way.",
   /** Shown once a calibration is kept (audio-output R16.8, audio-safety rule 8). */
-  keptLine:
-    "Leave your system volume where it is now. The house keeps every sound below its limit only if you do not turn the volume up.",
+  keptLine: "From here on, do not turn the volume up.",
   startButton: "Start calibrating",
   quieterButton: "Quieter",
   louderButton: "Louder",
@@ -42,13 +35,23 @@ export const calibrationCopy = Object.freeze({
     heading: "Set the hiss to a comfortable volume",
     againHeading: "Set the hiss again",
     openLine:
-      "The calibration sound is a hiss. Move the control until it is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The hiss starts very quietly.",
-    riseLine: "The hiss follows the control as you move it.",
+      "Set this hiss as loud as you would play music in a quiet room. Leave your system volume alone.",
     atTopLine:
       "This is as loud as the hiss goes here. If it still sounds too quiet, keep this setting.",
     systemVolumeHighLine:
       "Your system volume is set very high. Turn it down, then set the hiss again.",
   }),
+});
+
+/** The public visit plays a fixed reference. The visitor sets the device volume. */
+export const referenceVolumeCopy = Object.freeze({
+  heading: "Set a comfortable volume",
+  againHeading: "Set your volume again",
+  openLine: "Use your device’s volume controls to make the music comfortable.",
+  hissLine: "Use your device’s volume controls to make the hiss comfortable.",
+  startButton: "Play reference sound",
+  keepButton: "Continue",
+  keptLine: "Keep your system volume unchanged during the test.",
 });
 
 /**
@@ -72,5 +75,5 @@ export function roomsShortLine(count: number, total: number): string {
     return "At this setting, every room can get as loud as the house would like.";
   }
   const rooms = total === 1 ? "room" : "rooms";
-  return `At this setting, ${count} of the ${total} ${rooms} cannot get as loud as the house would like. The house will stop at the loudest it can play there. Do not turn the volume up to change this.`;
+  return `At this setting, ${count} of the ${total} ${rooms} cannot get as loud as the house would like. Do not turn the volume up.`;
 }

@@ -10,7 +10,25 @@ describe("visitFlowConfig", () => {
       practiceStartLevelDb: 0,
       practiceGapMs: 2000,
       practiceSoundsPerEarMaxCount: 2,
+      roomsTogetherMaxCount: 5,
+      reminderAfterQuietMs: 12000,
+      reminderAboveCaughtDb: 10,
+      chimeAboveCaughtDb: 30,
+      chimeMaxLevelDb: -6,
+      missLevelDb: -10,
+      roomTimeLimitMs: 300000,
     });
+  });
+
+  it("puts every room of the longest visit in one room (one-room D1)", () => {
+    expect(Number.isInteger(visitFlowConfig.roomsTogetherMaxCount)).toBe(true);
+    expect(visitFlowConfig.roomsTogetherMaxCount).toBeGreaterThanOrEqual(
+      Math.max(
+        ...Object.values(hearingMethodConfig.roomFrequenciesHz).map(
+          (frequencies) => frequencies.length,
+        ),
+      ),
+    );
   });
 
   it("starts practice no louder than the anchor and keeps its last sound within the cap", () => {

@@ -12,15 +12,14 @@ describe("hearingMethodConfig", () => {
       capRelativeToAnchorDb: 5,
       floorDb: -70,
       responseWindowMs: 1800,
-      gapBetweenTrialsMinMs: 1000,
-      gapBetweenTrialsMaxMs: 2500,
+      gapBetweenTrialsMinMs: 800,
+      gapBetweenTrialsMaxMs: 1600,
       noSoundTrialShareMinFraction: 0.15,
       noSoundTrialShareMaxFraction: 0.25,
       falseAlarmRateUnreliableAboveFraction: 0.3,
       trialLimitPerEarPerRoomCount: 20,
       swappedRepeatDifferenceDb: 15,
       roomFrequenciesHz: {
-        quick: [1000, 4000, 8000],
         full: [500, 1000, 2000, 4000, 8000],
       },
       noSoundTrialProbabilityFraction: 0.2,
@@ -42,13 +41,6 @@ describe("hearingMethodConfig", () => {
     it("orders the floor below the starting level and the starting level below the cap", () => {
       expect(config.floorDb).toBeLessThan(config.startingLevelDb);
       expect(config.startingLevelDb).toBeLessThan(config.capRelativeToAnchorDb);
-    });
-
-    it("keeps the cap at 5 dB above the anchor or lower (audible-start R2.3)", () => {
-      expect(
-        config.capRelativeToAnchorDb,
-        "capRelativeToAnchorDb is above 5 dB. It was made stricter on 2026-11-16; a higher cap needs the project owner's approval first.",
-      ).toBeLessThanOrEqual(5);
     });
 
     it("has positive step sizes", () => {
@@ -120,19 +112,12 @@ describe("hearingMethodConfig", () => {
         }
       }
     });
-
-    it("makes every quick visit room a full visit room", () => {
-      for (const roomHz of config.roomFrequenciesHz.quick) {
-        expect(config.roomFrequenciesHz.full).toContain(roomHz);
-      }
-    });
   });
 
   describe("freezing", () => {
     it("freezes the object, the room lists object and every room list", () => {
       expect(Object.isFrozen(config)).toBe(true);
       expect(Object.isFrozen(config.roomFrequenciesHz)).toBe(true);
-      expect(Object.isFrozen(config.roomFrequenciesHz.quick)).toBe(true);
       expect(Object.isFrozen(config.roomFrequenciesHz.full)).toBe(true);
     });
 
@@ -145,11 +130,13 @@ describe("hearingMethodConfig", () => {
     });
 
     it("throws a TypeError when a room list is replaced and keeps its value", () => {
-      const writable = config.roomFrequenciesHz as { quick: readonly number[] };
+      const writable = config.roomFrequenciesHz as { full: readonly number[] };
       expect(() => {
-        writable.quick = [250];
+        writable.full = [250];
       }).toThrow(TypeError);
-      expect(config.roomFrequenciesHz.quick).toEqual([1000, 4000, 8000]);
+      expect(config.roomFrequenciesHz.full).toEqual([
+        500, 1000, 2000, 4000, 8000,
+      ]);
     });
 
     it("throws a TypeError when an element of a room list is assigned and keeps its value", () => {

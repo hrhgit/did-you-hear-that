@@ -1,8 +1,8 @@
 import type { ResultPicture } from "../../session/result-page-types";
-import { resultViewBox } from "./result-geometry";
+import { resultCurveViewBox } from "./result-curve-box";
 
 /**
- * The saved image of a result, laid out as plain data: a sheet with the drawing of the house at
+ * The saved image of a result, laid out as plain data: a sheet with the drawing at
  * the left and, beside it, what the picture can tell and each floor in words. The limits
  * statement is on every sheet, in full. A pure function of the picture and of how wide text is,
  * so it can be checked without a browser.
@@ -32,7 +32,7 @@ export interface SheetRule {
 export interface PictureSheet {
   readonly width: number;
   readonly height: number;
-  /** Where the drawing of the house goes. It has the proportions of the result's view box. */
+  /** Where the drawing goes. It has the proportions of the result's view box. */
   readonly drawing: {
     readonly x: number;
     readonly y: number;
@@ -106,11 +106,18 @@ export function wrapText(
   return lines;
 }
 
-/** Lays out the sheet for a picture. */
+/**
+ * Lays out the sheet for a picture. `drawingBox` is the view box of the drawing as the page shows
+ * it, so the drawing keeps its proportions on the sheet.
+ */
 export function layoutPictureSheet(
   picture: ResultPicture,
   headphones: SheetHeadphones | null,
   measure: MeasureText,
+  drawingBox: {
+    readonly width: number;
+    readonly height: number;
+  } = resultCurveViewBox,
 ): PictureSheet {
   const lines: SheetLine[] = [];
   const rules: SheetRule[] = [];
@@ -211,9 +218,7 @@ export function layoutPictureSheet(
     x: margin,
     y: bodyTop,
     width: drawingWidth,
-    height: Math.round(
-      (drawingWidth * resultViewBox.height) / resultViewBox.width,
-    ),
+    height: Math.round((drawingWidth * drawingBox.height) / drawingBox.width),
   };
 
   // Beside the drawing: what the picture can tell, in full, then each floor from the top down.

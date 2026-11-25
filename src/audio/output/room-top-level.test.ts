@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { audioOutputConfig } from "../../config/audio-output-config";
 import { audioSafetyConfig } from "../../config/audio-safety-config";
 import { hearingMethodConfig } from "../../config/hearing-method-config";
-import type { SoundId } from "../../config/sound-id";
+import type { ListedSoundId } from "../../config/sound-id";
 import { soundIds } from "../../config/sound-id";
 import { soundRulesConfig } from "../../config/sound-rules-config";
 import { decibelsToGain } from "../synth/decibels-to-gain";
@@ -15,7 +15,7 @@ import { roomTopLevelDb } from "./room-top-level";
  * each is `13.98 − peakBoundDb − Calibration_Setting`, at most +5.
  */
 const roomTopTableDb: Readonly<
-  Record<number, Readonly<Record<SoundId, number>>>
+  Record<number, Readonly<Record<ListedSoundId, number>>>
 > = {
   [-40]: {
     cellar: 5,

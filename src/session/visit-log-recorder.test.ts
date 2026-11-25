@@ -10,9 +10,9 @@ const visitStartMs = 100_000;
 
 function recorder() {
   return createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 4242,
-    rooms: visitRooms("quick"),
+    rooms: visitRooms("full"),
     startedAtMs: visitStartMs,
   });
 }
@@ -151,9 +151,9 @@ describe("createVisitLogRecorder", () => {
     const log = recorder().log();
     expect(log).toEqual({
       formatVersion: 1,
-      visitType: "quick",
+      visitType: "full",
       visitSeed: 4242,
-      rooms: visitRooms("quick"),
+      rooms: visitRooms("full"),
       calibrations: [],
       headphoneChecks: [],
       roomAttempts: [],
@@ -363,7 +363,7 @@ describe("createVisitLogRecorder", () => {
     expect(Object.hasOwn(entry, "anchor")).toBe(false);
   });
 
-  it("refuses an anchor that is not music or hiss, the hands among them", () => {
+  it("refuses invalid anchors, including the legacy hands anchor", () => {
     const visit = recorder();
     for (const anchor of ["hands", "loading", ""]) {
       expect(() =>

@@ -18,6 +18,7 @@ import {
   unreliableReasonLine,
   visitNoticeLine,
   wingLine,
+  wingValue,
 } from "../copy/result-lines";
 import { pitchLabel, roomNames } from "../copy/room-copy";
 import {
@@ -117,6 +118,9 @@ function earlierWing(
   return {
     state: earlierResult.state,
     outlineDepthFraction: lightDepthFraction(earlierResult, scale),
+    ...(earlierResult.state === "found"
+      ? { levelDb: earlierResult.thresholdDb }
+      : {}),
   };
 }
 
@@ -126,6 +130,7 @@ function wing(
   scale: FloorScale,
   earlierResult: VisitEarResult | null,
 ): PictureWing {
+  const value = wingValue(words(result));
   return {
     ear,
     state: result.state,
@@ -137,6 +142,14 @@ function wing(
         : null,
     // The outline of an earlier visit (design.md, "Comparison with an earlier visit").
     earlier: earlierResult === null ? null : earlierWing(earlierResult, scale),
+    valueLabel: value.value,
+    valueNote: value.note,
+    ...(result.state === "found" &&
+    result.lowDb !== undefined &&
+    result.highDb !== undefined
+      ? { range: { lowDb: result.lowDb, highDb: result.highDb } }
+      : {}),
+    ...(result.state === "found" ? { levelDb: result.thresholdDb } : {}),
   };
 }
 

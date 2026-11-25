@@ -24,6 +24,8 @@ import {
   differenceLine,
   falseAlarmLine,
   floorDescription,
+  levelRangeLabel,
+  levelRangeLine,
   playableFloorLine,
   swappedRepeatLine,
   unreliableReasonLine,
@@ -42,6 +44,20 @@ import {
   visitDateLabel,
   visitTypeLabel,
 } from "./saved-visit-lines";
+
+describe("levelRangeLabel", () => {
+  it.each([
+    [-34.8, -30.2, "30–35"],
+    [1.2, 4.8, "1–5"],
+    [-3.6, 2.1, "0–4"],
+    [-20.2, -20.1, "20–20"],
+  ] as const)("formats %s to %s as %s", (lowDb, highDb, label) => {
+    expect(levelRangeLabel(lowDb, highDb)).toBe(label);
+    expect(findBannedTerms(levelRangeLine(lowDb, highDb), bannedTerms)).toEqual(
+      [],
+    );
+  });
+});
 
 // The copy of the result page (result-page design.md, "The copy" and "The copy tests").
 
@@ -102,7 +118,7 @@ const deleteRefusals: readonly DeleteRefusalName[] = [
   "refused",
   "notFound",
 ];
-const visitTypes: readonly VisitType[] = ["quick", "full"];
+const visitTypes: readonly VisitType[] = ["full"];
 const differences = [-40, -15, -0.4, 0, 0.4, 15, 40];
 const thresholds = [-70, -35, -12.6, -0.4, 0, 0.4, 5, 15];
 const counts = [0, 1, 2, 3, 9, 21];
@@ -263,7 +279,7 @@ describe("the result page's constant copy", () => {
 
   it("holds every fixed string of the design, word for word", () => {
     expect(resultPageCopy).toEqual({
-      heading: "The quietest sounds you caught",
+      heading: "Your listening estimates",
       leftLabel: "Left",
       rightLabel: "Right",
       differenceHeading: "Left and right",
@@ -272,16 +288,14 @@ describe("the result page's constant copy", () => {
       savePictureButton: "Save picture",
       pictureNotSavedLine:
         "The picture could not be saved just now. Try again.",
-      headphoneNameLabel: "Name your headphones. You may leave this empty.",
-      saveButton: "Save this visit in this browser",
-      notSavedLine:
-        "This visit is not saved. If you leave without saving it, nothing from it is kept.",
+      headphoneNameLabel: "Name your headphones, if you like.",
+      saveButton: "Save this visit",
+      notSavedLine: "Not saved yet. If you leave now, nothing is kept.",
       savedLine: "Saved in this browser. Nothing has left it.",
       renamedLine: "The name of the headphones was changed.",
-      mayBeClearedLine:
-        "A browser can clear what is saved in it on its own, so a saved visit may not stay forever.",
+      mayBeClearedLine: "Your browser may clear saved visits on its own.",
       savedVisitsHeading: "Visits saved in this browser",
-      noSavedVisitsLine: "No visits are saved in this browser.",
+      noSavedVisitsLine: "None yet.",
       headphonesLabel: "Headphones",
       unnamedHeadphonesLabel: "Not named",
       showButton: "Show its picture",
@@ -364,13 +378,13 @@ describe("visitNoticeLine", () => {
 describe("wingLine", () => {
   it("gives the line of each state", () => {
     expect(wingLine(found(-35))).toBe(
-      "The quietest sound you caught here was 35 dB quieter than your calibration.",
+      "The estimated level here is 35 dB quieter than your calibration.",
     );
     expect(wingLine(found(5))).toBe(
-      "The quietest sound you caught here was 5 dB louder than your calibration.",
+      "The estimated level here is 5 dB louder than your calibration.",
     );
     expect(wingLine(found(0))).toBe(
-      "The quietest sound you caught here was as loud as your calibration.",
+      "The estimated level here is as loud as your calibration.",
     );
     expect(wingLine(betterThanFloor)).toBe(
       "Quieter than this house can whisper.",
@@ -420,7 +434,7 @@ describe("wingLine", () => {
 describe("unreliableReasonLine", () => {
   it("gives the line of each reason", () => {
     expect(reasons.map(unreliableReasonLine)).toEqual([
-      "Your answers here had not settled when the house ran out of tries.",
+      "The check ended before your answers settled.",
       "One catch here did not fit with your other answers.",
       "In this room you often answered when I made no sound.",
       "A sound here was not played at the level the house asked for.",
@@ -447,7 +461,7 @@ describe("differenceLabel and differenceLine", () => {
     for (const difference of [0, -0, 0.4, -0.4]) {
       expect(differenceLabel(difference)).toBe("0 dB");
       expect(differenceLine(difference)).toBe(
-        "On this floor you caught the same level on your left and on your right.",
+        "At this pitch the estimates are the same on your left and right.",
       );
     }
   });
@@ -457,10 +471,10 @@ describe("differenceLabel and differenceLine", () => {
     expect(differenceLabel(-15)).toBe("15 dB quieter on the right");
     expect(differenceLabel(14.6)).toBe("15 dB quieter on the left");
     expect(differenceLine(15)).toBe(
-      "On this floor you caught a sound 15 dB quieter on your left than on your right.",
+      "At this pitch the estimate is 15 dB quieter on your left than on your right.",
     );
     expect(differenceLine(-40)).toBe(
-      "On this floor you caught a sound 40 dB quieter on your right than on your left.",
+      "At this pitch the estimate is 40 dB quieter on your right than on your left.",
     );
   });
 
@@ -478,7 +492,7 @@ describe("differenceLabel and differenceLine", () => {
 
 describe("swappedRepeatLine", () => {
   const line = (size: number): string =>
-    `Your left and right are ${String(size)} dB apart here. Swap the headphones, so that the left earpiece is on your right ear, and visit this room again. That helps tell whether the difference stays with your ears or moves with the headphones.`;
+    `Your left and right are ${String(size)} dB apart here. A swap tells whether the difference stays with your ears or moves with the headphones.`;
 
   it("gives the size of the difference whichever side is quieter", () => {
     expect(swappedRepeatLine(15)).toBe(line(15));
@@ -505,13 +519,13 @@ describe("floorDescription", () => {
         null,
       ),
     ).toBe(
-      "Stairs, 4 kHz. Left: The quietest sound you caught here was 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
+      "Scritch, 4 kHz. Left: The estimated level here is 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
     );
   });
 
   it("gives both levels and the difference when both wings are found", () => {
     expect(floorDescription("cellar", 500, found(-20), found(-5), 15)).toBe(
-      "Cellar, 500 Hz. Left: The quietest sound you caught here was 20 dB quieter than your calibration. Right: The quietest sound you caught here was 5 dB quieter than your calibration. On this floor you caught a sound 15 dB quieter on your left than on your right.",
+      "Thump, 500 Hz. Left: The estimated level here is 20 dB quieter than your calibration. Right: The estimated level here is 5 dB quieter than your calibration. At this pitch the estimate is 15 dB quieter on your left than on your right.",
     );
   });
 
@@ -519,7 +533,7 @@ describe("floorDescription", () => {
     expect(
       floorDescription("attic", 8000, betterThanFloor, worseThanCap, null),
     ).toBe(
-      "Attic, 8 kHz. Left: Quieter than this house can whisper. Right: You did not catch the loudest sound the house may play here. There is no left and right difference to show here, because one side has no level.",
+      "Squeak, 8 kHz. Left: Quieter than this house can whisper. Right: You did not catch the loudest sound the house may play here. There is no left and right difference to show here, because one side has no level.",
     );
   });
 
@@ -566,8 +580,8 @@ describe("visitDateLabel, imageFileBaseName and imageCaption", () => {
     expect(imageFileBaseName("2026-11-20")).toBe(
       "did-you-hear-that-2026-11-20",
     );
-    expect(imageCaption("2026-11-20", "quick", 3)).toBe(
-      "Did You Hear That? A first listen on 20 November 2026. Short visit, 3 rooms.",
+    expect(imageCaption("2026-11-20", "full", 3)).toBe(
+      "Did You Hear That? A first listen on 20 November 2026. Full visit, 3 rooms.",
     );
   });
 
@@ -596,31 +610,27 @@ describe("visitDateLabel, imageFileBaseName and imageCaption", () => {
 
 describe("visitTypeLabel and deleteVisitLabel", () => {
   it("name the visit by its number of rooms", () => {
-    expect(visitTypeLabel("quick", 3)).toBe("Short visit, 3 rooms");
-    expect(visitTypeLabel("full", 5)).toBe("Long visit, 5 rooms");
-    expect(visitTypeLabel("quick", 1)).toBe("Short visit, 1 room");
-    expect(visitTypeLabel("full", 1)).toBe("Long visit, 1 room");
-    expect(visitTypeLabel("full", 3)).toBe("Long visit, 3 rooms");
+    expect(visitTypeLabel("full", 3)).toBe("Full visit, 3 rooms");
+    expect(visitTypeLabel("full", 5)).toBe("Full visit, 5 rooms");
+    expect(visitTypeLabel("full", 1)).toBe("Full visit, 1 room");
   });
 
   it("names the delete control of one visit", () => {
     expect(deleteVisitLabel("2026-11-20", "full", 5)).toBe(
-      "Delete the visit of 20 November 2026, long visit, 5 rooms",
+      "Delete the visit of 20 November 2026, full visit, 5 rooms",
     );
-    expect(deleteVisitLabel("2026-11-20", "quick", 3)).toBe(
-      "Delete the visit of 20 November 2026, short visit, 3 rooms",
+    expect(deleteVisitLabel("2026-11-20", "full", 3)).toBe(
+      "Delete the visit of 20 November 2026, full visit, 3 rooms",
     );
   });
 
   it("refuse a room count below 1 or not whole, and an unknown visit type", () => {
     for (const bad of [0, -1, 2.5, Number.NaN]) {
-      expect(() => visitTypeLabel("quick", bad), String(bad)).toThrow(
+      expect(() => visitTypeLabel("full", bad), String(bad)).toThrow(
         RangeError,
       );
-      expect(() => imageCaption("2026-11-20", "quick", bad)).toThrow(
-        RangeError,
-      );
-      expect(() => deleteVisitLabel("2026-11-20", "quick", bad)).toThrow(
+      expect(() => imageCaption("2026-11-20", "full", bad)).toThrow(RangeError);
+      expect(() => deleteVisitLabel("2026-11-20", "full", bad)).toThrow(
         RangeError,
       );
     }
@@ -706,7 +716,7 @@ describe("the comparison's copy", () => {
   it("holds the fixed strings of the design, word for word", () => {
     expect(comparisonCopy).toEqual({
       headphoneNameHint:
-        "Give the same name on a later visit, and this visit is drawn there as faint outlines.",
+        "Use the same name next time, and this visit is drawn there as faint lines.",
       noEarlierVisitLine:
         "No earlier visit with headphones of this name is saved in this browser.",
     });
@@ -715,16 +725,16 @@ describe("the comparison's copy", () => {
 
   it("names the earlier visit's date and says each visit is relative to its own calibration", () => {
     expect(earlierVisitLine("2026-11-12")).toBe(
-      "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+      "The faint lines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
     );
     expect(earlierVisitLine("2027-01-01")).toBe(
-      "The faint outlines are your visit of 1 January 2027 with headphones of the same name. Each visit is relative to its own calibration.",
+      "The faint lines are your visit of 1 January 2027 with headphones of the same name. Each visit is relative to its own calibration.",
     );
   });
 
   it("says that an earlier visit unreliable as a whole has no outlines", () => {
     expect(earlierVisitUnreliableLine("2026-11-12")).toBe(
-      "Your visit of 12 November 2026 with headphones of the same name was unreliable as a whole, so it has no outlines.",
+      "Your visit of 12 November 2026 with headphones of the same name was unreliable as a whole, so it is not drawn.",
     );
   });
 

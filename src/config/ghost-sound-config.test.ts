@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { audioSafetyConfig } from "./audio-safety-config";
 import { ghostSoundConfig } from "./ghost-sound-config";
 import { hearingMethodConfig } from "./hearing-method-config";
-import { ghostSoundIds, soundIds } from "./sound-id";
+import { everySoundId, ghostSoundIds, soundIds } from "./sound-id";
 import { soundRulesConfig } from "./sound-rules-config";
 
 const { fadeMinMs, ghostSoundMaxDurationMs } = audioSafetyConfig;
@@ -36,7 +36,7 @@ function expectInsideBandWithMargin(
 
 describe("ghostSoundConfig", () => {
   it("has one entry per sound id", () => {
-    expect(Object.keys(ghostSoundConfig)).toEqual([...soundIds]);
+    expect(Object.keys(ghostSoundConfig)).toEqual([...everySoundId]);
   });
 
   it("gives the five rooms the room frequencies of the full visit, in floor order (R2.3)", () => {

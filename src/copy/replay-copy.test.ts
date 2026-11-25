@@ -262,7 +262,7 @@ describe("announcementLines", () => {
   it("gives the four lines of the design for a raise of 20 dB", () => {
     expect(announcementLines(20)).toEqual([
       "Before you leave, I will play again the sounds you did not catch.",
-      "Each one comes from the room and the side where I made it, in the order I made them.",
+      "Each one comes from the side where I made it, with its creature in the doorway, in the order I made them.",
       "Each one is 20 dB louder than when it went by, but never louder than the house may play.",
       "Leave the volume as it is. You can stop the sounds at any moment.",
     ]);

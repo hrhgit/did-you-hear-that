@@ -60,7 +60,7 @@ const pageAheadMs = 5000;
 const outputDelayMs = 30;
 /** The visit begins when the timer starts. */
 const visitStartMs = pageAheadMs;
-const rooms = visitRooms("quick");
+const rooms = visitRooms("full");
 /** The floor that is repeated: the stairs, 4 kHz, 20 dB quieter on the left. */
 const floorIndex = 1;
 const floor = rooms[floorIndex]!;
@@ -147,7 +147,7 @@ function visitAtResult(
     throw new Error("The shell holds no calibration.");
   }
   const recorder = createVisitLogRecorder({
-    visitType: "quick",
+    visitType: "full",
     visitSeed: 7,
     rooms,
     startedAtMs: visitStartMs,
@@ -533,7 +533,7 @@ describe("createSwappedRepeat: the swap check", () => {
     expect(rig.notRunning).toEqual([]);
   });
 
-  it.each(["busy", "peakBoundNotMet", "tooLong", "unsupported"] as const)(
+  it.each(["busy", "peakBoundNotMet", "emptyBuffer", "unsupported"] as const)(
     "gives a check refused %s as playRefusal, counts nothing, and plays it on a later press",
     async (reason) => {
       const rig = await rigOf();

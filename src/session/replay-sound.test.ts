@@ -34,7 +34,7 @@ describe("replaySoundOf", () => {
       positionLabel: "Sound 3 of 20",
       trialOrder: 17,
       room: { roomIndex: 1, roomId: "stairs", frequencyHz: 4000 },
-      roomName: "Stairs",
+      roomName: "Scritch",
       pitchLabel: "4 kHz",
       ear: "left",
       missedLevelDb: -35,
@@ -77,7 +77,7 @@ describe("replaySoundOf", () => {
       5,
     );
     expect(sound.capChangedLevel).toBe(true);
-    expect(sound.roomName).toBe("Corridor");
+    expect(sound.roomName).toBe("Murmur");
     expect(sound.rippleLabel).toBe(
       "On your right, 1 kHz. When you did not catch it, it was 5 dB louder than your calibration. Now it is as loud as the house may play.",
     );
@@ -86,7 +86,7 @@ describe("replaySoundOf", () => {
   it("says the cap changed the level when the output stage names a clamp limit", () => {
     const sound = replaySoundOf(
       planned(),
-      { playedLevelDb: -16, clampLimit: "anchorCap" },
+      { playedLevelDb: -16, clampLimit: "ceiling" },
       1,
       2,
     );
@@ -111,7 +111,7 @@ describe("replaySoundOf", () => {
     const sound = replaySoundOf(unfrozen, asked, 1, 1);
     expect(isDeeplyFrozen(sound)).toBe(true);
     expect(sound.pitchLabel).toBe("8 kHz");
-    expect(sound.roomName).toBe("Attic");
+    expect(sound.roomName).toBe("Squeak");
   });
 
   it("refuses a position outside the replay", () => {

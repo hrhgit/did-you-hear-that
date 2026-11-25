@@ -269,6 +269,36 @@ describe("createEarSearch", () => {
     expect(search.ending()).toBeUndefined();
   });
 
+  describe("cutOff", () => {
+    it("ends a search that is still going as the trial limit, and keeps what it had", () => {
+      const search = createEarSearch("left", hearingMethodConfig);
+      search.record("caught");
+      search.record("caught");
+      search.cutOff();
+      expect(search.isSearching()).toBe(false);
+      expect(search.ending()).toEqual({ kind: "trialLimit" });
+      expect(search.presentations()).toHaveLength(2);
+      expect(() => search.next()).toThrow(Error);
+      expect(() => search.record("caught")).toThrow(Error);
+    });
+
+    it("leaves an ending the search had already reached as it was", () => {
+      const search = createEarSearch("left", hearingMethodConfig);
+      for (const outcome of traces[0].outcomes) {
+        search.record(outcome);
+      }
+      search.cutOff();
+      expect(search.ending()).toEqual({ kind: "found", thresholdDb: -50 });
+    });
+
+    it("can be called twice", () => {
+      const search = createEarSearch("right", hearingMethodConfig);
+      search.cutOff();
+      search.cutOff();
+      expect(search.ending()).toEqual({ kind: "trialLimit" });
+    });
+  });
+
   it("returns frozen presentations and a frozen next step", () => {
     const search = createEarSearch("left", hearingMethodConfig);
     expect(Object.isFrozen(search.next())).toBe(true);

@@ -6,7 +6,7 @@ import type {
 } from "../../session/result-page-types";
 import type { SwappedRepeatComparison } from "../../session/visit-flow-types";
 import { layoutPictureSheet, wrapText } from "./picture-sheet";
-import { resultViewBox } from "./result-geometry";
+import { resultCurveViewBox } from "./result-curve-box";
 
 /** Every character is half as wide as the text is tall. */
 const measure = (text: string, sizePx: number): number =>
@@ -19,6 +19,8 @@ const wing = (ear: "left" | "right"): PictureWing => ({
   line: `${ear} line`,
   reasonLine: null,
   earlier: null,
+  valueLabel: `${ear} value`,
+  valueNote: `${ear} note`,
 });
 
 const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
@@ -42,7 +44,7 @@ const floor = (roomId: "corridor" | "stairs" | "attic"): PictureFloor => ({
 
 const picture: ResultPicture = {
   kind: "live",
-  visitType: "quick",
+  visitType: "full",
   heading: "The heading",
   dateLabel: "20 November 2026",
   visitTypeLabel: "Short visit, 3 rooms",
@@ -67,14 +69,8 @@ describe("wrapText", () => {
   });
 
   it("breaks between words and never makes a line wider than the limit", () => {
-    const lines = wrapText(
-      "the quietest sound you caught here was quieter",
-      12,
-      widthOf,
-    );
-    expect(lines.join(" ")).toBe(
-      "the quietest sound you caught here was quieter",
-    );
+    const lines = wrapText("the estimated level here is quieter", 12, widthOf);
+    expect(lines.join(" ")).toBe("the estimated level here is quieter");
     for (const line of lines) {
       expect(widthOf(line)).toBeLessThanOrEqual(12);
     }
@@ -132,7 +128,7 @@ describe("layoutPictureSheet", () => {
 
   it("gives the drawing the proportions of the result's view box", () => {
     expect(sheet.drawing.height / sheet.drawing.width).toBeCloseTo(
-      resultViewBox.height / resultViewBox.width,
+      resultCurveViewBox.height / resultCurveViewBox.width,
       2,
     );
   });

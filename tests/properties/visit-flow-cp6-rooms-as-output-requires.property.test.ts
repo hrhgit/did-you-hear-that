@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import type { RiseLimitScope } from "../../src/audio/output/create-audio-output";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { ghostSoundIds } from "../../src/config/sound-id";
 import { roomSearchCapDb } from "../../src/session/room-search-cap";
@@ -8,6 +9,7 @@ import { playVisit } from "../listeners/simulated-visitor";
 import { visitRunArbitrary } from "./visit-flow-arbitraries";
 import {
   createVisitHarness,
+  roomRuns,
   type RecordedOutputCall,
 } from "./visit-flow-harness";
 import { observeVisit, type TimelineEntry } from "./visit-flow-timeline";
@@ -18,6 +20,11 @@ import { observeVisit, type TimelineEntry } from "./visit-flow-timeline";
 // calibration repeats, which the calibration controller plays; every calibration is followed by
 // a headphone check, which it records. The visits render with the worst-case renderers (D26,
 // audio-output D43).
+//
+// The property holds however the rooms run (one-room design.md, D1). One room at a time, every
+// room begins a span of its own and every sound is that room's. In the one room, the searches that
+// take turns begin one span between them, which holds each sound to its own last level on an ear
+// (one-room design.md, D4), and every sound is the sound of the creature whose trial it is.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
   const { worstCaseRenderers } = await import("./worst-case-renderers");
   return { soundRenderers: worstCaseRenderers };
@@ -33,25 +40,36 @@ const isSoundOrBeginRoom = (call: RecordedOutputCall): boolean =>
   call.name === "playHeadphoneCheck" ||
   call.name === "beginRoom";
 
-/** The last sound or `beginRoom` among the first `count` calls is a `beginRoom`. */
+/**
+ * The last sound or `beginRoom` among the first `count` calls is a `beginRoom`, and its span holds
+ * a rise as `riseLimitPer` says.
+ */
 function expectBeginRoomLast(
   calls: readonly RecordedOutputCall[],
   count: number,
   where: string,
+  riseLimitPer: RiseLimitScope,
 ): void {
   const last = calls.slice(0, count).filter(isSoundOrBeginRoom).at(-1);
   expect(last?.name, where).toBe("beginRoom");
+  if (last?.name === "beginRoom") {
+    expect(last.riseLimitPer, where).toBe(riseLimitPer);
+  }
 }
 
 describe("visit flow CP6. Rooms start as the output stage requires (Universal; R2.5, R3.2, R6, R13.2, R16.1)", () => {
-  it(
-    "activates only in actions, plays trials only after a kept calibration and a correct check, and begins every room and the replay",
-    async () => {
+  it.each(roomRuns)(
+    "activates only in actions, plays trials only after a kept calibration and a correct check, and begins every room ($name)",
+    async ({ roomsTogetherMaxCount, together }) => {
+      // The sound trials that played the sound of a creature other than the first one still
+      // about, over all the visits. One room at a time there is no other.
+      let laterCreatureSoundCount = 0;
       await fc.assert(
         fc.asyncProperty(visitRunArbitrary(), async (visitRun) => {
           const harness = createVisitHarness({
             seed: visitRun.seed,
             performanceOffsetMs: visitRun.performanceOffsetMs,
+            roomsTogetherMaxCount,
             spyOnOutput: true,
           });
           const timeline = observeVisit(harness);
@@ -81,6 +99,11 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
           let kept = false;
           let checked = false;
           let room: VisitRoom | null = null;
+          // The rooms whose creatures are about: started, and not yet finished.
+          const about = new Map<number, VisitRoom>();
+          /** The room whose sound a trial of `roomIndex` plays. */
+          const roomOfTrial = (roomIndex: number): VisitRoom | null =>
+            together ? (about.get(roomIndex) ?? null) : room;
           let pointer = 0;
           const takeCallsUntil = (count: number): void => {
             for (; pointer < count; pointer += 1) {
@@ -97,18 +120,41 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
               }
               if (call.name === "play") {
                 expect(call.stage).toBe("room");
-                expect(["trial", "practice"]).toContain(call.request.purpose);
+                // A reminder after a long quiet plays a creature's sound, and a chime after a
+                // catch is the house's bell (the game layer, 2026-11-17).
+                expect([
+                  "trial",
+                  "practice",
+                  "reminder",
+                  "chime",
+                  "miss",
+                ]).toContain(call.request.purpose);
                 expect(
                   kept && checked,
                   `a trial sound at ${String(call.atMs)}`,
                 ).toBe(true);
-                expect(call.request.soundId).toBe(room?.roomId);
+                if (call.request.purpose === "chime") {
+                  expect(call.request.soundId).toBe("chime");
+                } else if (call.request.purpose === "miss") {
+                  expect(call.request.soundId).toBe("snuff");
+                } else if (together) {
+                  // The sound of a creature that is about. Whose trial it is, is checked below.
+                  expect(
+                    [...about.values()].map((one) => one.roomId),
+                  ).toContain(call.request.soundId);
+                } else {
+                  expect(call.request.soundId).toBe(room?.roomId);
+                }
               }
             }
           };
           let roomStartedCount = 0;
-          let replayReached = false;
-          const take = (entry: TimelineEntry): void => {
+          // The room runs: the rooms that started in one step are one run.
+          let runStartedCount = 0;
+          const take = (
+            entry: TimelineEntry,
+            before: TimelineEntry | undefined,
+          ): void => {
             takeCallsUntil(entry.outputCallCount);
             switch (entry.kind) {
               case "action":
@@ -126,29 +172,29 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
               case "event":
                 if (entry.event.kind === "roomStarted") {
                   roomStartedCount += 1;
+                  if (
+                    before?.kind !== "event" ||
+                    before.event.kind !== "roomStarted"
+                  ) {
+                    runStartedCount += 1;
+                  }
                   room = entry.event.room;
+                  about.set(room.roomIndex, room);
                   expectBeginRoomLast(
                     calls,
                     entry.outputCallCount,
                     `room ${String(room.roomIndex)}, run ${String(entry.event.attempt)}`,
+                    together ? "sound" : "ear",
                   );
+                }
+                if (entry.event.kind === "roomFinished") {
+                  about.delete(entry.event.room.roomIndex);
                 }
                 return;
               case "snapshot":
                 if (entry.snapshot.pause?.reason === "deviceChanged") {
                   kept = false;
                   checked = false;
-                }
-                if (
-                  entry.snapshot.stage === "missedSoundReplay" &&
-                  !replayReached
-                ) {
-                  replayReached = true;
-                  expectBeginRoomLast(
-                    calls,
-                    entry.outputCallCount,
-                    "the replay",
-                  );
                 }
                 return;
               case "presented": {
@@ -161,8 +207,26 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
                 if (play?.name !== "play") {
                   return;
                 }
+                // Its own room's sound: a creature that has started and has not gone home.
+                const own = roomOfTrial(entry.trial.roomIndex);
+                expect(own).not.toBeNull();
+                expect(own?.roomIndex).toBe(entry.trial.roomIndex);
+                if (entry.trial.roomIndex !== Math.min(...about.keys())) {
+                  laterCreatureSoundCount += 1;
+                }
+                // An easy turn (headphone-traits R2) is a reminder sound, held by the search's
+                // cap and floor, so its level may differ from the one it asked for.
+                if (entry.trial.reminder === true) {
+                  expect(play.request).toMatchObject({
+                    soundId: own?.roomId,
+                    ear: entry.trial.ear,
+                    purpose: "reminder",
+                  });
+                  expect(play.outcome.kind).toBe("scheduled");
+                  return;
+                }
                 expect(play.request).toEqual({
-                  soundId: room?.roomId,
+                  soundId: own?.roomId,
                   ear: entry.trial.ear,
                   levelDb: entry.trial.levelDb,
                   purpose: "trial",
@@ -180,8 +244,11 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
                 if (play?.name !== "play" || entry.trial.kind !== "sound") {
                   return;
                 }
+                const own = roomOfTrial(entry.trial.roomIndex);
+                expect(own).not.toBeNull();
+                expect(own?.roomIndex).toBe(entry.trial.roomIndex);
                 expect(play.request).toEqual({
-                  soundId: room?.roomId,
+                  soundId: own?.roomId,
                   ear: entry.trial.ear,
                   levelDb: entry.trial.levelDb,
                   purpose: "practice",
@@ -193,12 +260,13 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
                 return;
             }
           };
-          for (const entry of entries) {
-            take(entry);
-          }
+          entries.forEach((entry, index) => {
+            take(entry, entries[index - 1]);
+          });
           takeCallsUntil(calls.length);
+          // One span for each room, one room at a time, and one for each room run of the one room.
           expect(calls.filter((call) => call.name === "beginRoom").length).toBe(
-            roomStartedCount + (replayReached ? 1 : 0),
+            together ? runStartedCount : roomStartedCount,
           );
 
           // Each run's cap is the room top of the calibration kept last before it began.
@@ -243,6 +311,12 @@ describe("visit flow CP6. Rooms start as the output stage requires (Universal; R
         }),
         { numRuns: runs },
       );
+      // In the one room the creatures took turns, or the checks above would be the old ones.
+      if (together) {
+        expect(laterCreatureSoundCount).toBeGreaterThan(runs);
+      } else {
+        expect(laterCreatureSoundCount).toBe(0);
+      }
     },
     timeoutMs,
   );

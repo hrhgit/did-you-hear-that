@@ -7,8 +7,9 @@ const gridToleranceSteps = 1e-9;
 /**
  * The Calibration_Setting of the next Calibration_Repeat (R16.1, R16.2, D8). A pure function.
  *
- * - With no previous repeat in this calibration, it is the bottom of the control, whatever was
- *   requested.
+ * - With no previous repeat in this calibration, it is the request, held to the top of the control
+ *   and rounded down to the grid, so the first repeat plays where the calibration starts: the middle
+ *   of the control (the owner's request of 2026-11-18). NaN counts as the bottom.
  * - Otherwise it is the request (NaN counts as the previous setting), limited to at most
  *   `calibrationRiseMaxDb` above the previous setting and to the Control_Range, and rounded down
  *   to the control's grid, `calibrationSettingMinDb + k × calibrationSettingStepDb`. With the
@@ -24,13 +25,15 @@ export function nextCalibrationSettingDb(
     calibrationSettingStepDb,
     calibrationRiseMaxDb,
   } = audioOutputConfig;
-  if (previousDb === null) {
-    return calibrationSettingMinDb;
-  }
-  const wantedDb = Number.isNaN(requestedDb) ? previousDb : requestedDb;
+  // The first repeat has no previous setting to rise from, so only the top limits it.
+  const wantedDb = Number.isNaN(requestedDb)
+    ? (previousDb ?? calibrationSettingMinDb)
+    : requestedDb;
   const limitedDb = Math.min(
     wantedDb,
-    previousDb + calibrationRiseMaxDb,
+    previousDb === null
+      ? Number.POSITIVE_INFINITY
+      : previousDb + calibrationRiseMaxDb,
     calibrationSettingTopDb(),
   );
   const stepCount = Math.floor(

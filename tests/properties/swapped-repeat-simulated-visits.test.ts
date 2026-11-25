@@ -18,7 +18,7 @@ import {
 import { restMaxMs } from "./visit-flow-arbitraries";
 import { createVisitHarness } from "./visit-flow-harness";
 
-// A quick and a full visit played to the result with the swapped repeat run to its end
+// A full visit played to the result with the swapped repeat run to its end
 // (swapped-repeat R20.6, brief 08 "Done when", tasks.md task 16): an uneven Step_Listener in
 // Worn_Headphones, once with an ear difference only and once with an imbalance only, through the
 // visit flow's harness and the simulated visitor. Fixed seeds and the worst-case renderers
@@ -78,22 +78,21 @@ const cases: readonly Case[] = [
 ];
 
 const flowSeed: Readonly<Record<VisitType, number>> = Object.freeze({
-  quick: 20261221,
   full: 20261222,
 });
 
 /**
- * The visitor names the lowest offered floor. In the quick visit it swaps at once; in the full
- * visit it first confirms without swapping, hears the hiss on the left and is asked again.
+ * The visitor names the lowest offered floor. It first confirms without swapping, hears the hiss
+ * on the left and is asked again.
  */
-const behaviourFor = (visitType: VisitType): VisitorSwappedRepeatBehaviour => ({
+const behaviour: VisitorSwappedRepeatBehaviour = {
   floor: { kind: "firstOffered" },
-  swapsOnFirstInstruction: visitType === "quick",
+  swapsOnFirstInstruction: false,
   firstCheckAnswer: "heard",
   pressDelayMaxMs: 2000,
   events: [],
   turnsBack: true,
-});
+};
 
 const stepListener = (
   earDifferenceDb: number,
@@ -125,11 +124,11 @@ const scriptFor = (visitType: VisitType, testCase: Case): VisitorScript => ({
   disturbances: [],
   ending: null,
   headphones: { imbalanceDb: testCase.imbalanceDb },
-  swappedRepeat: behaviourFor(visitType),
+  swappedRepeat: behaviour,
 });
 
 describe("swapped repeat: simulated visits (R20.6)", () => {
-  for (const visitType of ["quick", "full"] as const) {
+  for (const visitType of ["full"] as const) {
     for (const testCase of cases) {
       it(
         `a ${visitType} visit with ${testCase.name} runs the repeat to its end from the result and says the difference ${testCase.outcome === "followsEar" ? "stayed with the ears" : "moved with the headphones"}`,
@@ -181,9 +180,10 @@ describe("swapped repeat: simulated visits (R20.6)", () => {
             outcome: testCase.outcome,
             unclearReason: null,
           });
-          expect(record.swapChecks.map((check) => check.judgement)).toEqual(
-            visitType === "quick" ? ["confirmed"] : ["notSwapped", "confirmed"],
-          );
+          expect(record.swapChecks.map((check) => check.judgement)).toEqual([
+            "notSwapped",
+            "confirmed",
+          ]);
           expect(
             harness.snapshots.some(
               ({ snapshot }) =>

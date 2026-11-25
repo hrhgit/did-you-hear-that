@@ -1,5 +1,14 @@
 import type { HearingMethodConfig } from "../config/hearing-method-config";
 
+export type HearingSearchMethod = "staircase" | "quick" | "adaptive";
+export type CatchGrade = "perfect" | "great" | "good";
+
+export interface SearchEvidence {
+  readonly netAnswerMs?: number;
+  readonly baselineMs?: number;
+  readonly steering?: { readonly centreDb: number; readonly spreadDb: number };
+}
+
 export type Ear = "left" | "right";
 /** Named to avoid the DOM's global `Response`. */
 export type VisitorResponse = Ear | "none";
@@ -58,6 +67,7 @@ export type TrialRecord =
       readonly outcome: NoSoundOutcome;
     };
 
+/** `trialLimit`: the search was cut off before it settled, by its trial limit or by the room's time. */
 export type UnreliableReason =
   "trialLimit" | "inconsistentCatch" | "falseAlarmRate";
 
@@ -70,7 +80,12 @@ export interface EarCounts {
 }
 
 export type EarResult =
-  | (EarCounts & { readonly state: "found"; readonly thresholdDb: number })
+  | (EarCounts & {
+      readonly state: "found";
+      readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
+    })
   | (EarCounts & { readonly state: "betterThanFloor" })
   | (EarCounts & { readonly state: "worseThanCap" })
   | (EarCounts & {
@@ -97,5 +112,18 @@ export interface ThresholdSearch {
   /** The trial waiting for a response, or the result. Has no effect and may be called any number of times. */
   current(): SearchStep;
   /** Records the response to the waiting trial and returns the next step. */
-  respond(response: VisitorResponse): SearchStep;
+  respond(
+    response: VisitorResponse,
+    grade?: CatchGrade,
+    evidence?: SearchEvidence,
+  ): SearchStep;
+  /** The ear's found estimate, or null while searching or when no level was found. Has no effect. */
+  earEstimate(ear: Ear): number | null;
+  /**
+   * Ends the room now, because the time for it is over: every ear still searching ends as
+   * `unreliable` with the reason `trialLimit`, the trial that waits is dropped and no closing
+   * trial is made. Returns the result, which is also what `current()` gives from then on. Draws
+   * nothing. Calling it on a room that has finished returns that result unchanged.
+   */
+  cutOff(): Extract<SearchStep, { readonly kind: "finished" }>;
 }

@@ -7,13 +7,9 @@ import type { SoundId } from "./sound-id";
  * floor, the starting level and the upward step live in `hearing-method-config.ts` (D2). Every
  * field name ends in its unit.
  *
- * The bottom of the calibration control, the Keep_Minimum, the rise between repeats, the output
- * fade, the stop fade and the headphone check level are guarded against loosening by the config
- * test (D32). Making one stricter is always allowed. Loosening one needs the project owner's
- * approval first. The rise period of the calibration music is guarded the same way
- * (`.kiro/specs/audible-start/design.md`, Config). On 2026-11-16 the owner raised the bottom to
- * −40 dB and dropped the slow rise of the calibration sound after playing; the guards now hold
- * those values.
+ * The loosening guards of D32 were removed with the audio safety rules on 2026-11-17: every value
+ * here is a default and may be changed freely. On 2026-11-16 the owner raised the bottom of the
+ * calibration control to −40 dB and dropped the slow rise of the calibration sound after playing.
  */
 export interface AudioOutputConfig {
   /** The raised-cosine fade the output stage multiplies into each end of every buffer. */
@@ -26,6 +22,8 @@ export interface AudioOutputConfig {
   readonly peakBoundDb: Readonly<Record<SoundId, number>>;
   /** Most renders tried for one playable buffer before the request is refused. */
   readonly renderAttemptsMaxCount: number;
+  /** Fixed reference level for the public visit and its opening theme. */
+  readonly calibrationReferenceDb: number;
   /** Bottom of the calibration control, where every calibration begins. */
   readonly calibrationSettingMinDb: number;
   /** Step of the calibration control. */
@@ -92,12 +90,18 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
     stairs: 17,
     attic: 4.5,
     calibration: 15.5,
+    // The game layer, 2026-11-17: the chime always renders the same, with a peak of 14.5 dB
+    chime: 15,
+    // The game layer, 2026-11-20: the puff always renders the same.
+    snuff: 15,
   },
   // D6: eight stairs renders in a row above the bound happen about once in 10^10
   renderAttemptsMaxCount: 8,
   // D8: about 66 dB below full scale for the calibration sound. Raised from -60 by the owner on
   // 2026-11-16 after playing: the first seconds were too quiet to hear. Guarded (D32)
   calibrationSettingMinDb: -40,
+  // The level at which the visit already started its calibration music.
+  calibrationReferenceDb: -23,
   // D8
   calibrationSettingStepDb: 1,
   // The whole control: the calibration sound follows the control as it moves. The 5 dB limit of

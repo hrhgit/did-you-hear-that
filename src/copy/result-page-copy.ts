@@ -5,7 +5,7 @@
  * enters a string of the house (D11).
  */
 export const resultPageCopy = Object.freeze({
-  heading: "The quietest sounds you caught",
+  heading: "Your listening estimates",
   leftLabel: "Left",
   rightLabel: "Right",
   differenceHeading: "Left and right",
@@ -13,16 +13,14 @@ export const resultPageCopy = Object.freeze({
   swappedRepeatButton: "Swap the headphones and visit this room again",
   savePictureButton: "Save picture",
   pictureNotSavedLine: "The picture could not be saved just now. Try again.",
-  headphoneNameLabel: "Name your headphones. You may leave this empty.",
-  saveButton: "Save this visit in this browser",
-  notSavedLine:
-    "This visit is not saved. If you leave without saving it, nothing from it is kept.",
+  headphoneNameLabel: "Name your headphones, if you like.",
+  saveButton: "Save this visit",
+  notSavedLine: "Not saved yet. If you leave now, nothing is kept.",
   savedLine: "Saved in this browser. Nothing has left it.",
   renamedLine: "The name of the headphones was changed.",
-  mayBeClearedLine:
-    "A browser can clear what is saved in it on its own, so a saved visit may not stay forever.",
+  mayBeClearedLine: "Your browser may clear saved visits on its own.",
   savedVisitsHeading: "Visits saved in this browser",
-  noSavedVisitsLine: "No visits are saved in this browser.",
+  noSavedVisitsLine: "None yet.",
   headphonesLabel: "Headphones",
   unnamedHeadphonesLabel: "Not named",
   showButton: "Show its picture",
@@ -47,6 +45,10 @@ export const resultPageCopy = Object.freeze({
  */
 export const chaseScoreCopy = Object.freeze({
   heading: "Your chase",
+  /** Under the number of sounds caught in the whole visit. */
+  caughtLabel: "caught in all",
+  /** Under the most sounds caught one after another in one room. */
+  rowLabel: "longest row of catches",
 });
 
 function requireWholeCount(count: number, what: string): void {

@@ -114,8 +114,8 @@ describe("replayRenderSeed", () => {
     const { log } = makeLog(99, runsWithDeviceChange);
     const other = deepFreeze<VisitLog>({
       ...log,
-      visitType: "quick",
-      rooms: visitRooms("quick"),
+      visitType: "full",
+      rooms: visitRooms("full"),
       calibrations: [],
       roomAttempts: log.roomAttempts.map((attempt, index) => ({
         ...attempt,
