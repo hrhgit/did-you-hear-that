@@ -315,35 +315,61 @@ export function createMixedRoomRunner(
     throw new RangeError("A room run needs at least one track.");
   }
 
+  const neighboursOf =
+    (frequencyHz: number) =>
+    (otherHz: number): boolean =>
+      otherHz === frequencyHz * 2 || otherHz * 2 === frequencyHz;
+
+  /**
+   * Where the neighbouring searches put this ear's level: the median of the levels found for the
+   * other ear at the same pitch, for both ears at the neighbouring octaves in this room and in
+   * earlier rooms. Before any of them has found a level, the quietest catches of the same
+   * searches still running stand in, one upward step below, so the first pitch already steers
+   * the others (one-room design, "Neighbour start").
+   */
   const steeringOf = (
     track: RoomTrack,
     ear: Ear,
   ): SearchEvidence["steering"] => {
-    const estimatesDb: number[] = [];
-    const add = (estimateDb: number | null): void => {
-      if (estimateDb !== null) estimatesDb.push(estimateDb);
-    };
-    const frequencyHz = track.room.frequencyHz;
-    const neighbours = (otherHz: number): boolean =>
-      otherHz === frequencyHz * 2 || otherHz * 2 === frequencyHz;
-    add(track.search.earEstimate(ear === "left" ? "right" : "left"));
-    for (const other of tracks) {
-      if (neighbours(other.room.frequencyHz)) {
-        add(other.search.earEstimate("left"));
-        add(other.search.earEstimate("right"));
+    const neighbours = neighboursOf(track.room.frequencyHz);
+    const otherEar = ear === "left" ? "right" : "left";
+    const collect = (
+      levelOf: (search: RoomTrack["search"], side: Ear) => number | null,
+    ): number[] => {
+      const levelsDb: number[] = [];
+      const add = (levelDb: number | null): void => {
+        if (levelDb !== null) levelsDb.push(levelDb);
+      };
+      add(levelOf(track.search, otherEar));
+      for (const other of tracks) {
+        if (neighbours(other.room.frequencyHz)) {
+          add(levelOf(other.search, "left"));
+          add(levelOf(other.search, "right"));
+        }
       }
-    }
+      return levelsDb;
+    };
+    const estimatesDb = collect((search, side) => search.earEstimate(side));
     for (const earlier of options.earlierRooms ?? []) {
       if (neighbours(earlier.frequencyHz)) {
         for (const result of [earlier.result.left, earlier.result.right]) {
-          if (result.state === "found") add(result.thresholdDb);
+          if (result.state === "found") estimatesDb.push(result.thresholdDb);
         }
       }
     }
-    return estimatesDb.length === 0
+    const levelsDb =
+      estimatesDb.length > 0
+        ? estimatesDb
+        : collect((search, side) => {
+            const caughtDb = search.quietestCatchDb(side);
+            return caughtDb === null
+              ? null
+              : caughtDb - hearingMethodConfig.upwardStepDb;
+          });
+    return levelsDb.length === 0
       ? undefined
       : {
-          centreDb: quantile(estimatesDb, 0.5),
+          centreDb: quantile(levelsDb, 0.5),
           spreadDb: adaptiveHearingConfig.steeringSpreadDb,
         };
   };
@@ -450,19 +476,43 @@ export function createMixedRoomRunner(
     return step.kind === "trial" ? step.trial : null;
   };
 
-  /** Draws the track that presents next, or null when every track has finished. */
+  /**
+   * Draws the track that presents next, or null when every track has finished. The lead pitch
+   * plays alone until one of its ears ends. An ear that has not played yet starts near where its
+   * neighbours put it (one-room design, "Neighbour start").
+   */
   const drawTurn = (): RoomTrack | null => {
     const open = tracks.filter(
       (track) => !finishedTracks.has(track) && waitingTrial(track) !== null,
     );
-    if (open.length <= 1) {
-      return open[0] ?? null;
-    }
-    const index = Math.min(
-      open.length - 1,
-      Math.floor(turnRandom.next() * open.length),
+    const lead = open.find(
+      (track) =>
+        track.room.frequencyHz === adaptiveHearingConfig.leadFrequencyHz &&
+        track.search.earSearching("left") &&
+        track.search.earSearching("right"),
     );
-    return open[index] ?? null;
+    const pool = lead === undefined ? open : [lead];
+    const drawn =
+      pool.length <= 1
+        ? pool[0]
+        : pool[
+            Math.min(
+              pool.length - 1,
+              Math.floor(turnRandom.next() * pool.length),
+            )
+          ];
+    if (drawn === undefined) return null;
+    const trial = waitingTrial(drawn);
+    if (trial?.kind === "sound") {
+      const steering = steeringOf(drawn, trial.ear);
+      if (steering !== undefined) {
+        drawn.search.steerStart(
+          trial.ear,
+          steering.centreDb + adaptiveHearingConfig.steeringStartLeadDb,
+        );
+      }
+    }
+    return drawn;
   };
 
   const waitGap = (track: RoomTrack, trial: Trial): void => {
@@ -898,16 +948,18 @@ export function createMixedRoomRunner(
       judgement === "perfect" || judgement === "great" || judgement === "good"
         ? judgement
         : undefined;
+    // A miss carries the steering too: the neighbours' level may confirm it (fine-level-estimate
+    // design, "One missed sound").
     const evidence: SearchEvidence | undefined =
-      entry.kind === "sound" &&
-      entry.outcome === "caught" &&
-      entry.responseTimeMs !== null
-        ? {
-            netAnswerMs: entry.responseTimeMs - current.offsetMs,
-            baselineMs: options.baselineMs?.(),
-            steering: steeringOf(track, entry.ear),
-          }
-        : undefined;
+      entry.kind !== "sound"
+        ? undefined
+        : entry.outcome === "caught" && entry.responseTimeMs !== null
+          ? {
+              netAnswerMs: entry.responseTimeMs - current.offsetMs,
+              baselineMs: options.baselineMs?.(),
+              steering: steeringOf(track, entry.ear),
+            }
+          : { steering: steeringOf(track, entry.ear) };
     const step = track.search.respond(response, grade, evidence);
     if (played.kind === "sound" && outcome === "caught") {
       quietSinceMs = timer.now();

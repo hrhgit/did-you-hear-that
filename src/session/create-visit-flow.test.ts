@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { adaptiveHearingConfig } from "../config/adaptive-hearing-config";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { rhythmConfig } from "../config/rhythm-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
@@ -2294,14 +2295,18 @@ describe('createVisitFlow: the swapped repeat (swapped-repeat design.md, "What e
     if (first.left.state !== "found" || first.right.state !== "found") {
       throw new Error("The first run did not find both levels.");
     }
-    expect(run.left).toMatchObject({
-      state: "found",
-      thresholdDb: first.left.thresholdDb,
-    });
-    expect(run.right).toMatchObject({
-      state: "found",
-      thresholdDb: first.right.thresholdDb,
-    });
+    // The first run started its ears near their neighbours, so it probed other levels than the
+    // repeat's room alone: the estimates agree within the margin above a clear catch.
+    for (const ear of ["left", "right"] as const) {
+      const repeated = run[ear];
+      const firstEar = first[ear];
+      expect(repeated.state).toBe("found");
+      if (repeated.state === "found" && firstEar.state === "found") {
+        expect(
+          Math.abs(repeated.thresholdDb - firstEar.thresholdDb),
+        ).toBeLessThanOrEqual(adaptiveHearingConfig.estimateAboveClearMaxDb);
+      }
+    }
   }, 60_000);
 
   /** Plays a quick visit whose audio device changes in the second room, so that the first floor used an earlier calibration. */
@@ -3638,15 +3643,36 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
           ] as const,
       ),
     );
+    // The lead pitch plays alone, with no draw, until the last sound of whichever of its ears
+    // ends first (one-room design, "Neighbour start").
+    const leadRoom = rooms.find(
+      (room) => room.frequencyHz === adaptiveHearingConfig.leadFrequencyHz,
+    )!.roomIndex;
+    const leadTrials = log.trials.filter(
+      (trial) => trial.roomIndex === leadRoom,
+    );
+    const lastSoundOf = (ear: Ear) =>
+      leadTrials.reduce(
+        (last, trial, index) =>
+          trial.kind === "sound" && trial.ear === ear ? index : last,
+        -1,
+      );
+    let leadLeft = Math.min(lastSoundOf("left"), lastSoundOf("right")) + 1;
     let open = rooms.map((room) => room.roomIndex);
     const drawnOrder: number[] = [];
     while (open.length > 0) {
       const drawn =
-        open.length === 1
-          ? open[0]!
-          : open[
-              Math.min(open.length - 1, Math.floor(turns.next() * open.length))
-            ]!;
+        leadLeft > 0
+          ? leadRoom
+          : open.length === 1
+            ? open[0]!
+            : open[
+                Math.min(
+                  open.length - 1,
+                  Math.floor(turns.next() * open.length),
+                )
+              ]!;
+      if (leadLeft > 0) leadLeft -= 1;
       drawnOrder.push(drawn);
       const left = trialsLeft.get(drawn)! - 1;
       trialsLeft.set(drawn, left);
@@ -3655,9 +3681,14 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       }
     }
     expect(log.trials.map((trial) => trial.roomIndex)).toEqual(drawnOrder);
-    // And the turns are mixed: early on, every creature has had one.
+    // And the turns are mixed: soon after the lead, every creature has had one.
+    const leadCount = Math.min(lastSoundOf("left"), lastSoundOf("right")) + 1;
     expect(
-      new Set(log.trials.slice(0, 24).map((trial) => trial.roomIndex)).size,
+      new Set(
+        log.trials
+          .slice(leadCount, leadCount + 24)
+          .map((trial) => trial.roomIndex),
+      ).size,
     ).toBe(rooms.length);
     const result = harness.flow.snapshot() as ResultSnapshot;
     expect(result.stage).toBe("result");
@@ -3742,16 +3773,35 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
       (trial) => trial.kind === "sound",
     );
     // 2026-11-25, fine-level-estimate: the Good-only ear can take 2–5 dB
-    // drops. The timing baseline and found neighbours available on each turn
-    // make its last probes differ by room. The mixed-grade ear still takes 10, 5, 5.
-    // The first two rooms skip -29 because their floor is -30.
-    const leftLevelsByRoom = [
-      [-10, -15, -20, -25, -27, -30],
-      [-10, -15, -20, -23, -25, -27, -30],
-      [-10, -15, -20, -24, -26, -28],
-      [-10, -15, -20, -24, -26, -28],
-      [-10, -15, -20, -25, -28],
-    ];
+    // drops, and the mixed-grade ear takes 10, then 5. The first two rooms skip -29 because their
+    // floor is -30. One missed sound: a first miss is played again unless the neighbours' levels
+    // explain it. Neighbour start: 1 kHz (room 1) plays alone first and starts at the usual level;
+    // the ears after it start a little above where their neighbours put them and go straight down
+    // to them, so most ears take 2 to 5 sounds.
+    const levelsByRoom: Record<Ear, number[][]> = {
+      left: [
+        [-18, -23, -26, -28],
+        [-10, -15, -19, -23, -25, -27, -30, -30],
+        [-17, -22, -26, -28],
+        [-24, -28],
+        [-10, -15, -20, -23, -27, -30, -30],
+      ],
+      right: [
+        [-18, -28, -22, -26, -28],
+        [-10, -20, -25, -30],
+        [-17, -27, -30, -30],
+        [-15, -25, -30],
+        [-17, -27, -30, -30],
+      ],
+    };
+    const catchesOf = (roomIndex: number, side: Ear) =>
+      sounds.filter(
+        (trial) =>
+          trial.roomIndex === roomIndex &&
+          trial.ear === side &&
+          trial.status === "scored" &&
+          trial.outcome === "caught",
+      ).length;
     for (const { roomIndex, result: roomResult } of result.visitLog
       .roomAttempts) {
       for (const side of ["left", "right"] as const) {
@@ -3759,9 +3809,7 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
           (trial) => trial.roomIndex === roomIndex && trial.ear === side,
         );
         const levels = own.map(({ playedLevelDb }) => playedLevelDb);
-        expect(levels).toEqual(
-          side === "left" ? leftLevelsByRoom[roomIndex] : [-10, -20, -25, -30],
-        );
+        expect(levels).toEqual(levelsByRoom[side][roomIndex]);
         expect(own.at(-1)).toMatchObject({ outcome: "missed" });
         expect(roomResult?.[side]).toMatchObject({ state: "found" });
         const earResult = roomResult?.[side];
@@ -3773,9 +3821,12 @@ describe('createVisitFlow: one room in which the creatures take turns (one-room 
     for (const { room, left, right } of result.summary.rooms) {
       expect(left).toMatchObject({
         state: "found",
-        catchCount: leftLevelsByRoom[room.roomIndex]!.length - 1,
+        catchCount: catchesOf(room.roomIndex, "left"),
       });
-      expect(right).toMatchObject({ state: "found", catchCount: 3 });
+      expect(right).toMatchObject({
+        state: "found",
+        catchCount: catchesOf(room.roomIndex, "right"),
+      });
       const logged = result.visitLog.roomAttempts[room.roomIndex]?.result;
       for (const [summaryEar, loggedEar] of [
         [left, logged?.left],

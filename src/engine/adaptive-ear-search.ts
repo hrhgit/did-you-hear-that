@@ -27,6 +27,9 @@ const {
   rangeLowFraction,
   rangeHighFraction,
   estimateAboveClearMaxDb,
+  confirmingMissesCount,
+  steeringLeadDb,
+  steeringAgreesWithinDb,
 } = adaptiveHearingConfig;
 
 const sigmoid = (value: number): number => 1 / (1 + Math.exp(-value));
@@ -127,8 +130,8 @@ export function createAdaptiveEarSearch(
   let levelDb = settings.startingLevelDb;
   let direction: Presentation["direction"] = "first";
   let ending: EarEnding | undefined;
-  let lastCatchLevel: number | undefined;
-  let lastClearLevel: number | undefined;
+  let lowestCatchLevel: number | undefined;
+  let lowestClearLevel: number | undefined;
   let weakSinceClear = 0;
   let maxDropDb = largeStepDb;
   let capMisses = 0;
@@ -190,14 +193,15 @@ export function createAdaptiveEarSearch(
     return nearby >= concentratedProbabilityFraction;
   };
 
-  // The estimate is the posterior median, held at or above the last miss and at most
-  // `estimateAboveClearMaxDb` above the last clear catch; the range is the posterior's 10th to
-  // 90th percentiles around it. Holding the estimate at the clear catch itself, as first designed,
-  // pulled it back onto the levels played (fine-level-estimate, Measured).
-  const finishEstimate = (quieterDb: number, clearerDb: number): void => {
-    const thresholdDb = clamp(
+  // The estimate is the posterior median, at most `estimateAboveClearMaxDb` above the quietest
+  // clear catch; the range is the posterior's 10th to 90th percentiles around it. Holding the
+  // estimate at the clear catch itself, as first designed, pulled it back onto the levels played
+  // (fine-level-estimate, Measured). No miss bounds it from below: the response model already
+  // allows for a missed sound that was loud enough, and a hard bound let one such miss set the
+  // result (2026-11-25, one missed sound).
+  const finishEstimate = (clearerDb: number): void => {
+    const thresholdDb = Math.min(
       estimateQuantile(0.5),
-      quieterDb,
       clearerDb + estimateAboveClearMaxDb,
     );
     ending = Object.freeze({
@@ -208,6 +212,23 @@ export function createAdaptiveEarSearch(
     });
   };
 
+  /** The expected information a probe at this level gives about the threshold. */
+  const probeInformation = (
+    probeDb: number,
+    choiceWeights: readonly number[],
+  ): number => {
+    const predicted = { miss: 0, weak: 0, clear: 0 };
+    let expectedEntropy = 0;
+    for (const [index, row] of rowsAt(probeDb).entries()) {
+      const weight = choiceWeights[index]!;
+      for (const observation of observations) {
+        predicted[observation] += weight * row.probabilities[observation];
+      }
+      expectedEntropy += weight * row.entropy;
+    }
+    return entropy(predicted) - expectedEntropy;
+  };
+
   const descend = (
     grade: CatchGrade | undefined,
     steering: SearchEvidence["steering"],
@@ -215,7 +236,13 @@ export function createAdaptiveEarSearch(
     if (grade !== "perfect") {
       maxDropDb = stepDb;
     }
-    const lowestProbeDb = Math.max(floorDb, levelDb - maxDropDb);
+    // Until this ear has missed, the levels the neighbouring searches found may pull the next
+    // probe down to a little above them in one step, past the usual largest drop.
+    const steeredLowestDb =
+      steering === undefined
+        ? levelDb - maxDropDb
+        : Math.min(levelDb - maxDropDb, steering.centreDb + steeringLeadDb);
+    const lowestProbeDb = Math.max(floorDb, Math.round(steeredLowestDb));
     const highestProbeDb = levelDb - minDropDb;
     // Within the minimum drop of the floor, the only remaining probe is the floor.
     let bestLevelDb = floorDb;
@@ -237,23 +264,64 @@ export function createAdaptiveEarSearch(
     for (let probeDb = highestProbeDb; probeDb >= lowestProbeDb; probeDb -= 1) {
       // A catch just above the floor would force a sub-minimum drop on the next turn.
       if (probeDb > floorDb && probeDb < floorDb + minDropDb) continue;
-      const predicted = { miss: 0, weak: 0, clear: 0 };
-      let expectedEntropy = 0;
-      const rows = rowsAt(probeDb);
-      for (const [index, row] of rows.entries()) {
-        const weight = choiceWeights[index]!;
-        for (const observation of observations) {
-          predicted[observation] += weight * row.probabilities[observation];
-        }
-        expectedEntropy += weight * row.entropy;
-      }
-      const information = entropy(predicted) - expectedEntropy;
+      const information = probeInformation(probeDb, choiceWeights);
       if (information > bestInformation) {
         bestLevelDb = probeDb;
         bestInformation = information;
       }
     }
     direction = "descending";
+    levelDb = bestLevelDb;
+    // Trust the neighbours: go straight to a little above their level when that is lower still.
+    // A miss there is cheap, because the search climbs back up from it.
+    if (steering !== undefined) {
+      let jumpDb = Math.max(
+        floorDb,
+        Math.round(steering.centreDb + steeringLeadDb),
+      );
+      if (jumpDb > floorDb && jumpDb < floorDb + minDropDb) {
+        jumpDb = floorDb + minDropDb;
+      }
+      if (jumpDb < bestLevelDb) levelDb = jumpDb;
+    }
+  };
+
+  /** The misses below every catch so far: the ones a catch has not since outweighed. */
+  const missesBelowCatches = (): readonly number[] =>
+    lowestCatchLevel === undefined
+      ? []
+      : recorded
+          .filter(
+            ({ outcome, levelDb: playedDb }) =>
+              outcome !== "caught" && playedDb < lowestCatchLevel!,
+          )
+          .map(({ levelDb: playedDb }) => playedDb);
+
+  /**
+   * After a miss below the catches: narrow the gap between the loudest such miss and the
+   * quietest catch, choosing the most informative whole-decibel level inside it, or play the
+   * missed level again once the gap is one upward step or less. A catch there outweighs the miss,
+   * so a single missed sound costs one more sound instead of the result.
+   */
+  const probeTheGap = (missDb: number, catchDb: number): void => {
+    direction = "ascending";
+    if (catchDb - missDb <= stepDb) {
+      levelDb = missDb;
+      return;
+    }
+    let bestLevelDb = missDb;
+    let bestInformation = -Infinity;
+    for (
+      let probeDb = catchDb - minDropDb;
+      probeDb >= missDb + minDropDb;
+      probeDb -= 1
+    ) {
+      const information = probeInformation(probeDb, weights);
+      if (information > bestInformation) {
+        bestLevelDb = probeDb;
+        bestInformation = information;
+      }
+    }
     levelDb = bestLevelDb;
   };
 
@@ -263,19 +331,35 @@ export function createAdaptiveEarSearch(
     steering: SearchEvidence["steering"],
   ): void => {
     if (observation === "miss") {
-      if (lastCatchLevel !== undefined) {
-        finishEstimate(levelDb, lastClearLevel ?? lastCatchLevel);
+      if (lowestCatchLevel === undefined) {
+        if (levelDb === capDb) {
+          capMisses += 1;
+        }
+        if (capMisses >= capMissesForWorseThanCapCount) {
+          ending = Object.freeze({ kind: "worseThanCap" });
+        } else {
+          direction = "ascending";
+          levelDb = Math.min(capDb, levelDb + stepDb);
+        }
         return;
       }
-      if (levelDb === capDb) {
-        capMisses += 1;
+      const misses = missesBelowCatches();
+      const loudestMissDb = Math.max(...misses);
+      const narrow = lowestCatchLevel - loudestMissDb <= stepDb;
+      // One miss is enough when the neighbouring searches put the level in the same place: only a
+      // miss they do not explain is played again.
+      const steeringAgrees =
+        steering !== undefined &&
+        Math.abs(steering.centreDb - (loudestMissDb + lowestCatchLevel) / 2) <=
+          steeringAgreesWithinDb;
+      if (
+        narrow &&
+        (misses.length >= confirmingMissesCount || steeringAgrees)
+      ) {
+        finishEstimate(lowestClearLevel ?? lowestCatchLevel);
+        return;
       }
-      if (capMisses >= capMissesForWorseThanCapCount) {
-        ending = Object.freeze({ kind: "worseThanCap" });
-      } else {
-        direction = "ascending";
-        levelDb = Math.min(capDb, levelDb + stepDb);
-      }
+      probeTheGap(loudestMissDb, lowestCatchLevel);
       return;
     }
 
@@ -283,16 +367,9 @@ export function createAdaptiveEarSearch(
       ending = Object.freeze({ kind: "betterThanFloor" });
       return;
     }
-    const previous = recorded.at(-2);
-    if (lastCatchLevel === undefined && previous !== undefined) {
-      // Any correct catch above an initial miss gives us a range to estimate from.
-      finishEstimate(previous.levelDb, levelDb);
-      return;
-    }
-
-    lastCatchLevel = levelDb;
+    lowestCatchLevel = Math.min(lowestCatchLevel ?? levelDb, levelDb);
     if (observation === "clear") {
-      lastClearLevel = levelDb;
+      lowestClearLevel = Math.min(lowestClearLevel ?? levelDb, levelDb);
       weakSinceClear = 0;
     } else {
       weakSinceClear += 1;
@@ -300,12 +377,17 @@ export function createAdaptiveEarSearch(
       // keep going down until a miss or the quietest playable sound.
       if (
         levelDb === floorDb ||
-        (lastClearLevel !== undefined &&
+        (lowestClearLevel !== undefined &&
           (weakSinceClear >= 2 || concentrated(estimateQuantile(0.5))))
       ) {
-        finishEstimate(levelDb, lastClearLevel ?? levelDb);
+        finishEstimate(lowestClearLevel ?? lowestCatchLevel);
         return;
       }
+    }
+    const misses = missesBelowCatches();
+    if (misses.length > 0) {
+      probeTheGap(Math.max(...misses), lowestCatchLevel);
+      return;
     }
     descend(grade, steering);
   };
@@ -341,5 +423,12 @@ export function createAdaptiveEarSearch(
     },
     remainingPresentationsLowerBound: () => (ending === undefined ? 1 : 0),
     presentations: () => Object.freeze([...recorded]),
+    startAt(startDb) {
+      if (ending !== undefined || recorded.length > 0) return;
+      levelDb = Math.min(
+        settings.startingLevelDb,
+        Math.max(floorDb, Math.round(startDb)),
+      );
+    },
   });
 }

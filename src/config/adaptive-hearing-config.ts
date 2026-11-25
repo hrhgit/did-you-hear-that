@@ -35,4 +35,30 @@ export const adaptiveHearingConfig = Object.freeze({
    * above the Clear_Threshold, so the catch is not a hard bound (fine-level-estimate, Measured).
    */
   estimateAboveClearMaxDb: 2.5,
+  /**
+   * Misses below every catch, within one upward step of the quietest catch, that end an ear with
+   * a level. One miss alone is played again, unless the steering agrees with it
+   * (`steeringAgreesWithinDb`), so a single missed sound cannot set the result on its own.
+   */
+  confirmingMissesCount: 2,
+  /**
+   * How far above the neighbouring searches' level a steered descent may land in one step. It
+   * keeps the probe likely to be caught while skipping the levels between.
+   */
+  steeringLeadDb: 5,
+  /**
+   * How close the neighbouring searches' level must lie to the middle of the gap between the
+   * first miss and the quietest catch for that one miss to end the ear without being played again.
+   */
+  steeringAgreesWithinDb: 5,
+  /**
+   * How far above the neighbouring searches' level an ear that has not played yet starts, instead
+   * of the usual starting level (never above it).
+   */
+  steeringStartLeadDb: 5,
+  /**
+   * The pitch a mixed room plays alone first, until one of its ears ends, so the other pitches
+   * have a level to start near. The middle of the hearing range, where most people hear best.
+   */
+  leadFrequencyHz: 1000,
 });

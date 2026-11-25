@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import { adaptiveHearingConfig } from "../../src/config/adaptive-hearing-config";
 import { hearingMethodConfig } from "../../src/config/hearing-method-config";
 import { createSeededRandom } from "../../src/config/seeded-random";
 import type { Trial } from "../../src/engine/search-types";
@@ -84,6 +85,8 @@ describe("visit flow CP5. The log replays through the engine (Universal; R7.9, R
             }
             const log = snapshot.visitLog;
 
+            // How many scored trials each attempt had when one of its ears first stopped.
+            const firstEarEndedAfter = new Map<string, number>();
             for (const attempt of log.roomAttempts) {
               const search = createThresholdSearch({
                 settings: {
@@ -109,6 +112,7 @@ describe("visit flow CP5. The log replays through the engine (Universal; R7.9, R
                   trial.attempt === attempt.attempt,
               );
               let step = search.current();
+              let scoredCount = 0;
               for (const trial of trials) {
                 // Every played trial, scored or discarded, is the trial the search waits on.
                 expect(step.kind).toBe("trial");
@@ -118,6 +122,15 @@ describe("visit flow CP5. The log replays through the engine (Universal; R7.9, R
                 expect(askedFor(trial)).toEqual(searchAskedFor(step.trial));
                 if (trial.status === "scored") {
                   step = search.respond(trial.response);
+                  scoredCount += 1;
+                  const key = `${attempt.roomIndex}:${attempt.attempt}`;
+                  if (
+                    !firstEarEndedAfter.has(key) &&
+                    (!search.earSearching("left") ||
+                      !search.earSearching("right"))
+                  ) {
+                    firstEarEndedAfter.set(key, scoredCount);
+                  }
                 }
               }
               if (attempt.ending === "finished") {
@@ -199,17 +212,40 @@ describe("visit flow CP5. The log replays through the engine (Universal; R7.9, R
                     : Number.POSITIVE_INFINITY,
                 ]),
               );
+              // The lead pitch plays alone, with no draw, until one of its ears ends (one-room
+              // design, "Neighbour start").
+              const frequencies =
+                hearingMethodConfig.roomFrequenciesHz[
+                  visitRun.script.visitType
+                ];
+              const lead = members.find(
+                (member) =>
+                  frequencies[member.roomIndex] ===
+                  adaptiveHearingConfig.leadFrequencyHz,
+              );
+              const leadRoom = lead?.roomIndex;
+              // The lead plays alone up to the trial on which one of its ears ended; a lead
+              // abandoned before that had both ears open to the end of its run.
+              let leadLeft =
+                lead === undefined
+                  ? 0
+                  : (firstEarEndedAfter.get(
+                      `${lead.roomIndex}:${lead.attempt}`,
+                    ) ?? Number.POSITIVE_INFINITY);
               let open = members.map((member) => member.roomIndex);
               for (const trial of decided) {
                 const drawn =
-                  open.length <= 1
-                    ? open[0]
-                    : open[
-                        Math.min(
-                          open.length - 1,
-                          Math.floor(turns.next() * open.length),
-                        )
-                      ];
+                  leadLeft > 0
+                    ? leadRoom
+                    : open.length <= 1
+                      ? open[0]
+                      : open[
+                          Math.min(
+                            open.length - 1,
+                            Math.floor(turns.next() * open.length),
+                          )
+                        ];
+                if (leadLeft > 0) leadLeft -= 1;
                 expect(trial.roomIndex).toBe(drawn);
                 const left = (decidedLeft.get(trial.roomIndex) ?? 0) - 1;
                 decidedLeft.set(trial.roomIndex, left);

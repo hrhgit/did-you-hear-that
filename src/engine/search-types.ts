@@ -126,4 +126,17 @@ export interface ThresholdSearch {
    * nothing. Calling it on a room that has finished returns that result unchanged.
    */
   cutOff(): Extract<SearchStep, { readonly kind: "finished" }>;
+  /**
+   * The quietest level the ear has caught in this room so far, or null before any catch. Has no
+   * effect.
+   */
+  quietestCatchDb(ear: Ear): number | null;
+  /** Whether the ear is still searching in this room. Has no effect. */
+  earSearching(ear: Ear): boolean;
+  /**
+   * Starts an ear that has not played yet at `levelDb` instead of the starting level, when its
+   * search can (the adaptive one). When the waiting trial is that ear's, it is made again at the
+   * new level with the same number and gap, so nothing is drawn. Returns the waiting step.
+   */
+  steerStart(ear: Ear, levelDb: number): SearchStep;
 }

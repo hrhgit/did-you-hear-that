@@ -55,7 +55,7 @@ The Steering_Prior is `N(T; centreDb, spreadDb)`, never stored: it multiplies a 
 
 ## Ending and the estimate
 
-The ending rules stay as they are (first miss after a catch; the Good-only rule; floor and cap rules; the trial limit). `concentrated` now asks for `concentratedProbabilityFraction` of the Report_Posterior within ±`concentratedWithinDb` of the estimate.
+The ending rules stay as they are (first miss after a catch; the Good-only rule; floor and cap rules; the trial limit; the first of these changed on 2026-11-25, see "One missed sound" at the end). `concentrated` now asks for `concentratedProbabilityFraction` of the Report_Posterior within ±`concentratedWithinDb` of the estimate.
 
 The estimate is the median of the Report_Posterior, interpolated linearly inside the 0.5 dB bucket, rounded to 0.1 dB, and held between the quieter miss and the clearer catch as today. `lowDb` and `highDb` are its 10th and 90th percentiles the same way, also held to that span widened by `detectionLeadDb` on the quiet side; and `lowDb ≤ thresholdDb ≤ highDb` always.
 
@@ -65,7 +65,7 @@ At each counted turn's response:
 
 - `netAnswerMs`: the logged response time minus the turn's Timing_Offset, for a catch; absent otherwise.
 - `baselineMs`: the 25th percentile of the net answer times of the visit's Loud_Catches so far (`headphoneTraitsConfig.loudLevelMinDb`), once there are `baselineCatchesMinCount` of them; absent before. The visit flow keeps these in the same place it already feeds the Timing_Offset tracker, and passes a getter to the runner, like `timingOffsetMs`.
-- `steering`: from the tracks of the room run and the earlier finished rooms the runner knows of, the found estimates of (a) the other ear of this track and (b) either ear of the rooms whose pitch is one octave away. Centre: their median. Spread: `steeringSpreadDb`. Absent when none is found.
+- `steering`: from the tracks of the room run and the earlier finished rooms the runner knows of, the found estimates of (a) the other ear of this track and (b) either ear of the rooms whose pitch is one octave away. Centre: their median. Spread: `steeringSpreadDb`. When none is found, the quietest catches of (a) and (b) in this run, each one upward step lower; absent when there are none of those either. Given with a miss as well as with a catch (since "Neighbour start", below).
 
 The steering affects only which level comes next. The result, the picture and every line keep reading each floor from its own room alone (result-page design, "Each floor is computed from its own room summary alone").
 
@@ -83,6 +83,11 @@ The steering affects only which level comes next. The result, the picture and ev
 | `steeringSpreadDb` | 12 | width of the Steering_Prior |
 | `concentratedWithinDb` | 2.5 | replaces `stepDb` in `concentrated` |
 | `rangeLowFraction` / `rangeHighFraction` | 0.1 / 0.9 | the range |
+| `confirmingMissesCount` | 2 | misses below the catches that end an ear ("One missed sound") |
+| `steeringLeadDb` | 5 | how far above the steering centre a steered descent lands |
+| `steeringAgreesWithinDb` | 5 | how close the centre must be for one miss to end an ear |
+| `steeringStartLeadDb` | 5 | how far above the centre an ear that has not played starts ("Neighbour start") |
+| `leadFrequencyHz` | 1000 | the pitch a room run plays alone first ("Neighbour start") |
 
 ## Checks
 
@@ -129,3 +134,65 @@ The three R6 failures above came from the design's hold of the estimate between 
 | R6.3 ranges covering the true threshold | — | 82.7% | Passed |
 
 The gain is not a smaller error but an honest one: the estimates no longer sit on the levels played, and each comes with a range that holds the true level about four times in five. Lowering the error itself needs more trials per ear, which the owner ruled out.
+
+## One missed sound, 2026-11-25
+
+The owner saw a result with one ear near −20 dB and the other below the floor at two pitches, and asked whether the search was at fault, then asked, translated from Chinese, for the pitches not to be measured each on its own: to use the other data both to estimate and to come down faster, because a visit must finish within five minutes.
+
+**The fault.** The search ended an ear at the first miss after a catch and held the estimate at or above that miss. One missed sound, a lapse or a late press, therefore set the result: a listener who hears −55 dB, catching at −10 and −15 and missing once at −20, was reported at −17.2 dB. In simulation, attentive listeners with equal ears and thresholds below a −45 dB floor showed a left and right difference of 15 dB or more in about a quarter of rooms; the staircase search, which needs two catches on the way up, in none.
+
+**The change** (`src/engine/adaptive-ear-search.ts`, three new fields of `adaptiveHearingConfig`):
+
+- A miss below every catch no longer ends the ear. The search plays the most informative whole-decibel level in the gap between the loudest such miss and the quietest catch, or the missed level itself once the gap is one upward step or less. A catch there outweighs the miss and the descent goes on. The ear ends with a level after `confirmingMissesCount` (2) such misses within one upward step of the quietest catch.
+- One such miss is enough when the steering agrees with it: when the Steering_Prior's centre lies within `steeringAgreesWithinDb` (5 dB) of the middle of the gap. Only a miss the neighbours do not explain costs another sound.
+- Until the ear has missed below its catches, the steering may take a descent past the largest drop, down to `steeringLeadDb` (5 dB) above its centre.
+- The estimate is no longer held at or above a miss; the response model's outlier share already allows for one. It is still held at most `estimateAboveClearMaxDb` above the quietest clear catch.
+
+**Measured.** Whole visits of five pitches and two ears taking turns, with the steering the room runner gives, a −45 dB floor, 2,000 visits per row, equal ears, thresholds per pitch within 10 dB of each other. Time counts the gap, the answer or the full window, and the no-sound trials; the five-minute limit was never reached.
+
+| Listeners | Search | Sound trials per visit | Time | Equal ears shown 15 dB or more apart | Found ears more than 10 dB off |
+| --- | --- | --- | --- | --- | --- |
+| Attentive, near or below the floor | before | 48.8 | 133 s | 10.7% | 18.2% |
+| | after | 52.6 | 145 s | 0.1% | 0.7% |
+| Lapse 8%, near or below the floor | before | 45.2 | 126 s | 33.7% | 51.1% |
+| | after | 57.7 | 162 s | 4.8% | 9.9% |
+| Attentive, −40 to −20 dB | before | 37.2 | 110 s | 4.5% | 4.5% |
+| | after | 50.2 | 153 s | 0.1% | 0.2% |
+| Lapse 8%, −40 to −20 dB | before | 34.4 | 102 s | 16.3% | 18.0% |
+| | after | 52.6 | 160 s | 1.8% | 2.4% |
+
+Without the agreement rule the same rows took about 1 to 4 more sound trials per visit; without the steered descent, about 0.5 more. Steering from the catches of searches still running, not only from found ears, saved about 2 more sound trials per visit and is not built. On the simulated listeners of "Checks", with no steering, the mean is 7.06 sound trials per ear against the reference's 5.15, and the median error 2.8 dB against 3.3 dB.
+
+## Neighbour start, 2026-11-25
+
+The owner asked, translated from Chinese, that once a neighbouring pitch has measured a level the others take it as roughly right and jump close to it instead of walking down, and then that the early descent be faster since the search can climb back up after a miss.
+
+**The change** (`adaptive-ear-search.ts`, `threshold-search.ts`, `room-runner.ts`, two new fields of `adaptiveHearingConfig`):
+
+- **The lead pitch first.** In a room run of several pitches the track at `leadFrequencyHz` (1000 Hz) plays alone, drawing no turn, until one of its ears ends. With one track, nothing changes.
+- **A neighbour start.** When the runner draws a turn whose waiting trial is the first of its ear, and the steering has a centre, it calls `ThresholdSearch.steerStart(ear, centre + steeringStartLeadDb)`. The adaptive ear search moves its first level there (whole decibels, between the floor and the starting level), and the waiting trial is made again with the same number and gap, so the random draws are those of before. The staircase and the quick search keep their grid and ignore it.
+- **A straight descent.** Until the ear has missed below its catches, a steered descent goes to `steeringLeadDb` above the centre whenever that is lower than the most informative probe, keeping the minimum drop above the floor.
+- **Steering from searches still running.** Before any neighbour is found, its quietest catch one upward step lower stands in (`ThresholdSearch.quietestCatchDb`). The lead's catches therefore steer the other pitches from its first catches on.
+- **Steering with a miss.** The runner now gives the steering with every counted sound, so the agreement rule of "One missed sound" can end an ear in the game, not only in simulation.
+
+**Not built: larger early drops.** Letting the first descent drop 20 or 30 dB instead of 10 saved about 2 to 4 sound trials for listeners near the floor, but cost about 7 for listeners between −40 and −20 dB, and about 3 to 4 everywhere when hearing changes by 8 dB an octave: an overshoot costs more climbing than it saves. With the neighbour start the early descent is already fast where a neighbour is known.
+
+**Measured** as in "One missed sound", 1,000 visits per row, on the shipped engine:
+
+| Listeners | Search | Sound trials per visit | Time | Equal ears shown 15 dB or more apart | Found ears more than 10 dB off |
+| --- | --- | --- | --- | --- | --- |
+| Attentive, near or below the floor | first miss ends | 48.8 | 133 s | 10.7% | 18.2% |
+| | one missed sound | 52.6 | 145 s | 0.1% | 0.7% |
+| | neighbour start | 32.1 | 90 s | 0.1% | 1.0% |
+| Lapse 8%, near or below the floor | first miss ends | 45.2 | 126 s | 33.7% | 51.1% |
+| | one missed sound | 57.7 | 162 s | 4.8% | 9.9% |
+| | neighbour start | 36.7 | 104 s | 2.4% | 7.9% |
+| Attentive, −40 to −20 dB | first miss ends | 37.2 | 110 s | 4.5% | 4.5% |
+| | one missed sound | 50.2 | 153 s | 0.1% | 0.2% |
+| | neighbour start | 40.7 | 126 s | 0.0% | 0.3% |
+| Lapse 8%, −40 to −20 dB | first miss ends | 34.4 | 102 s | 16.3% | 18.0% |
+| | one missed sound | 52.6 | 160 s | 1.8% | 2.4% |
+| | neighbour start | 42.6 | 131 s | 1.0% | 2.8% |
+
+With hearing that falls by 8 dB an octave the neighbour start took 37.0, 40.2, 39.9 and 41.9 sound trials per visit on the same rows, with no loss of accuracy (at most 3.0% of found ears more than 10 dB off). No row came near the five-minute limit.
+

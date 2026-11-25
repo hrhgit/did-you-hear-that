@@ -555,3 +555,53 @@ describe("createThresholdSearch", () => {
     }).toThrow(TypeError);
   });
 });
+
+describe("createThresholdSearch, the neighbour start (one-room design)", () => {
+  it("starts an ear that has not played at the given level, drawing nothing and keeping the waiting trial's number and gap", () => {
+    const random = createStubRandom(0.99);
+    const search = createThresholdSearch({
+      settings: hearingMethodConfig,
+      random,
+      method: "adaptive",
+    });
+    const waiting = trialOf(search.current());
+    expect(waiting).toMatchObject({
+      kind: "sound",
+      ear: "right",
+      levelDb: -25,
+    });
+    const calls = random.calls;
+    expect(trialOf(search.steerStart("right", -37.4))).toEqual({
+      ...waiting,
+      levelDb: -37,
+    });
+    // The other ear moves too; the waiting trial is not its own.
+    expect(trialOf(search.steerStart("left", -40))).toEqual({
+      ...waiting,
+      levelDb: -37,
+    });
+    expect(random.calls).toBe(calls);
+    expect(search.earSearching("right")).toBe(true);
+    expect(search.quietestCatchDb("right")).toBeNull();
+
+    search.respond("right");
+    expect(search.quietestCatchDb("right")).toBe(-37);
+    // An ear that has played keeps its own course.
+    const next = search.current();
+    expect(search.steerStart("right", -50)).toBe(next);
+    random.queue.push(0.99, 0);
+    search.respond("right");
+    expect(trialOf(search.current())).toMatchObject({
+      ear: "left",
+      levelDb: -40,
+      direction: "first",
+    });
+  });
+
+  it("leaves the staircase on its level grid", () => {
+    const search = create(createStubRandom(0.99));
+    const waiting = search.current();
+    expect(search.steerStart("right", -37)).toBe(waiting);
+    expect(trialOf(waiting)).toMatchObject({ kind: "sound", levelDb: -25 });
+  });
+});

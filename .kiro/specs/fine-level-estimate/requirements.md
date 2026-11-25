@@ -52,14 +52,17 @@ Acceptance criteria use EARS notation.
 ## R4 Steering without reporting
 
 1. WHILE choosing a probe, THE search MAY multiply the Report_Posterior by a Steering_Prior given to it by the room runner.
-2. THE Steering_Prior SHALL be a wide normal on the Clear_Threshold, centred on the median of the estimates the room runner has at that moment: the other ear at the same pitch if it is found, and the found ears of the neighbouring pitches. Its width is `steeringSpreadDb`. With none of these, there is no Steering_Prior.
-3. THE reported estimate, range and ending SHALL NOT depend on the Steering_Prior.
+2. THE Steering_Prior SHALL be a wide normal on the Clear_Threshold, centred on the median of the estimates the room runner has at that moment: the other ear at the same pitch if it is found, and the found ears of the neighbouring pitches. Its width is `steeringSpreadDb`. With none of these found, the quietest catches of the same searches still running, each one upward step lower, stand in (added 2026-11-25, "Neighbour start"). With none of either, there is no Steering_Prior.
+3. THE reported estimate and range SHALL NOT depend on the Steering_Prior. THE ending MAY: a first miss within one upward step of the quietest catch ends the ear when the Steering_Prior's centre lies within `steeringAgreesWithinDb` of the middle of that gap (changed 2026-11-25 at the owner's request, "one missed sound" below).
 4. No visitor-facing text SHALL compare one pitch with another.
+5. Until the ear has missed below its catches, a descent SHALL go straight to `steeringLeadDb` above the Steering_Prior's centre when that is lower than the probe it would choose, and MAY go further than the largest drop to get there (added 2026-11-25; straight since "Neighbour start").
+6. An ear that has not played yet SHALL start at `steeringStartLeadDb` above the Steering_Prior's centre when that is below the starting level, drawing nothing (added 2026-11-25, "Neighbour start").
+7. In a room run of several pitches, the pitch at `leadFrequencyHz` SHALL play alone, drawing no turn, until one of its ears ends, so the others have a level to start near (added 2026-11-25, "Neighbour start").
 
 ## R5 No more trials, no dwelling at the edge
 
-1. THE number of counted sound trials per ear SHALL NOT grow: over the simulated listeners of design.md "Checks", its mean SHALL be at most the mean of the current search plus 0.3.
-2. THE search SHALL still end at the first miss after a catch, as today, so that it never probes twice in a row below a level the visitor missed.
+1. Over the simulated listeners of design.md "Checks", without steering, the mean number of counted sound trials per ear SHALL be at most the mean of the reference search plus 2 (was 0.3; changed 2026-11-25, see 2).
+2. A miss below every catch SHALL NOT end the ear on its own unless the Steering_Prior agrees with it (R4.3). The search plays the gap between that miss and the quietest catch, or the missed level again once the gap is one upward step or less, and ends with a level after `confirmingMissesCount` such misses within one upward step of the quietest catch (changed 2026-11-25: ending at the first miss let one lapse set the result, measured below in design.md).
 3. No descent step SHALL be smaller than `minDropDb`.
 
 ## R6 Accuracy

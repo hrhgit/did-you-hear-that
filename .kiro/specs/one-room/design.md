@@ -246,7 +246,7 @@ export interface MixedRoomRunnerOptions extends RunnerCommonOptions {
 }
 ```
 
-**The turn** (D6). An open track is one whose search has not finished and has a trial waiting. With `n` open tracks in the order of the visit and a draw `u` of the turn source, the turn falls on the track at the index `min(n − 1, floor(u × n))`. With one open track the turn is that track's and nothing is drawn. With none, the run is over.
+**The turn** (D6). An open track is one whose search has not finished and has a trial waiting. With `n` open tracks in the order of the visit and a draw `u` of the turn source, the turn falls on the track at the index `min(n − 1, floor(u × n))`. With one open track the turn is that track's and nothing is drawn. With none, the run is over. While the track at `adaptiveHearingConfig.leadFrequencyHz` is open and both of its ears are searching, the turn is that track's and nothing is drawn (fine-level-estimate design, "Neighbour start", 2026-11-25). When the turn's waiting trial is the first of its ear, the runner may start that ear near its neighbours with `steerStart`, which draws nothing.
 
 **When it draws.** Once in `start`, and once after every decision. A decision is the moment a trial is scored: an answer was taken in its window, or its window ended. Nothing else draws: not a pause, not a resume, not a refused sound, not an ignored answer. So the number of draws of a run can be counted from its decided trials, which is what lets the log replay (CP5).
 
@@ -507,7 +507,7 @@ The properties of the visit flow, of the practice and of the screen record were 
 
 **CP4. Answers are judged against their windows** (50 each way; R3.3, R5.1, R8.3). In the roll call an answer is the practised creature's. In the counting an answer is judged against the window of the trial that is presented, and an ignored answer is logged against the creature whose turn waited. The test counts answers held to a creature and to a later creature, and fails when either stays at 0.
 
-**CP5. The log replays through the engine, and the turns replay from the seeds** (50 each way; R4.1 to R4.6, R4.8, R17.2). Each Room_Attempt's trials replay through a search made from its logged seed. Whose turn it was is found again from the engine seeds of the log alone: one draw when a run starts and one after each decided trial, while two or more of the run's searches are open; a trial that was discarded is presented again without a draw. The first room run of every visit holds `min(roomCount, roomsTogetherMaxCount)` searches.
+**CP5. The log replays through the engine, and the turns replay from the seeds** (50 each way; R4.1 to R4.6, R4.8, R17.2). Each Room_Attempt's trials replay through a search made from its logged seed. Whose turn it was is found again from the engine seeds of the log alone: one draw when a run starts and one after each decided trial, while two or more of the run's searches are open and the lead pitch has no ear ended (its replayed search tells when); a trial that was discarded is presented again without a draw. The first room run of every visit holds `min(roomCount, roomsTogetherMaxCount)` searches.
 
 **CP6. The output stage is used as it requires** (50 each way; R6.1, R6.5, R3.3). `beginRoom` is called once for each room run and once before the replay, with the mixed span exactly when together. Every sound is the sound of the creature whose trial it is. The test counts sounds of a later creature and fails unless there are more than the number of visits.
 

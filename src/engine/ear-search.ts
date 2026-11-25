@@ -46,6 +46,13 @@ export interface EarSearch {
   /** 0 once ended; otherwise at least 1. See D6. */
   remainingPresentationsLowerBound(): number;
   presentations(): readonly Presentation[];
+  /**
+   * Moves the first level of a search that has not played yet down to `levelDb`, a whole
+   * decibel between the floor and the starting level (one-room design, "Neighbour start").
+   * Does nothing once a sound has been recorded or the search has ended. Only searches that
+   * can start off the level grid have it.
+   */
+  startAt?(levelDb: number): void;
 }
 
 interface AscendingTally {
