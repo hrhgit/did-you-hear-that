@@ -272,16 +272,14 @@ describe("the result page's constant copy", () => {
       savePictureButton: "Save picture",
       pictureNotSavedLine:
         "The picture could not be saved just now. Try again.",
-      headphoneNameLabel: "Name your headphones. You may leave this empty.",
-      saveButton: "Save this visit in this browser",
-      notSavedLine:
-        "This visit is not saved. If you leave without saving it, nothing from it is kept.",
+      headphoneNameLabel: "Name your headphones, if you like.",
+      saveButton: "Save this visit",
+      notSavedLine: "Not saved yet. If you leave now, nothing is kept.",
       savedLine: "Saved in this browser. Nothing has left it.",
       renamedLine: "The name of the headphones was changed.",
-      mayBeClearedLine:
-        "A browser can clear what is saved in it on its own, so a saved visit may not stay forever.",
+      mayBeClearedLine: "Your browser may clear saved visits on its own.",
       savedVisitsHeading: "Visits saved in this browser",
-      noSavedVisitsLine: "No visits are saved in this browser.",
+      noSavedVisitsLine: "None yet.",
       headphonesLabel: "Headphones",
       unnamedHeadphonesLabel: "Not named",
       showButton: "Show its picture",
@@ -478,7 +476,7 @@ describe("differenceLabel and differenceLine", () => {
 
 describe("swappedRepeatLine", () => {
   const line = (size: number): string =>
-    `Your left and right are ${String(size)} dB apart here. Swap the headphones, so that the left earpiece is on your right ear, and visit this room again. That helps tell whether the difference stays with your ears or moves with the headphones.`;
+    `Your left and right are ${String(size)} dB apart here. A swap tells whether the difference stays with your ears or moves with the headphones.`;
 
   it("gives the size of the difference whichever side is quieter", () => {
     expect(swappedRepeatLine(15)).toBe(line(15));
@@ -702,7 +700,7 @@ describe("the comparison's copy", () => {
   it("holds the fixed strings of the design, word for word", () => {
     expect(comparisonCopy).toEqual({
       headphoneNameHint:
-        "Give the same name on a later visit, and this visit is drawn there as faint outlines.",
+        "Use the same name next time, and this visit is drawn there as faint outlines.",
       noEarlierVisitLine:
         "No earlier visit with headphones of this name is saved in this browser.",
     });

@@ -242,19 +242,12 @@ describe("screenOfSnapshot", () => {
     const screen = screenOfSnapshot({
       ...calibration,
       heading: calibrationCopy.hiss.heading,
-      introLines: [
-        calibrationCopy.hiss.openLine,
-        calibrationCopy.whyLine,
-        calibrationCopy.hiss.riseLine,
-        calibrationCopy.keysLine,
-      ],
+      introLines: [calibrationCopy.hiss.openLine, calibrationCopy.keysLine],
       line: calibrationCopy.hiss.openLine,
     });
     expect(screen.calibration?.heading).toBe(calibrationCopy.hiss.heading);
     expect(screen.calibration?.introLines).toEqual([
       calibrationCopy.hiss.openLine,
-      calibrationCopy.whyLine,
-      calibrationCopy.hiss.riseLine,
     ]);
     expect(screen.calibration?.keysLine).toBe(calibrationCopy.keysLine);
     expect(screen.calibration?.statusLine).toBeNull();

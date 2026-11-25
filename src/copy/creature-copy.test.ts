@@ -139,11 +139,10 @@ describe("rollCallCaughtLine", () => {
 });
 
 describe("rollCallNotHeardLines", () => {
-  it("says who was not caught on one side, what to check, and what each choice does", () => {
+  it("says who was not caught on one side and what to check", () => {
     expect(rollCallNotHeardLines([{ roomId: "attic", side: "left" }])).toEqual([
       "Not caught, even a little louder: Squeak on your left.",
-      "Check that the earpieces are in and that the volume is where you set it.",
-      "Start counting goes on anyway; a sound you cannot hear here will show as louder than this house can play. Try again plays those sounds once more.",
+      "Check that both earpieces are in.",
     ]);
   });
 
@@ -188,7 +187,7 @@ describe("rollCallNotHeardLines", () => {
         }),
         (missed) => {
           const lines = rollCallNotHeardLines(missed);
-          expect(lines).toHaveLength(3);
+          expect(lines).toHaveLength(2);
           expect(Object.isFrozen(lines)).toBe(true);
           for (const line of lines) {
             expectFitToRead(line);

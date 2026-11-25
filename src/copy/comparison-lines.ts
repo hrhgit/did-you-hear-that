@@ -9,7 +9,7 @@ import { visitDateLabel } from "./saved-visit-lines";
 export const comparisonCopy = Object.freeze({
   /** Under the headphone name field. */
   headphoneNameHint:
-    "Give the same name on a later visit, and this visit is drawn there as faint outlines.",
+    "Use the same name next time, and this visit is drawn there as faint outlines.",
   /** When a name is typed and no earlier visit has it. */
   noEarlierVisitLine:
     "No earlier visit with headphones of this name is saved in this browser.",

@@ -515,23 +515,89 @@ p.visit-status {
 }
 
 /*
+ * The sheets before the room, and the notices, hold one thing to do and a line or two about it.
+ * They are narrow and set in the middle, like a sign on a door.
+ */
+.visit-sheet-calibration .visit-sheet-body,
+.visit-sheet-check .visit-sheet-body,
+.visit-sheet-rules .visit-sheet-body,
+.visit-sheet-notice .visit-sheet-body {
+  max-width: 31rem;
+  text-align: center;
+}
+
+.visit-sheet-calibration h1,
+.visit-sheet-check h1,
+.visit-sheet-rules h1,
+.visit-sheet-notice h1 {
+  margin-bottom: 0.9rem;
+  font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.1rem);
+}
+
+.visit-sheet-calibration p,
+.visit-sheet-check p,
+.visit-sheet-rules p,
+.visit-sheet-notice p {
+  max-width: 26rem;
+  margin-inline: auto;
+}
+
+.visit-sheet-calibration .visit-controls,
+.visit-sheet-check .visit-controls,
+.visit-sheet-rules .visit-controls,
+.visit-sheet-notice .visit-controls {
+  justify-content: center;
+  margin: 1.5rem 0 0.9rem;
+}
+
+.visit-sheet-calibration p.visit-status,
+.visit-sheet-check p.visit-status {
+  min-height: 2.9em;
+  margin-bottom: 0;
+}
+
+.visit-sheet-check .visit-controls:first-of-type {
+  margin-top: 0.4rem;
+}
+
+/* A line at the foot of a sheet: worth saying once, and not what the sheet is for. */
+.visit-sheet p.visit-foot-line {
+  margin: 0.4rem auto 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* A round button that shows its mark alone. */
+.visit-button.visit-button-icon {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.visit-button.visit-button-icon::before {
+  left: 50%;
+  margin-left: -0.55rem;
+}
+
+/*
  * The calibration control as a drawn line: quiet at the left end, loud at the right. The ring is
  * where the visitor has put the control. The lit part of the line and its mark are where the sound
  * has got to, which follows the ring a little at a time.
  */
-/* What to do comes first and stands out. Why, and how the sound follows, are said more quietly. */
-.visit-calibration-lines p + p {
-  color: var(--color-graphite);
-  font-size: 0.9375rem;
+/* The control with quieter at its left end and louder at its right, in one row. */
+.visit-dial {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 26rem;
+  margin: 1.75rem auto 0;
 }
 
-.visit-dial {
-  max-width: 28rem;
-  margin: 1.5rem 0 0;
-  padding: 1rem 1.1rem 1.1rem;
-  border: 1px solid var(--panel-line);
-  border-radius: 1rem;
-  background: rgb(10 8 18 / 0.55);
+.visit-dial .visit-meter {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* The control is drawn like Jack's flame in the room: a bar of candlelight in a dark groove. */
@@ -670,18 +736,9 @@ p.visit-status {
   border-radius: 0.5rem;
 }
 
-/* Quieter and Louder sit under the two ends of the line, so each also names its end. */
-.visit-dial-ends {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-top: 0.9rem;
-}
-
 p.visit-keys-line {
-  max-width: 26rem;
-  margin: 1.5rem 0 1.25rem;
-  font-size: 0.9375rem;
+  margin: 0 auto 0.5rem;
+  font-size: 0.875rem;
 }
 
 /* The keys are no use without a keyboard. */
@@ -691,64 +748,42 @@ p.visit-keys-line {
   }
 }
 
-/* The rules: one card for each, numbered with a little lit coin. */
+/*
+ * The rules: a few short lines in the house's voice, each under a small flame, with no box round
+ * any of them.
+ */
 .visit-rules {
   display: grid;
-  gap: 0.6rem;
-  margin: 0 0 1.1rem;
+  gap: 0.55rem;
+  margin: 0 0 1.5rem;
   padding: 0;
   list-style: none;
-  counter-reset: visit-rule;
   font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
   font-style: italic;
-  line-height: 1.42;
+  line-height: 1.35;
+  text-wrap: balance;
 }
 
 .visit-rule {
-  position: relative;
   margin: 0;
-  padding: 0.7rem 0.95rem 0.75rem 3.3rem;
-  border: 1px solid var(--panel-line);
-  border-radius: 0.9rem;
-  background: rgb(10 8 18 / 0.45);
-  counter-increment: visit-rule;
 }
 
-.visit-rule::before {
-  content: counter(visit-rule);
-  position: absolute;
-  top: 0.7rem;
-  left: 0.85rem;
-  display: grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
+.visit-rule + .visit-rule::before {
+  content: "";
+  display: block;
+  width: 0.3rem;
+  height: 0.3rem;
+  margin: 0 auto 0.55rem;
   border-radius: 50%;
-  background: radial-gradient(
-    circle at 35% 30%,
-    var(--color-candle),
-    var(--color-ember) 55%,
-    var(--color-ember-deep)
-  );
-  box-shadow: 0 0 0.7rem rgb(245 140 30 / 0.45);
-  color: #2a1204;
-  font-size: 0.9rem;
-  font-style: normal;
-  font-weight: 700;
-  font-variant-numeric: lining-nums;
-  line-height: 1;
+  background: var(--color-ember);
+  box-shadow: 0 0 0.5rem rgb(245 140 30 / 0.7);
 }
 
-/* How to answer: the two halves of the screen, each with its keys. */
+/* How to answer: a picture of the screen cut in two, each half with its keys. */
 .visit-answer-guide {
-  margin: 0 0 0.25rem;
-  padding: 0.95rem 1rem 0.35rem;
-  border: 1px solid var(--panel-line);
-  border-radius: 1rem;
-  background: rgb(10 8 18 / 0.5);
+  margin: 0;
 }
 
-.visit-answer-guide-heading,
 .visit-eyebrow {
   margin: 0 0 0.75rem;
   color: var(--color-hud-gold);
@@ -762,8 +797,10 @@ p.visit-keys-line {
 .visit-halves {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.6rem;
-  margin-bottom: 0.85rem;
+  overflow: hidden;
+  border: 1px solid var(--panel-line-strong);
+  border-radius: 0.9rem;
+  background: rgb(10 8 18 / 0.5);
 }
 
 .visit-half {
@@ -772,19 +809,19 @@ p.visit-keys-line {
   justify-content: space-between;
   gap: 0.5rem;
   min-width: 0;
-  padding: 0.55rem 0.75rem;
-  border: 1px dashed rgb(255 214 160 / 0.28);
-  border-radius: 0.7rem;
-  background: linear-gradient(90deg, rgb(245 158 11 / 0.14), transparent);
+  min-height: 3.5rem;
+  padding: 0.6rem 0.85rem;
+  background: linear-gradient(90deg, rgb(245 158 11 / 0.16), transparent 75%);
 }
 
 .visit-half-right {
   flex-direction: row-reverse;
-  background: linear-gradient(270deg, rgb(245 158 11 / 0.14), transparent);
+  border-left: 1px dashed rgb(255 214 160 / 0.32);
+  background: linear-gradient(270deg, rgb(245 158 11 / 0.16), transparent 75%);
 }
 
 .visit-half-word {
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-style: italic;
 }
 
@@ -811,14 +848,42 @@ p.visit-keys-line {
 }
 
 .visit-sheet .visit-answer-guide p {
-  margin-bottom: 0.55rem;
-  font-size: 0.9375rem;
-  line-height: 1.45;
+  margin: 0.6rem auto 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/*
+ * The key caps are a picture of the keyboard line, so beside them the line is only read out.
+ * Where there is no keyboard to speak of, the caps go and the line about touching stands alone.
+ */
+.visit-sheet .visit-answer-guide p.visit-keyboard-line {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.visit-sheet .visit-answer-guide p.visit-touch-line {
+  display: none;
+}
+
+@media (any-pointer: coarse) {
+  .visit-sheet .visit-answer-guide p.visit-touch-line {
+    display: block;
+  }
 }
 
 @media (pointer: coarse) {
   .visit-keycaps {
     display: none;
+  }
+
+  .visit-half {
+    justify-content: center;
   }
 }
 
@@ -973,83 +1038,52 @@ p.visit-swap-turn-back {
 
 /* ─── The row of steps before the room ─────────────────────────────────────────────── */
 
+/* A short row of dots over the heading. Their names are read out and not shown. */
 .visit-steps {
   display: flex;
-  margin: -0.4rem 0 1.5rem;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: -0.5rem 0 1.4rem;
   padding: 0;
   list-style: none;
 }
 
 .visit-step {
-  position: relative;
-  display: grid;
-  flex: 1 1 0;
-  justify-items: center;
-  gap: 0.4rem;
-  min-width: 0;
-  color: var(--color-graphite);
-  font-size: 0.6875rem;
-  letter-spacing: 0.14em;
-  line-height: 1.2;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-/* The line from the step before, drawn under the dots. */
-.visit-step + .visit-step::before {
-  content: "";
-  position: absolute;
-  top: 0.45rem;
-  right: 50%;
-  width: 100%;
-  height: 1px;
-  background: var(--color-graphite-faint);
-}
-
-.visit-step[data-state="done"]::before,
-.visit-step[data-state="now"]::before {
-  height: 2px;
-  margin-top: -0.5px;
-  background: linear-gradient(90deg, var(--color-ember), var(--color-lamp));
+  display: block;
+  line-height: 0;
 }
 
 .visit-step-dot {
-  position: relative;
-  width: 0.9rem;
-  height: 0.9rem;
-  border: 1px solid var(--color-graphite-faint);
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
-  background: var(--color-night);
+  background: var(--color-graphite-faint);
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
 }
 
 .visit-step[data-state="done"] .visit-step-dot {
-  border-color: var(--color-lamp);
-  background: var(--color-ember);
+  background: var(--color-lamp-low);
 }
 
 .visit-step[data-state="now"] .visit-step-dot {
-  border-color: var(--color-candle);
-  background: var(--color-candle);
-  box-shadow:
-    0 0 0 4px rgb(245 158 11 / 0.2),
-    0 0 0.8rem rgb(255 170 60 / 0.8);
+  width: 1.6rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-ember), var(--color-candle));
+  box-shadow: 0 0 0.7rem rgb(255 170 60 / 0.7);
 }
 
-.visit-step[data-state="now"] .visit-step-name {
-  color: var(--color-hud-gold);
-}
-
-.visit-step-name {
-  max-width: 100%;
+.visit-step-name,
+.visit-spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip-path: inset(50%);
   white-space: nowrap;
-}
-
-@media (max-width: 30rem) {
-  .visit-step:not([data-state="now"]) .visit-step-name {
-    visibility: hidden;
-  }
 }
 
 /* ─── The answers of a headphone check: four tiles, each with the headphones drawn ─────────── */

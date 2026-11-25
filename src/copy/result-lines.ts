@@ -194,10 +194,10 @@ export function wingValue(wing: WingWords): WingValueWords {
     case "worseThanCap":
       return {
         value: "Not caught",
-        note: "even the loudest sound the house may play here went by",
+        note: "the loudest sound went by",
       };
     case "unreliable":
-      return { value: "No level", note: "this room should be visited again" };
+      return { value: "No level", note: "visit this room again" };
   }
 }
 
@@ -238,7 +238,7 @@ export function differenceLine(rightMinusLeftDb: number | null): string {
 /** The offer of the swapped repeat on a floor whose left and right are this far apart. */
 export function swappedRepeatLine(rightMinusLeftDb: number): string {
   const size = Math.abs(wholeDifference(rightMinusLeftDb));
-  return `Your left and right are ${String(size)} dB apart here. Swap the headphones, so that the left earpiece is on your right ear, and visit this room again. That helps tell whether the difference stays with your ears or moves with the headphones.`;
+  return `Your left and right are ${String(size)} dB apart here. A swap tells whether the difference stays with your ears or moves with the headphones.`;
 }
 
 /** A wing's line, followed by the line of its first reason when it is unreliable. */

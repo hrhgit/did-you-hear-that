@@ -314,7 +314,7 @@ describe("resultPicture", () => {
         reasonLine: null,
         earlier: null,
         valueLabel: "Not caught",
-        valueNote: "even the loudest sound the house may play here went by",
+        valueNote: "the loudest sound went by",
       });
     });
 
@@ -327,7 +327,7 @@ describe("resultPicture", () => {
         reasonLine: "One catch here did not fit with your other answers.",
         earlier: null,
         valueLabel: "No level",
-        valueNote: "this room should be visited again",
+        valueNote: "visit this room again",
       });
     });
 
@@ -424,7 +424,7 @@ describe("resultPicture", () => {
       const picture = live(visit);
       expect(picture.floors[0]?.swappedRepeat).toEqual({
         roomIndex: 0,
-        line: "Your left and right are 15 dB apart here. Swap the headphones, so that the left earpiece is on your right ear, and visit this room again. That helps tell whether the difference stays with your ears or moves with the headphones.",
+        line: "Your left and right are 15 dB apart here. A swap tells whether the difference stays with your ears or moves with the headphones.",
         buttonLabel: resultPageCopy.swappedRepeatButton,
       });
       expect(picture.floors[1]?.swappedRepeat).toBeNull();

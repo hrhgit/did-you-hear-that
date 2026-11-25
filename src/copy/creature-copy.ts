@@ -62,12 +62,10 @@ export function creatureIntroLine(roomId: GhostSoundId): string {
 export const rollCallCopy = Object.freeze({
   heading: "Meet them",
   lines: Object.freeze([
-    "Each one makes its sound once in each ear, loud enough to hear easily.",
-    "Answer which side it came from. Nothing counts yet.",
+    "Press the side each sound comes from. Nothing counts yet.",
   ]),
   countingLines: Object.freeze([
-    "Now it counts. They take turns in no order, and some turns make no sound at all.",
-    "The bars beside each one show your quietest catch on each side.",
+    "Now it counts. Some turns make no sound at all.",
   ]),
 });
 
@@ -118,8 +116,7 @@ export function rollCallNotHeardLines(
   });
   return Object.freeze([
     `Not caught, even a little louder: ${joined(who)}.`,
-    "Check that the earpieces are in and that the volume is where you set it.",
-    "Start counting goes on anyway; a sound you cannot hear here will show as louder than this house can play. Try again plays those sounds once more.",
+    "Check that both earpieces are in.",
   ]);
 }
 

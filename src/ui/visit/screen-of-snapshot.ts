@@ -1,6 +1,6 @@
 import { audioOutputConfig } from "../../config/audio-output-config";
 import type { GhostSoundId } from "../../config/sound-id";
-import { calibrationCopy } from "../../copy/calibration-copy";
+import { calibrationCopy, roomsShortLine } from "../../copy/calibration-copy";
 import {
   creatureCardLabel,
   creatureCaughtCountLine,
@@ -79,7 +79,11 @@ export interface CalibrationScreen {
 
 /** The headphone check sheet. */
 export interface HeadphoneCheckScreen {
-  readonly roomsLine: string;
+  /**
+   * Said when some rooms cannot get as loud as the house would like at the kept setting, or null
+   * when every room can: that needs no line.
+   */
+  readonly roomsLine: string | null;
   /** Whether the four answers can be pressed: from a played check until its answer. */
   readonly awaitingAnswer: boolean;
   /** The line for the last answer, or for a check that could not be played, or null. */
@@ -671,7 +675,11 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
         ...base,
         sheet: "headphoneCheck",
         headphoneCheck: {
-          roomsLine: snapshot.roomsLine,
+          roomsLine:
+            snapshot.rooms.length > 0 &&
+            snapshot.roomsLine === roomsShortLine(0, snapshot.rooms.length)
+              ? null
+              : snapshot.roomsLine,
           awaitingAnswer: snapshot.awaitingAnswer,
           statusLine:
             snapshot.playRefusal !== null

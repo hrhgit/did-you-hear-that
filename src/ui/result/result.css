@@ -167,16 +167,15 @@ p.result-silence {
   box-shadow: none;
 }
 
+/* The label of the card is read out, not shown: its heading already says what stands out. */
 p.result-focus-eyebrow {
-  margin: 0 0 0.45rem;
-  color: var(--color-lamp);
-  font-size: 0.8125rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.result-focus[data-kind="close"] p.result-focus-eyebrow {
-  color: var(--color-graphite);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .result h2.result-focus-heading {
@@ -584,18 +583,16 @@ p.result-turn-back {
 }
 
 /*
- * The score of the chase: the game's side of the visit, in the lamp's colour, like the lights of
- * the lantern the visitor carried. It counts catches only, never levels.
+ * The score of the chase: the game's side of the visit, in the lamp's colour. It counts catches
+ * only, never levels. One strip: the two counts side by side and the rooms under them.
  */
 .result-score {
-  padding: 1.1rem 1.1rem 1.2rem;
-  border: 1px solid var(--color-graphite-faint);
-  border-radius: 1rem;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--color-lamp) 8%, var(--color-wall)),
-    var(--color-wall) 70%
-  );
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--color-graphite-faint);
 }
 
 .result h2.result-score-heading {
@@ -606,27 +603,22 @@ p.result-turn-back {
 }
 
 .result-score-tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
-  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
 }
 
 .result p.result-score-tile {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.75rem 0.9rem 0.8rem;
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--color-night) 55%, transparent);
+  align-items: baseline;
+  gap: 0.45rem;
 }
 
 .result-score-number {
   color: var(--color-lamp);
-  font-size: clamp(2.125rem, 1.7rem + 1.6vw, 2.75rem);
+  font-size: 1.75rem;
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1;
-  text-shadow: 0 0 1.2rem color-mix(in srgb, var(--color-lamp) 45%, transparent);
 }
 
 .result-score-label {
@@ -637,9 +629,10 @@ p.result-turn-back {
 
 .result-score-rooms {
   display: flex;
+  flex: 1 0 100%;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0.85rem 0 0;
+  gap: 0.35rem 1.1rem;
+  margin: 0.15rem 0 0;
   padding: 0;
   list-style: none;
 }
@@ -647,49 +640,49 @@ p.result-turn-back {
 .result-score-room {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.2rem 0.8rem 0.2rem 0.25rem;
-  border: 1px solid var(--color-graphite-faint);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-night) 55%, transparent);
-  font-size: 0.9375rem;
+  gap: 0.4rem;
+  color: var(--color-graphite);
+  font-size: 0.875rem;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
 .result-score-badge {
-  --badge-size: 1.75rem;
+  --badge-size: 1.5rem;
 }
 
 /* Each floor in words, from the top of the house down: a card for each, in its creature's colour. */
+/*
+ * The floors in words: one ledger, a floor to a row. The name and what lies between the two
+ * sides on one line, the two sides under it.
+ */
 .result-floors {
-  display: grid;
-  gap: 0.85rem;
   margin: 0;
   padding: 0;
+  border-top: 1px solid var(--color-graphite-faint);
   list-style: none;
 }
 
 .result-floor-words {
-  padding: 1.05rem 1.05rem 1.15rem;
-  border: 1px solid var(--color-graphite-faint);
-  border-radius: 1rem;
-  background:
-    radial-gradient(
-      110% 90% at 0% 0%,
-      color-mix(in srgb, var(--creature-hue) 10%, transparent),
-      transparent 60%
-    ),
-    var(--color-wall);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 1rem;
+  padding: 0.85rem 0.6rem 0.95rem;
+  border-bottom: 1px solid var(--color-graphite-faint);
   outline: none;
   scroll-margin-block: 2rem;
   transition:
-    border-color 0.3s ease,
+    background-color 0.3s ease,
     box-shadow 0.3s ease;
+}
+
+.result-floor-words > * {
+  flex: 1 0 100%;
 }
 
 /* A floor the focus card names. */
 .result-floor-words:not([data-stands-out="none"]) {
-  border-color: color-mix(in srgb, var(--color-lamp) 55%, transparent);
+  background: color-mix(in srgb, var(--color-lamp) 6%, transparent);
   box-shadow: inset 3px 0 0 var(--color-lamp);
 }
 
@@ -698,7 +691,7 @@ p.result-turn-back {
   outline-offset: 3px;
 }
 
-/* Taken there from the focus card: the card glows for a moment. */
+/* Taken there from the focus card: the row glows for a moment. */
 .result-floor-words[data-called="true"] {
   animation: result-called 1.8s ease-out;
 }
@@ -711,24 +704,24 @@ p.result-turn-back {
   }
 }
 
-.result-floor-top {
+.result-floor-words > .result-floor-top {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 0.8rem;
-  margin-bottom: 0.85rem;
+  gap: 0.6rem;
 }
 
 .result-floor-badge {
-  --badge-size: 2.75rem;
+  --badge-size: 2rem;
 }
 
 .result-floor-heading {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.2rem 0.75rem;
+  gap: 0.1rem 0.6rem;
   margin: 0;
-  font-size: 1.4375rem;
+  font-size: 1.25rem;
   font-style: italic;
   font-weight: 400;
   line-height: 1.2;
@@ -736,46 +729,43 @@ p.result-turn-back {
 
 .result-floor-pitch {
   color: var(--color-graphite);
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* The two sides, in line with the floor's name. */
 .result-wings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
+  gap: 0.75rem;
+  padding-left: 2.6rem;
 }
 
-/* One wing: its level large, the note that finishes it small. */
+/* One wing: its side small, its level in the lamp's colour, the note that finishes it small. */
 .result-wing {
-  padding: 0.65rem 0.8rem 0.75rem;
-  border-top: 2px solid color-mix(in srgb, var(--color-lamp) 70%, transparent);
-  border-radius: 0.6rem;
-  background: color-mix(in srgb, var(--color-night) 55%, transparent);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 0 0.6rem;
 }
 
-.result-wing[data-state="worseThanCap"] {
-  border-top-color: var(--color-graphite-faint);
+.result-wing > * {
+  grid-column: 2;
 }
 
-.result-wing[data-state="unreliable"] {
-  border-top: 2px dashed var(--color-graphite);
-}
-
-.result-wing-side {
-  display: block;
+.result-wing > .result-wing-side {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: baseline;
   color: var(--color-graphite);
-  font-size: 0.8125rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 0.875rem;
 }
 
 .result p.result-wing-value {
-  margin-top: 0.25rem;
   color: var(--color-lamp);
-  font-size: clamp(1.1875rem, 1.05rem + 0.6vw, 1.4375rem);
+  font-size: 1.125rem;
   font-variant-numeric: lining-nums tabular-nums;
-  line-height: 1.15;
+  line-height: 1.3;
 }
 
 .result-wing:is([data-state="worseThanCap"], [data-state="unreliable"])
@@ -784,38 +774,50 @@ p.result-turn-back {
 }
 
 .result p.result-wing-note {
-  margin-top: 0.2rem;
   color: var(--color-graphite);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
 }
 
 .result p.result-wing-reason {
-  margin-top: 0.45rem;
-  font-size: 0.875rem;
+  margin-top: 0.3rem;
+  font-size: 0.8125rem;
   line-height: 1.4;
 }
 
-p.result-difference {
+.result-floor-words > p.result-difference {
   display: flex;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.7rem;
-  margin-top: 0.8rem;
+  gap: 0.3rem 0.6rem;
+  margin-left: auto;
   font-variant-numeric: lining-nums;
 }
 
 .result-difference-heading {
   color: var(--color-graphite);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
 
 .result-difference-label {
   display: inline-block;
-  padding: 0.12rem 0.75rem;
+  padding: 0.08rem 0.7rem;
   border: 1px solid var(--color-graphite-faint);
   border-radius: 999px;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
+}
+
+/* No difference to give: read out, not shown. Apart: the label says it all without its heading. */
+.result-floor-words > p.result-difference[data-kind="none"],
+.result-difference[data-kind="apart"] .result-difference-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* The difference is why the floor stands out. */
@@ -832,14 +834,20 @@ p.result-difference {
 }
 
 .result p.result-floor-line {
-  margin-top: 0.8rem;
-  padding-left: 0.75rem;
-  border-left: 1px solid var(--color-graphite-faint);
-  font-size: 0.9375rem;
+  padding-left: 2.6rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* Said once for every floor, under the list. */
+.result p.result-floors-line {
+  margin-top: 0.85rem;
+  padding-left: 0.6rem;
 }
 
 .result-swap {
-  margin-top: 1rem;
+  margin-top: 0.4rem;
+  margin-left: 2.6rem;
   padding: 0.85rem 0.9rem 0.05rem;
   border: 1px solid color-mix(in srgb, var(--color-lamp) 35%, transparent);
   border-radius: 0.8rem;
@@ -876,6 +884,30 @@ p.result-status {
   display: block;
   font-size: 1.0625rem;
   line-height: 1.5;
+}
+
+/* The field and the control that saves, on one line where there is room. */
+.result-keep-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+  margin: 0.3rem 0 0.6rem;
+}
+
+.result-keep-row .result-name-input {
+  flex: 1 1 12rem;
+  width: auto;
+  margin: 0;
+}
+
+.result-keep-row .result-controls {
+  margin: 0;
+}
+
+.result-keep p.result-status {
+  margin-top: 0.5rem;
+  font-size: 0.9375rem;
 }
 
 /* A field drawn as one ruled line to write on. */
@@ -958,7 +990,29 @@ p.result-name-hint {
   margin-top: 0.5rem;
 }
 
-/* A very narrow screen: one wing under the other. */
+/* A narrow screen: the sides start at the row's edge. A very narrow one: one under the other. */
+@media (max-width: 30rem) {
+  .result-wings,
+  .result p.result-floor-line {
+    padding-left: 0;
+  }
+
+  .result-swap {
+    margin-left: 0;
+  }
+
+  /* Each side's name over its level, so that the level keeps to one line. */
+  .result-wing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-wing > *,
+  .result-wing > .result-wing-side {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
 @media (max-width: 22rem) {
   .result-wings {
     grid-template-columns: minmax(0, 1fr);

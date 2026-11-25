@@ -78,6 +78,7 @@ test.describe(`a visit at ${address}`, () => {
 
   test("walks from the front door through calibration, the headphone check and the rules into the one room", async ({
     page,
+    hasTouch,
   }) => {
     const record = await openPage(page, address);
     await expect(heading(page, siteTitle)).toBeVisible();
@@ -100,8 +101,13 @@ test.describe(`a visit at ${address}`, () => {
     for (const sentence of rulesCopy.sentences) {
       await expect(page.getByText(sentence)).toBeVisible();
     }
-    await expect(page.getByText(rulesCopy.keyboardLine)).toBeVisible();
-    await expect(page.getByText(rulesCopy.touchLine)).toBeVisible();
+    // The keys are drawn as key caps, and their line is read out. The touch line is shown only
+    // where there is a touch screen.
+    await expect(page.locator(".visit-halves")).toBeVisible();
+    await expect(page.getByText(rulesCopy.keyboardLine)).toBeAttached();
+    await expect(page.getByText(rulesCopy.touchLine)).toBeVisible({
+      visible: hasTouch,
+    });
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
 

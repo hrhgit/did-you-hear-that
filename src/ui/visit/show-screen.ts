@@ -147,7 +147,7 @@ export function createScreenView(options: {
     const answerHadFocus = answers.some(
       (button) => doc.activeElement === button,
     );
-    setText(sheet.roomsLine, check.roomsLine);
+    setLine(sheet.roomsLine, check.roomsLine);
     for (const button of answers) {
       button.disabled = !check.awaitingAnswer;
     }
@@ -489,6 +489,7 @@ export function createScreenView(options: {
       page.root.dataset.house = screen.sheet === null ? "full" : "faint";
       // Which sheet is up, so that each can lay out the yard behind it in its own way.
       page.root.dataset.sheet = screen.sheet ?? "none";
+      scene.setCovered(screen.sheet === "result");
 
       // The bar.
       page.stopButton.hidden = !screen.stopShown;

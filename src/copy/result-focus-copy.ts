@@ -53,8 +53,7 @@ export const resultFocusCopy = Object.freeze({
   eyebrow: "What stands out",
   closeHeading: "Your left and right stayed close",
   /** Added on the visit that has just ended, which can still be saved. */
-  keepLine:
-    "Save this visit, and a later one with the same headphones can be set beside it.",
+  keepLine: "Save this visit to set a later one beside it.",
 });
 
 function requireKind(kind: FocusPointKindName): void {
@@ -172,7 +171,7 @@ export function focusLine(
     case "followsEar":
       return limitsStatement.sentences[3];
     case "dark":
-      return "The house played as loud as it may there, and the sound went by. Check that both earpieces play and that the volume is where you set it, then walk through the house again.";
+      return "Check that both earpieces play and that the volume is where you set it, then walk through the house again.";
     case "farApart":
       return `Swapping the headphones and visiting ${rooms} again tells whether the difference stays with your ears or moves with the headphones.`;
     case "unsettled":

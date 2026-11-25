@@ -6,6 +6,7 @@ import {
   pictureKeyCopy,
   resultFocusCopy,
 } from "../../copy/result-focus-copy";
+import { differenceLabel } from "../../copy/result-lines";
 import {
   chaseScoreCopy,
   longestRowLine,
@@ -204,6 +205,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const floorList = make("ol", "result-floors");
   floorList.id = "result-floors";
   drawing.setAttribute("aria-describedby", floorList.id);
+  // The Floor_Line once, under the list, when every floor has the same one.
+  const sharedFloorLine = make(
+    "p",
+    "visit-quiet result-floor-line result-floors-line",
+  );
+  sharedFloorLine.hidden = true;
   const comparisonLine = make("p", "result-comparison visit-quiet");
 
   // Keeping the visit.
@@ -236,10 +243,12 @@ export function createResultView(options: ResultViewOptions): ResultView {
   savedCopyLacks.hidden = true;
   const keep = make("section", "result-keep", [
     nameLabel,
-    nameInput,
+    make("div", "result-keep-row", [
+      nameInput,
+      make("div", "result-controls", [saveButton]),
+    ]),
     nameHint,
     savedCopyLacks,
-    make("div", "result-controls", [saveButton]),
     saveStatus,
   ]);
 
@@ -286,7 +295,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
       figure,
       limits,
       score,
-      make("div", "result-words", [floorList, comparisonLine]),
+      make("div", "result-words", [floorList, sharedFloorLine, comparisonLine]),
       keep,
       saved,
       make("div", "result-controls result-leave", [backButton]),
@@ -444,12 +453,30 @@ export function createResultView(options: ResultViewOptions): ResultView {
     }, calledGlowMs);
   };
 
-  /** One floor in words. `standsOutFor` is why the focus card names it, or null. */
+  /**
+   * One floor in words. `standsOutFor` is why the focus card names it, or null. `ownFloorLine`
+   * is false when the list says the Floor_Line once for every floor.
+   */
   const floorWords = (
     floor: PictureFloor,
     standsOutFor: FocusPointKind | null,
+    ownFloorLine: boolean,
   ): HTMLElement => {
     const roomId = floor.room.roomId;
+    // The difference of the two sides: shown as it is when they are apart, with its heading when
+    // they are level, and only read out when there is none.
+    const difference = make("p", "result-difference", [
+      make("span", "result-difference-heading", [
+        resultPageCopy.differenceHeading,
+      ]),
+      make("span", "result-difference-label", [floor.differenceLabel]),
+    ]);
+    difference.dataset.kind =
+      floor.rightMinusLeftDb === null
+        ? "none"
+        : floor.differenceLabel === differenceLabel(0)
+          ? "level"
+          : "apart";
     const item = make("li", "result-floor-words", [
       make("div", "result-floor-top", [
         creatureBadge(roomId, "result-floor-badge"),
@@ -458,18 +485,13 @@ export function createResultView(options: ResultViewOptions): ResultView {
           make("span", "result-floor-pitch", [floor.pitchLabel]),
         ]),
       ]),
+      difference,
       make("div", "result-wings", [
         wingWords("left", resultPageCopy.leftLabel, floor.left),
         wingWords("right", resultPageCopy.rightLabel, floor.right),
       ]),
-      make("p", "result-difference", [
-        make("span", "result-difference-heading", [
-          resultPageCopy.differenceHeading,
-        ]),
-        make("span", "result-difference-label", [floor.differenceLabel]),
-      ]),
     ]);
-    if (floor.playableFloorLine !== null) {
+    if (ownFloorLine && floor.playableFloorLine !== null) {
       item.append(
         make("p", "visit-quiet result-floor-line", [floor.playableFloorLine]),
       );
@@ -783,11 +805,20 @@ export function createResultView(options: ResultViewOptions): ResultView {
         [],
     );
     floorItems.clear();
+    const firstFloorLine = picture.floors[0]?.playableFloorLine ?? null;
+    const sameFloorLine =
+      picture.floors.length > 1 &&
+      firstFloorLine !== null &&
+      picture.floors.every(
+        (floor) => floor.playableFloorLine === firstFloorLine,
+      );
+    setLine(sharedFloorLine, sameFloorLine ? firstFloorLine : null);
     floorList.replaceChildren(
       ...[...picture.floors].reverse().map((floor) => {
         const item = floorWords(
           floor,
           standingOut.get(floor.room.roomId) ?? null,
+          !sameFloorLine,
         );
         floorItems.set(floor.room.roomId, item);
         return item;

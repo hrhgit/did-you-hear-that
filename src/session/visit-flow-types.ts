@@ -246,7 +246,7 @@ export interface CalibrationSnapshot extends SnapshotBase<"calibration"> {
   readonly calibrationSound?: CalibrationSound;
   /** The heading of this screen, from `calibrationCopy`. Always present, as above. */
   readonly heading?: string;
-  /** What to read before using the control, in order: what to do, why, how the sound follows the control, the keys. Always present, as above. */
+  /** What to read before using the control, in order: what to do, then the keys. Always present, as above. */
   readonly introLines?: readonly string[];
 }
 

@@ -174,7 +174,7 @@ describe("the output stage's copy", () => {
 
   it("says how many rooms are short, and what to do, in the line of R16.9", () => {
     expect(roomsShortLine(3, 5)).toBe(
-      "At this setting, 3 of the 5 rooms cannot get as loud as the house would like. The house will stop at the loudest it can play there. Do not turn the volume up to change this.",
+      "At this setting, 3 of the 5 rooms cannot get as loud as the house would like. Do not turn the volume up.",
     );
     for (const [count, total] of [
       [-1, 5],
@@ -256,12 +256,8 @@ describe('the calibration copy (audible-start design.md, "The calibration copy")
       heading: "Set the music to a comfortable volume",
       againHeading: "Set the music again",
       openLine:
-        "Move the control until the music is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The music starts very quietly.",
-      whyLine:
-        "This tells the house how loud is safe on these headphones at this volume, and gives your result a level to be measured from.",
-      riseLine: "The music follows the control as you move it.",
-      keysLine:
-        "On a keyboard, the arrow keys move the control one step. Shift with an arrow, Page Up or Page Down move it five steps. Home and End go to the ends. Enter keeps the setting.",
+        "As loud as you would play music in a quiet room. Leave your system volume alone.",
+      keysLine: "Arrow keys move the control. Enter keeps the setting.",
       atTopLine:
         "This is as loud as the music goes here. If it still sounds too quiet, keep this setting.",
       systemVolumeHighLine:
@@ -275,8 +271,7 @@ describe('the calibration copy (audible-start design.md, "The calibration copy")
       heading: "Set the hiss to a comfortable volume",
       againHeading: "Set the hiss again",
       openLine:
-        "The calibration sound is a hiss. Move the control until it is as loud as you would listen to music in a quiet room: clear and comfortable, not loud. Leave your system volume where you usually have it. The hiss starts very quietly.",
-      riseLine: "The hiss follows the control as you move it.",
+        "Set this hiss as loud as you would play music in a quiet room. Leave your system volume alone.",
       atTopLine:
         "This is as loud as the hiss goes here. If it still sounds too quiet, keep this setting.",
       systemVolumeHighLine:
@@ -287,7 +282,7 @@ describe('the calibration copy (audible-start design.md, "The calibration copy")
 
   it("keeps the line of audio-safety rule 8 and the button labels as they were", () => {
     expect(calibrationCopy.keptLine).toBe(
-      "Leave your system volume where it is now. The house keeps every sound below its limit only if you do not turn the volume up.",
+      "From here on, do not turn the volume up.",
     );
     expect(calibrationCopy).toMatchObject({
       startButton: "Start calibrating",
@@ -308,7 +303,6 @@ describe('the calibration copy (audible-start design.md, "The calibration copy")
       "heading",
       "againHeading",
       "openLine",
-      "riseLine",
       "atTopLine",
       "systemVolumeHighLine",
     ] as const) {
@@ -316,7 +310,7 @@ describe('the calibration copy (audible-start design.md, "The calibration copy")
       expect(calibrationCopy[key], key).not.toMatch(/hiss/i);
       expect(calibrationCopy.hiss[key], key).toMatch(/hiss/i);
     }
-    for (const key of ["whyLine", "keysLine", "keptLine"] as const) {
+    for (const key of ["keysLine", "keptLine"] as const) {
       expect(calibrationCopy[key], key).not.toMatch(/music|hiss/i);
     }
     // The hiss's line says what the sound is and nothing about why the music is missing.

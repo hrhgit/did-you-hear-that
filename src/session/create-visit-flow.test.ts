@@ -762,12 +762,7 @@ describe("createVisitFlow: calibration", () => {
       // The harness's fake has no music file: the calibration sound is the hiss.
       calibrationSound: "hiss",
       heading: calibrationCopy.hiss.heading,
-      introLines: [
-        calibrationCopy.hiss.openLine,
-        calibrationCopy.whyLine,
-        calibrationCopy.hiss.riseLine,
-        calibrationCopy.keysLine,
-      ],
+      introLines: [calibrationCopy.hiss.openLine, calibrationCopy.keysLine],
     });
     harness.flow.startCalibration();
     expect(harness.flow.snapshot()).toMatchObject({
@@ -888,12 +883,7 @@ describe("createVisitFlow: calibration with the music (audible-start R4 to R8)",
     return samples;
   }
 
-  const musicLines = [
-    calibrationCopy.openLine,
-    calibrationCopy.whyLine,
-    calibrationCopy.riseLine,
-    calibrationCopy.keysLine,
-  ];
+  const musicLines = [calibrationCopy.openLine, calibrationCopy.keysLine];
 
   it("gives the music's heading, opening lines, line and top once the music is ready", async () => {
     const harness = createHarness({

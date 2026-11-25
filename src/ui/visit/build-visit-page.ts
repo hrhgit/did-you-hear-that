@@ -185,6 +185,17 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     }
     return element;
   };
+  // A button that shows its drawn mark alone. Its word is still its name, for a visitor who
+  // cannot see the mark, and its tooltip, for one who wonders what it does.
+  const iconButton = (label: string, icon: string): HTMLButtonElement => {
+    const element = make("button", "visit-button visit-button-icon", [
+      make("span", "visit-spoken", [label]),
+    ]);
+    element.type = "button";
+    element.title = label;
+    element.dataset.icon = icon;
+    return element;
+  };
   // An answer of a headphone check: a tile with a small drawing of the headphones over its word.
   // The drawing comes from `visit.css`, so the button holds its word alone and can be set as text.
   const choiceTile = (
@@ -364,8 +375,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   ]);
   frontDoorHeading.before(make("p", "visit-eyebrow", [frontDoorCopy.eyebrow]));
 
-  // Calibration: a control that can be dragged, quieter and louder at its two ends, and a button
-  // to keep the setting.
+  // Calibration: one line of what to do, a control that can be dragged with quieter and louder at
+  // its two ends, and a button to keep the setting.
   const calibrationHeading = heading(visitCopy.calibrationHeading);
   calibrationHeading.id = "visit-calibration-heading";
   const introLines = make("div", "visit-calibration-lines", [
@@ -383,16 +394,11 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   ]);
   const startButton = button(calibrationCopy.startButton, "visit-button-lit");
   startButton.dataset.icon = "play";
-  const quieterButton = button(calibrationCopy.quieterButton);
-  quieterButton.dataset.icon = "quieter";
-  const louderButton = button(calibrationCopy.louderButton);
-  louderButton.dataset.icon = "louder";
+  const quieterButton = iconButton(calibrationCopy.quieterButton, "quieter");
+  const louderButton = iconButton(calibrationCopy.louderButton, "louder");
   const keepButton = button(calibrationCopy.keepButton, "visit-button-lit");
   keepButton.dataset.icon = "keep";
-  const dial = make("div", "visit-dial", [
-    meter,
-    make("div", "visit-dial-ends", [quieterButton, louderButton]),
-  ]);
+  const dial = make("div", "visit-dial", [quieterButton, meter, louderButton]);
   dial.hidden = true;
   const keysLine = make("p", "visit-keys-line visit-quiet");
   keysLine.hidden = true;
@@ -400,8 +406,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     sheet("calibration", calibrationHeading, [
       introLines,
       dial,
-      keysLine,
       controls([startButton, keepButton]),
+      keysLine,
       statusLine,
     ]),
     0,
@@ -409,8 +415,11 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
 
   // The headphone check.
   const checkHeading = heading(visitCopy.headphoneCheckHeading);
-  const keptLine = make("p", "", [calibrationCopy.keptLine]);
-  const roomsLine = make("p", "visit-quiet");
+  // The two lines about the volume stand at the foot of the sheet, under what there is to do.
+  const keptLine = make("p", "visit-quiet visit-foot-line", [
+    calibrationCopy.keptLine,
+  ]);
+  const roomsLine = make("p", "visit-quiet visit-foot-line");
   const playButton = button(headphoneCheckCopy.playButton, "visit-button-lit");
   playButton.dataset.icon = "play";
   const question = make("p", "visit-voice", [headphoneCheckCopy.question]);
@@ -431,13 +440,13 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const checkGoOnButton = button(visitCopy.goOnButton, "visit-button-lit");
   const headphoneCheck = withSteps(
     sheet("check", checkHeading, [
-      keptLine,
-      roomsLine,
       controls([playButton]),
       question,
       answerList,
       judgementLine,
       controls([checkGoOnButton]),
+      keptLine,
+      roomsLine,
     ]),
     1,
   );
@@ -447,7 +456,8 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   const enterButton = button(rulesCopy.enterButton, "visit-button-lit");
   enterButton.dataset.icon = "door";
   // How to answer: the two halves of the screen, each with its keys drawn as key caps. The caps
-  // are a picture of the keyboard line under them, so only the line is read out.
+  // are a picture of the keyboard line, so the line is read out and not shown beside them; the
+  // line about touching is shown where there is a screen to touch (`visit.css`).
   const half = (side: "left" | "right"): HTMLElement => {
     const caps = make(
       "span",
@@ -462,23 +472,22 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     element.setAttribute("aria-hidden", "true");
     return element;
   };
+  const answerGuide = make("section", "visit-answer-guide", [
+    make("div", "visit-halves", [half("left"), half("right")]),
+    make("p", "visit-quiet visit-keyboard-line", [rulesCopy.keyboardLine]),
+    make("p", "visit-quiet visit-touch-line", [rulesCopy.touchLine]),
+  ]);
+  answerGuide.setAttribute("aria-label", rulesCopy.answerHeading);
   const rules = withSteps(
     sheet("rules", rulesHeading, [
       make(
-        "ol",
+        "ul",
         "visit-rules",
-        rulesCopy.sentences.map((sentence, index) => {
-          const item = make("li", "visit-rule", [sentence]);
-          item.dataset.rule = String(index + 1);
-          return item;
-        }),
+        rulesCopy.sentences.map((sentence) =>
+          make("li", "visit-rule", [sentence]),
+        ),
       ),
-      make("section", "visit-answer-guide", [
-        make("h2", "visit-answer-guide-heading", [rulesCopy.answerHeading]),
-        make("div", "visit-halves", [half("left"), half("right")]),
-        make("p", "visit-quiet", [rulesCopy.keyboardLine]),
-        make("p", "visit-quiet", [rulesCopy.touchLine]),
-      ]),
+      answerGuide,
       controls([enterButton]),
     ]),
     2,

@@ -493,12 +493,7 @@ export function createVisitFlow(
           heading: current.calibrationAgain
             ? lines.againHeading
             : lines.heading,
-          introLines: Object.freeze([
-            lines.openLine,
-            calibrationCopy.whyLine,
-            lines.riseLine,
-            calibrationCopy.keysLine,
-          ]),
+          introLines: Object.freeze([lines.openLine, calibrationCopy.keysLine]),
         });
       }
       case "headphoneCheck":
