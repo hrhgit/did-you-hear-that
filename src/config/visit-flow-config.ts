@@ -50,7 +50,7 @@ export interface VisitFlowConfig {
    * How long the counting of the room may last, from the end of the practice, with pauses left
    * out (2026-11-20). When it is up, a creature whose search is not over goes home with a result
    * of `unreliable` for that ear, and the room ends. A creature may go home sooner: its search
-   * ends when it has found the quietest sound caught, as before.
+   * ends when it has enough evidence to estimate a level.
    */
   readonly roomTimeLimitMs: number;
 }

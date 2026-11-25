@@ -125,7 +125,6 @@ const flowActionNames = [
   "goOnWithoutPractice",
   "stop",
   "chooseSwappedRepeat",
-  "startReplay",
   "confirmSwap",
   "playSwapCheck",
   "answerSwapCheck",

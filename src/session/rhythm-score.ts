@@ -32,8 +32,8 @@ export interface RhythmStanding {
 
 /** The score of one room run. It changes only when a turn is judged or a kick meets nothing. */
 export interface RhythmScore {
-  /** Judges a scored trial, counts it in, and gives the judgement. */
-  judge(entry: ScoredVisitTrial): RhythmJudgement;
+  /** Judges a scored trial or easy turn, counts it in, and gives the judgement. */
+  judge(entry: JudgedTurn): RhythmJudgement;
   /** A kick between turns: it breaks the combo and costs nothing else. */
   kickAtNothing(): void;
   standing(): RhythmStanding;
@@ -46,6 +46,7 @@ export type JudgedTurn =
       readonly kind?: "sound";
       readonly outcome: "caught" | "wrongSide" | "missed";
       readonly responseTimeMs: number | null;
+      readonly timingOffsetMs?: number;
     };
 
 /** The judgement of a scored trial. A pure function. */
@@ -65,7 +66,11 @@ export function judgementOf(
   if (entry.outcome === "wrongSide") {
     return "wrong";
   }
-  const timeMs = entry.responseTimeMs ?? Number.POSITIVE_INFINITY;
+  // On slow headphones the sound reached the ear late; the offset gives that time back
+  // (headphone-traits R1.4).
+  const timeMs =
+    (entry.responseTimeMs ?? Number.POSITIVE_INFINITY) -
+    (entry.timingOffsetMs ?? 0);
   if (timeMs <= settings.perfectWithinMs) {
     return "perfect";
   }
@@ -107,7 +112,7 @@ export function createRhythmScore(
     );
 
   return Object.freeze({
-    judge(entry: ScoredVisitTrial): RhythmJudgement {
+    judge(entry: JudgedTurn): RhythmJudgement {
       const judgement = judgementOf(entry, settings);
       counts[judgement] += 1;
       switch (judgement) {

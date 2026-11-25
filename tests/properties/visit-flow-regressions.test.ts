@@ -117,6 +117,11 @@ describe("visit flow regressions", () => {
   // the figures of 2026-11-18 assumed. Attempt 2 plays its first practice sound at 237 341 ms, so
   // the second device change is set at 236 300 ms, after the start and before that sound. The case
   // asserts that order first, so that it cannot quietly stop covering two device changes in a row.
+  //
+  // The timing offset and the easy turns (headphone-traits, 2026-11-25) moved them again. The
+  // third room's first attempt presents its first counted trial at 222 630 ms, so the first device
+  // change is set at 240 000 ms, in its counting; attempt 2 starts at 260 062 ms and plays its first
+  // practice sound at 262 082 ms, so the second device change is set at 261 000 ms.
   it("regression 1: a second device change after a new attempt of a room starts and before its first trial (CP7, seed -1594251289)", async () => {
     const script: VisitorScript = {
       visitType: "full",
@@ -133,8 +138,8 @@ describe("visit flow regressions", () => {
       restMaxMs,
       extraPresses: [],
       disturbances: [
-        { atMs: 230_000, kind: "deviceChanged", resumeAfterMs: 0 },
-        { atMs: 236_300, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 240_000, kind: "deviceChanged", resumeAfterMs: 0 },
+        { atMs: 261_000, kind: "deviceChanged", resumeAfterMs: 0 },
       ],
       ending: null,
     };

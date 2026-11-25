@@ -258,7 +258,7 @@ describe("resultFocus", () => {
             roomIndex: 1,
             roomName: "Scritch",
             pitchLabel: "4 kHz",
-            line: "You caught a sound 15 dB quieter on your left than on your right.",
+            line: "The estimate is 15 dB quieter on your left than on your right.",
           },
         ],
       });
@@ -269,7 +269,7 @@ describe("resultFocus", () => {
         visitOf([{ left: found(-20), right: found(-42) }, close, close]),
       );
       expect(focus.points[0]?.line).toBe(
-        "You caught a sound 22 dB quieter on your right than on your left.",
+        "The estimate is 22 dB quieter on your right than on your left.",
       );
     });
 
@@ -280,13 +280,13 @@ describe("resultFocus", () => {
       );
       expect(focus.kind).toBe("farApart");
       expect(focus.points.map((point) => point.line)).toEqual([
-        "You caught a sound at least 20 dB quieter on your left than on your right.",
+        "The estimate is at least 20 dB quieter on your left than on your right.",
       ]);
       const mirrored = focusOf(
         visitOf([close, close, { left: found(-50), right: betterThanFloor }]),
       );
       expect(mirrored.points[0]?.line).toBe(
-        "You caught a sound at least 20 dB quieter on your right than on your left.",
+        "The estimate is at least 20 dB quieter on your right than on your left.",
       );
     });
 

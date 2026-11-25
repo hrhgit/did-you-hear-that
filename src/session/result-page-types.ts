@@ -382,6 +382,10 @@ export interface PictureWing {
    */
   readonly valueLabel: string;
   readonly valueNote: string;
+  /** The estimated range beside the level, when both ends are available. */
+  readonly range?: { readonly lowDb: number; readonly highDb: number };
+  /** The found level relative to the calibration, for the curve (result-curve R1.3); found only. */
+  readonly levelDb?: number;
 }
 
 /** The earlier visit's result in one wing. */
@@ -389,6 +393,8 @@ export interface EarlierWing {
   readonly state: WingState;
   /** Where the faint outline is drawn, on this floor's scale in the shown visit, or null for no outline. */
   readonly outlineDepthFraction: number | null;
+  /** The earlier found level relative to its own calibration, for the curve; found only. */
+  readonly levelDb?: number;
 }
 
 /** The earlier visit the outlines come from. */

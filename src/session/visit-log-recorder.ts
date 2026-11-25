@@ -5,6 +5,7 @@ import type { PlayRefusal } from "../audio/output/create-audio-output";
 import type { ClampLimit } from "../audio/output/output-types";
 import type {
   Ear,
+  HearingSearchMethod,
   NoSoundOutcome,
   SoundOutcome,
   VisitorResponse,
@@ -87,6 +88,8 @@ export interface PlayedReminder {
   readonly gapBeforeMs: number;
   readonly presentedAtMs: number;
   readonly windowStartMs: number;
+  /** True for an easy turn on the beat (headphone-traits R2). */
+  readonly easy?: boolean;
 }
 
 /** How a played trial was decided. Times are on the timer's clock. */
@@ -97,6 +100,8 @@ export interface TrialDecision {
   readonly answeredAtMs: number | null;
   /** When the trial was decided. */
   readonly scoredAtMs: number;
+  /** The Timing_Offset in force when it was presented (headphone-traits R1.7). Kept only above 0. */
+  readonly timingOffsetMs?: number;
 }
 
 /** Builds the visit log of one visit (visit-flow design.md, "The visit log"). */
@@ -195,6 +200,7 @@ export interface VisitLogRecorder {
       readonly outcome: SoundOutcome;
       readonly answeredAtMs: number | null;
       readonly scoredAtMs: number;
+      readonly timingOffsetMs?: number;
     },
   ): ScoredReminderSound;
   /** Records a reminder sound that was not decided, with the next reminder `order`. */
@@ -276,6 +282,12 @@ function copyEarResult(result: LoggedEarResult): LoggedEarResult {
         ...counts,
         state: "found",
         thresholdDb: plainNumber("thresholdDb", result.thresholdDb),
+        ...(result.lowDb === undefined
+          ? {}
+          : { lowDb: plainNumber("lowDb", result.lowDb) }),
+        ...(result.highDb === undefined
+          ? {}
+          : { highDb: plainNumber("highDb", result.highDb) }),
       });
     case "betterThanFloor":
       return Object.freeze({ ...counts, state: "betterThanFloor" });
@@ -333,6 +345,7 @@ interface OpenPause {
 export function createVisitLogRecorder(options: {
   readonly visitType: VisitType;
   readonly visitSeed: number;
+  readonly searchMethod?: HearingSearchMethod;
   readonly rooms: readonly VisitRoom[];
   readonly startedAtMs: number;
 }): VisitLogRecorder {
@@ -402,7 +415,19 @@ export function createVisitLogRecorder(options: {
     gapBeforeMs: plainNumber("gapBeforeMs", sound.gapBeforeMs),
     presentedAtMs: sinceStart("presentedAtMs", sound.presentedAtMs),
     windowStartMs: sinceStart("windowStartMs", sound.windowStartMs),
+    ...(sound.easy === true ? { easy: true as const } : {}),
   });
+
+  /** The offset of a decision, kept only above 0 (headphone-traits D2). */
+  const offsetPart = (decision: { readonly timingOffsetMs?: number }) =>
+    decision.timingOffsetMs !== undefined && decision.timingOffsetMs > 0
+      ? {
+          timingOffsetMs: plainNumber(
+            "timingOffsetMs",
+            decision.timingOffsetMs,
+          ),
+        }
+      : {};
 
   const ignoredAnswerOf = (input: {
     readonly atMs: number;
@@ -451,10 +476,13 @@ export function createVisitLogRecorder(options: {
         ) as Record<GhostSoundId, number>,
       );
       const { anchor } = input;
-      if (anchor !== undefined && anchor !== "music" && anchor !== "hiss") {
-        throw new RangeError(
-          `A calibration's anchor is music or hiss, but got ${String(anchor)}.`,
-        );
+      if (
+        anchor !== undefined &&
+        anchor !== "music" &&
+        anchor !== "hiss" &&
+        anchor !== "preset"
+      ) {
+        throw new RangeError(`Invalid calibration anchor: ${String(anchor)}.`);
       }
       const floors = input.roomFloorLevelDb;
       const roomFloorLevelDb =
@@ -567,6 +595,7 @@ export function createVisitLogRecorder(options: {
           answeredAtMs === null ? null : answeredAtMs - common.windowStartMs,
         ),
         scoredAtMs: sinceStart("scoredAtMs", decision.scoredAtMs),
+        ...offsetPart(decision),
       };
       // The check above makes the outcome fit the kind, which the type cannot see.
       const entry = Object.freeze({
@@ -617,6 +646,7 @@ export function createVisitLogRecorder(options: {
           answeredAtMs === null ? null : answeredAtMs - common.windowStartMs,
         ),
         scoredAtMs: sinceStart("scoredAtMs", decision.scoredAtMs),
+        ...offsetPart(decision),
       });
       reminders.push(entry);
       return entry;
@@ -745,6 +775,10 @@ export function createVisitLogRecorder(options: {
         formatVersion: 1,
         visitType: options.visitType,
         visitSeed,
+        ...(options.searchMethod !== undefined &&
+        options.searchMethod !== "staircase"
+          ? { searchMethod: options.searchMethod }
+          : {}),
         rooms,
         calibrations: Object.freeze([...calibrations]),
         headphoneChecks: Object.freeze([...headphoneChecks]),

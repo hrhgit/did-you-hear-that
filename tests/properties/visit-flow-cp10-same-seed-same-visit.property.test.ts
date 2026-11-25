@@ -30,10 +30,7 @@ async function playOnFreshHarness(
   const final = harness.flow.snapshot();
   return {
     run,
-    log:
-      final.stage === "result" || final.stage === "missedSoundReplay"
-        ? final.visitLog
-        : null,
+    log: final.stage === "result" ? final.visitLog : null,
     snapshots: harness.snapshots,
     events: harness.events,
     presented: harness.presented,

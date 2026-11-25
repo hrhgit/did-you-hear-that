@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { audioOutputConfig } from "../../src/config/audio-output-config";
 import { rhythmConfig } from "../../src/config/rhythm-config";
-import { calibrationCopy } from "../../src/copy/calibration-copy";
+import { visitFlowConfig } from "../../src/config/visit-flow-config";
+import { referenceVolumeCopy } from "../../src/copy/calibration-copy";
 import {
   creatureCardLabel,
   creatureCaughtCountLine,
@@ -9,12 +9,12 @@ import {
   creatureIntroLine,
   rollCallCaughtLine,
   rollCallCopy,
-  rollCallNotHeardLines,
   stillAboutLine,
 } from "../../src/copy/creature-copy";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
 import { leavingCopy } from "../../src/copy/leaving-copy";
 import { practiceCopy } from "../../src/copy/practice-copy";
+import { resultPageCopy } from "../../src/copy/result-page-copy";
 import { roomCopy } from "../../src/copy/room-copy";
 import { rhythmCopy, rhythmHudLabel } from "../../src/copy/rhythm-copy";
 import { rulesCopy } from "../../src/copy/rules-copy";
@@ -32,11 +32,9 @@ import {
   answerRollCall,
   answerSide,
   button,
-  calibrate,
-  calibrationHeading,
-  calibrationSlider,
   checkHeadphones,
   creatureCards,
+  enterHouse,
   enterRoom,
   heading,
   playCheck,
@@ -76,15 +74,15 @@ const score = (page: Page) => page.locator(".rhythm-score");
 test.describe(`a visit at ${address}`, () => {
   test.describe.configure({ timeout: 120_000 });
 
-  test("walks from the front door through calibration, the headphone check and the rules into the one room", async ({
+  test("walks from the front door through the headphone check and the rules into the one room", async ({
     page,
     hasTouch,
   }) => {
     const record = await openPage(page, address);
     await expect(heading(page, siteTitle)).toBeVisible();
 
-    await calibrate(page);
-    await expect(page.getByText(calibrationCopy.keptLine)).toBeVisible();
+    await enterHouse(page);
+    await expect(page.getByText(referenceVolumeCopy.keptLine)).toBeVisible();
     await expect(button(page, roomCopy.stopButton)).toBeVisible();
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
@@ -161,12 +159,51 @@ test.describe(`a visit at ${address}`, () => {
     });
   });
 
-  test("answers by keyboard or by touch, and the house says who it was once a practice sound is caught", async ({
+  test("answers the roll call by keyboard or touch and starts counting automatically", async ({
     page,
     isMobile,
   }) => {
+    type ThemeTrace = { starts: boolean[]; stops: boolean[] };
+    type ThemeTraceWindow = Window & { themeTrace: ThemeTrace };
+    await page.addInitScript((roomTimeLimitMs) => {
+      // Let the real room finish in this test without waiting five minutes.
+      const browser: Window = window;
+      const setTimeout = browser.setTimeout.bind(browser);
+      browser.setTimeout = (handler, delay, ...args: unknown[]) =>
+        setTimeout(handler, delay === roomTimeLimitMs ? 1_800 : delay, ...args);
+
+      const trace: ThemeTrace = { starts: [], stops: [] };
+      (window as unknown as ThemeTraceWindow).themeTrace = trace;
+      const sources = new WeakSet<AudioBufferSourceNode>();
+      let themeLength: number | undefined;
+      const start = AudioBufferSourceNode.prototype.start;
+      const stop = AudioBufferSourceNode.prototype.stop;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        // The first loop starts on the headphone check screen, before the room's beat.
+        if (this.loop) {
+          themeLength ??= this.buffer?.length;
+        }
+        if (themeLength !== undefined && this.buffer?.length === themeLength) {
+          sources.add(this);
+          trace.starts.push(this.loop);
+        }
+        return start.apply(this, args);
+      };
+      AudioBufferSourceNode.prototype.stop = function (...args) {
+        if (sources.has(this)) {
+          trace.stops.push(this.loop);
+        }
+        return stop.apply(this, args);
+      };
+    }, visitFlowConfig.roomTimeLimitMs);
     const record = await openPage(page, address);
-    await enterRoom(page);
+    const themeTrace = () =>
+      page.evaluate(() => (window as unknown as ThemeTraceWindow).themeTrace);
+    await enterHouse(page);
+    await expect.poll(themeTrace).toEqual({ starts: [true], stops: [] });
+    await checkHeadphones(page);
+    await button(page, rulesCopy.enterButton).click();
+    await expect(rollCallHeading(page)).toBeVisible();
 
     // The page never shows the side of a sound before its answer, so this test does not use
     // one. It gives the same answer again and again until the house speaks, first on the left
@@ -203,10 +240,24 @@ test.describe(`a visit at ${address}`, () => {
     }
     // Nothing of the roll call counts: nothing is scored yet.
     await expect(score(page)).toBeHidden();
+    await answerRollCall(page, rollCallTurns(creatures.slice(1)), isMobile);
+    await expect(score(page)).toBeVisible();
+    await expect(rollCallHeading(page)).toBeHidden();
+
+    await expect(heading(page, resultPageCopy.heading)).toBeVisible();
+    await expect
+      .poll(themeTrace)
+      .toEqual({ starts: [true, false], stops: [true] });
+    await button(page, leavingCopy.backButton).click();
+    await expect(heading(page, siteTitle)).toBeVisible();
+    await expect.poll(themeTrace).toEqual({
+      starts: [true, false],
+      stops: [true, false],
+    });
     expect(record.pageErrors).toEqual([]);
   });
 
-  test("calls the roll before it counts, and offers to try again or go on when a sound was not caught", async ({
+  test("starts counting automatically when the last roll call sound was missed", async ({
     page,
     isMobile,
   }) => {
@@ -219,44 +270,14 @@ test.describe(`a visit at ${address}`, () => {
     await answerRollCall(page, turns.slice(0, -1), isMobile);
     await expectFeatured(page, lastCreature);
 
-    // That sound comes once more, a little louder, and is still not caught. The house then
-    // says who was not caught and on which side, and nothing more plays until the visitor chooses.
+    // That sound comes once more and is still not caught. Without another press the roll call
+    // gives way to the score and Jack's flame.
     const notice = heading(page, rollCallCopy.heading);
-    const lines = rollCallNotHeardLines([
-      { roomId: lastCreature, side: "right" },
-    ]);
-    await expect(notice).toBeVisible({ timeout: 60_000 });
-    await expect(notice).toBeFocused();
-    for (const line of lines) {
-      await expect(page.getByText(line, { exact: true })).toBeVisible();
-    }
-    await expect(answerButton(page, "left")).toBeHidden();
-    await expect(button(page, practiceCopy.tryAgainLabel)).toBeVisible();
-    await expect(button(page, practiceCopy.goOnLabel)).toBeVisible();
-    await expectNoHorizontalScroll(page);
-    await expectNoSeriousAccessibilityProblem(page);
-
-    // Trying again plays that one sound again and no other, and asks again when it is not caught.
-    await button(page, practiceCopy.tryAgainLabel).click();
+    await expect(score(page)).toBeVisible({ timeout: 60_000 });
     await expect(notice).toBeHidden();
-    await expect(rollCallHeading(page)).toHaveText(rollCallCopy.heading);
-    await expect(page.locator(".room-intro")).toHaveText(
-      creatureIntroLine(lastCreature),
-    );
-    await expectFeatured(page, lastCreature);
-    await expect(notice).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText(lines[0] ?? "", { exact: true })).toBeVisible();
-
-    // Going on starts the counting. Nobody stands in plain view any more, the heading of the
-    // roll call is gone, and the words say only that it now counts.
-    await button(page, practiceCopy.goOnLabel).click();
-    await expect(notice).toBeHidden();
-    await expect(rollCallHeading(page)).toBeHidden();
-    await expect(page.locator(".visit-practice-lines p")).toHaveText([
-      ...rollCallCopy.countingLines,
-    ]);
-    await expect(page.locator(".room-intro")).toBeHidden();
-    await expect(page.locator(".visit-practice-sound")).toBeHidden();
+    await expect(button(page, practiceCopy.tryAgainLabel)).toBeHidden();
+    await expect(button(page, practiceCopy.goOnLabel)).toBeHidden();
+    await expect(page.locator(".visit-practice")).toBeHidden();
     await expectFeatured(page, null);
 
     // With the counting comes the score, from nothing, and Jack's flame, full (the rhythm game).
@@ -336,61 +357,76 @@ test.describe(`a visit at ${address}`, () => {
     });
   });
 
-  test("stops from the calibration screen with one press", async ({ page }) => {
+  test("stops from the headphone check with one press", async ({ page }) => {
     await openPage(page, address);
-    await quickVisit(page).click();
-    await expect(calibrationHeading(page)).toBeVisible();
-    await button(page, calibrationCopy.startButton).click();
-    await expect(calibrationSlider(page)).toBeVisible();
+    await enterHouse(page);
 
     await button(page, roomCopy.stopButton).click();
     await expect(heading(page, leavingCopy.exitHeading)).toBeVisible();
-    await expect(calibrationSlider(page)).toBeHidden();
+    await expect(button(page, headphoneCheckCopy.playButton)).toBeHidden();
   });
 
-  test("moves the calibration control by the keys the sheet names", async ({
+  test("plays the old reference as an opening theme and stops it for the headphone check", async ({
     page,
-    isMobile,
   }) => {
-    test.skip(
-      isMobile,
-      "A phone has no keys, and the keys line is not shown there.",
-    );
-    const { calibrationSettingMinDb, calibrationSettingStepDb } =
-      audioOutputConfig;
-    // The control starts in the middle of its range, rounded down to its grid: −22 dB for the hiss
-    // and −23 dB for the music, whichever sound this browser could play.
+    type AudioTraceWindow = Window & { audioTrace: string[] };
+    await page.addInitScript(() => {
+      const trace: string[] = [];
+      (window as unknown as AudioTraceWindow).audioTrace = trace;
+      const start = AudioBufferSourceNode.prototype.start;
+      const stop = AudioBufferSourceNode.prototype.stop;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        trace.push(this.loop ? "theme started" : "check started");
+        return start.apply(this, args);
+      };
+      AudioBufferSourceNode.prototype.stop = function (...args) {
+        if (this.loop) {
+          trace.push("theme stopped");
+        }
+        return stop.apply(this, args);
+      };
+    });
     await openPage(page, address);
-    await quickVisit(page).click();
-    await button(page, calibrationCopy.startButton).click();
-    const slider = calibrationSlider(page);
-    // The control takes the focus once the sound starts, and the keys line appears under it.
-    await expect(slider).toBeFocused();
-    await expect(page.getByText(calibrationCopy.keysLine)).toBeVisible();
-    const startDb = Number(await slider.inputValue());
-    expect([-22, -23]).toContain(startDb);
+    const audioTrace = () =>
+      page.evaluate(() => (window as unknown as AudioTraceWindow).audioTrace);
+    expect(await audioTrace()).toEqual([]);
 
-    await page.keyboard.press("ArrowRight");
-    await expect(slider).toHaveValue(
-      String(startDb + calibrationSettingStepDb),
-    );
-    await page.keyboard.press("Shift+ArrowRight");
-    await expect(slider).toHaveValue(
-      String(startDb + 6 * calibrationSettingStepDb),
-    );
-    await page.keyboard.press("PageDown");
-    await expect(slider).toHaveValue(
-      String(startDb + calibrationSettingStepDb),
-    );
-    // The keys work with the focus on a button too.
-    await button(page, calibrationCopy.quieterButton).focus();
-    await page.keyboard.press("ArrowRight");
-    await expect(slider).toHaveValue(
-      String(startDb + 2 * calibrationSettingStepDb),
-    );
-    await page.keyboard.press("Home");
-    await expect(slider).toHaveValue(String(calibrationSettingMinDb));
+    await enterHouse(page);
+    await expect(page.locator(".visit-sheet-calibration")).toHaveCount(0);
+    await expect.poll(audioTrace).toEqual(["theme started"]);
 
-    await button(page, roomCopy.stopButton).click();
+    await playCheck(page);
+    expect(await audioTrace()).toEqual([
+      "theme started",
+      "theme stopped",
+      "check started",
+    ]);
+  });
+
+  test("can check headphones when the theme file is unavailable", async ({
+    page,
+  }) => {
+    await page.route("**/calibration-waltz.m4a", (route) => route.abort());
+    await page.goto(address);
+    await enterHouse(page);
+    await checkHeadphones(page);
+  });
+
+  test("runs just the headphone check again after the audio device changes", async ({
+    page,
+  }) => {
+    await openPage(page, address);
+    await enterRoom(page);
+
+    await page.evaluate(() =>
+      navigator.mediaDevices.dispatchEvent(new Event("devicechange")),
+    );
+    await expect(heading(page, leavingCopy.pauseHeading)).toBeVisible();
+    await button(page, leavingCopy.goOnButton).click();
+    await expect(heading(page, visitCopy.headphoneCheckHeading)).toBeVisible();
+    await playCheck(page);
+    await button(page, headphoneCheckCopy.answers.left).click();
+    await button(page, visitCopy.goOnButton).click();
+    await expect(rollCallHeading(page)).toHaveText(rollCallCopy.heading);
   });
 });

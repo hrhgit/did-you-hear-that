@@ -15,8 +15,7 @@ export type RhythmJudgement =
  * sound that goes by, or is answered on the other side, lets it reach Jack and burn down his
  * flame. Every field name ends in its unit.
  *
- * Nothing here changes a search: the search sees the same trials and answers as before, and only
- * the moment each trial is presented is moved onto the beat grid.
+ * The adaptive search treats Good as weak evidence and Great and Perfect as clear catches.
  */
 export interface RhythmConfig {
   /** Beats per minute of the room's beat. */

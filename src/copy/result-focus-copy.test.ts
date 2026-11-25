@@ -73,7 +73,7 @@ describe("focusPointLine", () => {
         rightMinusLeftDb: 17.6,
         atLeast: false,
       }),
-    ).toBe("You caught a sound 18 dB quieter on your left than on your right.");
+    ).toBe("The estimate is 18 dB quieter on your left than on your right.");
     expect(
       focusPointLine({
         kind: "farApart",
@@ -81,7 +81,7 @@ describe("focusPointLine", () => {
         atLeast: true,
       }),
     ).toBe(
-      "You caught a sound at least 20 dB quieter on your right than on your left.",
+      "The estimate is at least 20 dB quieter on your right than on your left.",
     );
   });
 

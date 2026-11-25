@@ -264,120 +264,7 @@ p.result-turn-back {
   outline: none;
 }
 
-/*
- * The picture: the yard of the room the visit was played in, one lane for each creature. A canvas
- * behind the drawing paints the yard (result-yard.ts); without one the frame is plain night sky.
- */
-.result-figure {
-  width: 100%;
-  max-width: 26rem;
-  margin: 0 auto;
-}
-
-.result-frame {
-  position: relative;
-  isolation: isolate;
-  padding: 0.5rem 0.5rem 0.25rem;
-  overflow: hidden;
-  border: 1px solid var(--panel-line-strong);
-  border-radius: 1.4rem 1.4rem 1.1rem 1.1rem;
-  background: linear-gradient(
-    180deg,
-    var(--color-sky-top),
-    var(--color-sky-mid) 55%,
-    var(--color-sky-low) 80%,
-    var(--color-night) 82%
-  );
-  box-shadow:
-    var(--panel-shadow),
-    0 0 2.5rem -0.5rem rgb(245 140 30 / 0.22);
-}
-
-.result-yard {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-}
-
-/* In the yard the outlines read as moonlit chalk, and the sides as the room's HUD. */
-.result-frame[data-yard="true"] .result-wing-label {
-  fill: var(--color-hud-gold);
-  font-style: normal;
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-/* What the marks mean: only the marks the picture holds. */
-.result-key {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: 0.4rem 1rem;
-  margin: 0.85rem 0.25rem 0;
-  padding: 0;
-  list-style: none;
-  color: var(--color-graphite);
-  font-size: 0.875rem;
-  line-height: 1.3;
-}
-
-.result-key-item {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.result-key-swatch {
-  flex: none;
-  width: 1.6rem;
-  height: 1rem;
-  border-radius: 0.25rem;
-}
-
-[data-mark="light"] > .result-key-swatch {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-lamp) 75%, transparent),
-    color-mix(in srgb, var(--color-lamp) 20%, transparent)
-  );
-}
-
-[data-mark="dark"] > .result-key-swatch {
-  background: var(--color-wall);
-  box-shadow: inset 0 0 0 1px var(--color-graphite-faint);
-}
-
-[data-mark="hatched"] > .result-key-swatch {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--color-graphite) 0 1px,
-    transparent 1px 5px
-  );
-  box-shadow: inset 0 0 0 1px var(--color-graphite-faint);
-}
-
-[data-mark="earlier"] > .result-key-swatch {
-  border: 1.3px dashed
-    color-mix(in srgb, var(--color-moonlight) 70%, transparent);
-}
-
-[data-mark="creature"] > .result-key-swatch {
-  --badge-size: 1.6rem;
-
-  border-radius: 50%;
-}
-
-.result-section {
-  display: block;
-  width: 100%;
-  overflow: visible;
-  height: auto;
-  aspect-ratio: 440 / 760;
-}
-
+/* The save control under the picture. */
 .result-figure-controls {
   display: flex;
   flex-wrap: wrap;
@@ -386,192 +273,30 @@ p.result-turn-back {
   margin: 1.25rem 0.4rem 0;
 }
 
-/* Each creature's lane: a faint bed on the grass, whether the visit entered it or not. */
-.result-lane {
-  fill: rgb(255 240 220 / 0.035);
-  stroke: color-mix(in srgb, var(--color-moonlight) 22%, transparent);
-  stroke-width: 1;
+/* Saving the picture is a wooden sign, like the way in on the front door. */
+.result-figure-controls .visit-button {
+  min-width: 12rem;
+  aspect-ratio: 76 / 20;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: 0;
+  background: url("../visit/art/sign.webp") center / 100% 100% no-repeat;
+  box-shadow: none;
+  color: var(--color-hud);
+  font-size: 1.125rem;
+  text-align: center;
+  text-shadow: 0 0.1rem 0.4rem rgb(0 0 0 / 0.75);
+  transform: rotate(-1deg);
+  transition:
+    transform 0.25s ease,
+    filter 0.25s ease;
 }
 
-.result-lane[data-state="closed"] {
-  stroke-dasharray: 3 5;
-  fill: none;
-}
-
-/* The pitch of a lane, above its candle. */
-.result-pitch {
-  fill: var(--color-graphite);
-  font-size: 13px;
-  font-style: italic;
-  letter-spacing: 0.04em;
-}
-
-.result-frame[data-yard="true"] .result-pitch {
-  fill: var(--color-moonlight);
-  fill-opacity: 0.8;
-}
-
-/* The candle in the middle of each lane, where both halves of its light start. */
-.result-candle-wax {
-  fill: #efe2c4;
-}
-
-.result-candle-flame {
-  fill: #ffd27a;
-  filter: drop-shadow(0 0 3px rgb(255 170 60 / 0.9));
-}
-
-/* Jack at the foot of the yard. */
-.result-jack-glow-near {
-  stop-color: #ff9632;
-  stop-opacity: 0.32;
-}
-
-.result-jack-glow-far {
-  stop-color: #ff9632;
-  stop-opacity: 0;
-}
-
-/* Each lane's light: its creature's colour, warmed by the candle, fading as it goes out. */
-.result-light-near {
-  stop-color: color-mix(
-    in srgb,
-    var(--creature-hue, var(--color-lamp)) 45%,
-    var(--color-lamp)
-  );
-  stop-opacity: 0.62;
-}
-
-.result-light-far {
-  stop-color: var(--creature-hue, var(--color-lamp));
-  stop-opacity: 0.22;
-}
-
-/* The glow around a candle. */
-.result-halo-near {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0.5;
-}
-
-.result-halo-far {
-  stop-color: var(--color-lamp);
-  stop-opacity: 0;
-}
-
-/* Each lit half's creature stands where its light ends, with a faint glow of its colour. */
-.result-creature {
-  filter: drop-shadow(
-    0 0 5px color-mix(in srgb, var(--creature-hue) 65%, transparent)
-  );
-}
-
-/* A lane picked in the words below: the others dim while it is picked. */
-.result-floor {
-  transition: opacity 0.35s ease;
-}
-
-.result-section[data-picking="true"]
-  .result-floor[data-kind="entered"]:not([data-picked="true"]) {
-  opacity: 0.32;
-}
-
-/* Where a half lane's light ends. */
-.result-reach {
-  fill: none;
-  stroke: color-mix(in srgb, var(--creature-hue, var(--color-lamp)) 60%, white);
-  stroke-width: 1.7;
-  stroke-linecap: round;
-}
-
-/* A half lane with no level to draw. */
-.result-doubt-line {
-  fill: none;
-  stroke: var(--color-graphite);
-  stroke-width: 1.1;
-  stroke-opacity: 0.75;
-}
-
-/* The outline of an earlier visit: ruled, dashed and faint. */
-.result-earlier {
-  fill: none;
-  stroke: var(--color-moonlight);
-  stroke-width: 1.3;
-  stroke-dasharray: 5 6;
-  stroke-opacity: 0.6;
-  animation: result-appear 0.4s ease both;
-}
-
-/* The line from Jack up through the candles, the way a draughtsman marks a centre. */
-.result-centre {
-  fill: none;
-  stroke: var(--color-graphite-faint);
-  stroke-width: 1;
-  stroke-dasharray: 16 5 2 5;
-}
-
-.result-wing-label {
-  fill: var(--color-graphite);
-  font-size: 21px;
-  font-style: italic;
-}
-
-/* The one moment of movement: the light spreads from each candle to where it ends. */
-.result-section[data-entering="true"] .result-light {
-  transform-box: view-box;
-  transform-origin: 220px 0;
-  animation: result-spread 2.6s cubic-bezier(0.22, 0.7, 0.2, 1) 0.5s both;
-}
-
-.result-section[data-entering="true"] .result-reach,
-.result-section[data-entering="true"] .result-earlier {
-  animation: result-appear 0.9s ease 2.6s both;
-}
-
-.result-section[data-entering="true"] .result-doubt {
-  animation: result-appear 1.6s ease 0.5s both;
-}
-
-.result-section[data-entering="true"] .result-halo {
-  animation: result-appear 1.2s ease 0.2s both;
-}
-
-/* Once the light has spread, each creature steps up to where it ends. */
-.result-section[data-entering="true"] .result-creature {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: result-arrive 0.8s cubic-bezier(0.2, 0.8, 0.3, 1.15) 2.8s both;
-}
-
-@keyframes result-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.86);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes result-spread {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes result-appear {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+.result-figure-controls .visit-button:hover,
+.result-figure-controls .visit-button:focus-visible {
+  box-shadow: none;
+  filter: brightness(1.15) drop-shadow(0 0 0.9rem rgb(245 140 30 / 0.45));
+  transform: rotate(0.5deg) scale(1.03);
 }
 
 /*
@@ -801,6 +526,14 @@ p.result-turn-back {
   font-size: 1.125rem;
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1.3;
+}
+
+.result-wing-range {
+  display: inline-block;
+  margin-inline-start: 0.35rem;
+  color: var(--color-graphite);
+  font-size: 0.8125rem;
+  white-space: nowrap;
 }
 
 .result-wing:is([data-state="worseThanCap"], [data-state="unreliable"])
@@ -1046,6 +779,14 @@ p.result-name-hint {
     grid-column: 1;
     grid-row: auto;
   }
+
+  .result p.result-wing-value:has(.result-wing-range) {
+    font-size: 1.0625rem;
+  }
+
+  .result-wing-range {
+    margin-inline-start: 0.25rem;
+  }
 }
 
 @media (max-width: 22rem) {
@@ -1055,14 +796,12 @@ p.result-name-hint {
 }
 
 /*
- * A wide screen: the picture at the left, as tall as the window allows, and everything else in
- * one column at its right. The picture stays in sight while the column scrolls.
+ * A wide screen: the picture is wide and stands across the page under the heading, and the words
+ * go on below it in one column, read from the top down.
  */
 @media (min-width: 56rem) {
   .result-page {
-    grid-template-columns: auto minmax(0, 34rem);
-    column-gap: clamp(2.5rem, 6vw, 5.5rem);
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 34rem) minmax(0, 1fr);
     max-width: none;
     padding: 3rem 2.5rem 5rem;
   }
@@ -1072,28 +811,17 @@ p.result-name-hint {
   }
 
   .result-page > .result-figure {
-    position: sticky;
-    top: 2rem;
-    grid-column: 1;
-    grid-row: 1 / span 8;
-    align-self: start;
-    width: clamp(18rem, calc((100dvh - 14rem) * 564 / 906), 30rem);
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 52rem, calc((100dvh - 12rem) * 600 / 400));
     max-width: none;
     margin: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .result-section[data-entering="true"] .result-light,
-  .result-section[data-entering="true"] .result-reach,
-  .result-section[data-entering="true"] .result-earlier,
-  .result-section[data-entering="true"] .result-doubt,
-  .result-section[data-entering="true"] .result-halo,
-  .result-section[data-entering="true"] .result-creature {
-    animation: result-appear 0.4s ease both;
-  }
-
-  .result-floor,
+  .result-curve-column,
+  .result-curve-beam,
   .result-floor-words,
   .result-focus-floor {
     transition: none;
@@ -1104,4 +832,228 @@ p.result-name-hint {
     outline: 2px solid var(--color-lamp);
     outline-offset: 3px;
   }
+}
+
+/* The headphone rows (headphone-traits R6): a label, its value, and the reason in small text. */
+.result-traits {
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--color-graphite-faint);
+}
+
+.result h2.result-traits-heading {
+  margin: 0 0 0.4rem;
+  color: var(--color-lamp);
+  font-size: 1.0625rem;
+  font-style: italic;
+}
+
+.result-traits-rows {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.result-traits-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  column-gap: 0.75rem;
+  align-items: baseline;
+}
+
+.result-traits-label {
+  color: var(--color-graphite);
+  font-size: 0.875rem;
+}
+
+.result-traits-value {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.result .result-traits-note {
+  grid-column: 2;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/*
+ * The yard chart (result-curve, redesign 2026-11-25): the room's night, the creatures on the
+ * ground and the two ears as lights in the sky. Left is a warm round wisp, right a cool square
+ * lantern on a dashed line.
+ */
+.result-curve {
+  --curve-left: #ffb85c;
+  --curve-left-core: #fff1d6;
+  --curve-right: #8fd0ff;
+  --curve-right-core: #e8f6ff;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.result-curve-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #0c061d;
+  box-shadow:
+    var(--panel-shadow),
+    0 0 2.5rem -0.5rem rgb(245 140 30 / 0.22);
+}
+
+.result-curve-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 0.7rem solid transparent;
+  border-image: url("../visit/art/frame.webp") 44 / 1.1rem stretch;
+  pointer-events: none;
+}
+
+.result-curve-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.result-curve-grid {
+  stroke: #c9b8ff;
+  stroke-width: 0.8;
+  stroke-dasharray: 2 5;
+  opacity: 0.28;
+}
+
+.result-curve-tick,
+.result-curve-axis-title,
+.result-curve-key-label,
+.result-curve-pitch {
+  fill: var(--color-graphite);
+  font-size: 17px;
+  font-variant-numeric: lining-nums tabular-nums;
+  paint-order: stroke;
+  stroke: #0b0416;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.result-curve-axis-title {
+  font-size: 16px;
+  font-style: italic;
+}
+
+.result-curve-pitch {
+  fill: var(--color-moonlight);
+  font-size: 17px;
+}
+
+.result-curve-key-label {
+  font-size: 14px;
+}
+
+.result-curve-thread {
+  stroke: var(--creature-hue, var(--color-graphite));
+  stroke-width: 1;
+  stroke-dasharray: 1 6;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+
+.result-curve-shadow {
+  fill: #000;
+  opacity: 0.45;
+}
+
+.result-curve-creature {
+  fill: var(--creature-hue, var(--color-graphite));
+}
+
+.result-curve-now-line,
+.result-curve-earlier-line,
+.result-curve-edge {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.result-curve-now-line,
+.result-curve-edge {
+  filter: url(#result-curve-glow);
+}
+
+.result-curve-line-left {
+  stroke: var(--curve-left);
+}
+
+.result-curve-line-right {
+  stroke: var(--curve-right);
+}
+
+.result-curve-now-line.result-curve-line-right {
+  stroke-dasharray: 7 5;
+}
+
+.result-curve-earlier {
+  opacity: 0.38;
+}
+
+.result-curve-earlier-line {
+  stroke-width: 1.4;
+  stroke-dasharray: 1.5 4;
+}
+
+.result-curve-range {
+  filter: url(#result-curve-glow);
+  opacity: 0.3;
+}
+
+.result-curve-range-left {
+  fill: var(--curve-left);
+}
+
+.result-curve-range-right {
+  fill: var(--curve-right);
+}
+
+.result-curve-unsure {
+  opacity: 0.6;
+}
+
+/*
+ * A moonbeam down one pitch: on the pitches the focus card names, and on the one the visitor
+ * points at or tabs to in the words below, while the others dim.
+ */
+.result-curve-beam {
+  fill: rgb(220 232 255 / 0.09);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.result-curve-column {
+  transition: opacity 0.35s ease;
+}
+
+.result-curve-column[data-standing] .result-curve-beam {
+  opacity: 0.7;
+}
+
+.result-curve-svg[data-picking="true"]
+  .result-curve-column[data-picked="true"]
+  .result-curve-beam {
+  opacity: 1;
+}
+
+.result-curve-svg[data-picking="true"]
+  .result-curve-column:not([data-picked="true"]) {
+  opacity: 0.4;
+}
+
+.result-curve-foot {
+  margin-top: 0.4rem;
+}
+
+.result .result-curve-note {
+  margin: 0.2rem 0 0;
+  color: var(--color-graphite);
+  font-size: 0.75rem;
 }

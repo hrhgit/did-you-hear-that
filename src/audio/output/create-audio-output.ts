@@ -269,6 +269,13 @@ export interface CalibrationMusicOutput {
   stopCalibrationMusic(): void;
 }
 
+/** The public visit uses a fixed reference level and plays the music as its theme. */
+export interface OpeningAudioOutput {
+  usePresetLevel(): Extract<KeepOutcome, { kind: "kept" }>;
+  startTheme(options: { readonly repeat: boolean }): void;
+  stopTheme(): void;
+}
+
 /** What `beginRoom` takes. Nothing of it has an effect since the rise limit was dropped. */
 export interface BeginRoomOptions {
   readonly riseLimitPer?: RiseLimitScope;
@@ -339,7 +346,7 @@ const refused = <Reason extends string>(
 export function createAudioOutput(options: {
   backend: AudioBackend;
   timer: Timer;
-}): AudioOutput & CalibrationMusicOutput {
+}): AudioOutput & CalibrationMusicOutput & OpeningAudioOutput {
   const { backend, timer } = options;
   const {
     scheduleLeadMs,
@@ -379,6 +386,7 @@ export function createAudioOutput(options: {
   const soundListeners = new Set<(sound: CalibrationSound) => void>();
   const stepListeners = new Set<(settingDb: number) => void>();
   let musicPlaying = false;
+  let themeEndMs: number | null = null;
   let musicTargetDb = calibrationSettingMinDb;
   /** The setting the last level ramp ends at, or the start's while no ramp has run. */
   let musicPlayedDb = calibrationSettingMinDb;
@@ -554,6 +562,25 @@ export function createAudioOutput(options: {
   const musicTopDb = (): number =>
     sound === "music" && music !== null ? music.controlTopDb : topSettingDb;
 
+  const startMusicLoop = (
+    ready: ReadyMusic,
+    startMs: number,
+    settingDb: number,
+    repeat = true,
+  ): void => {
+    backend.startLoop(
+      {
+        left: ready.samples,
+        right: ready.samples,
+        sampleRateHz: ready.sampleRateHz,
+      },
+      startMs,
+      musicLevelGain(ready, settingDb),
+      outputFadeMs,
+      repeat,
+    );
+  };
+
   /** The Played_Setting reached: during a level ramp, the lower of its two ends. */
   const reachedMusicSettingDb = (): number =>
     musicRampEndMs !== null && backend.currentTimeMs() < musicRampEndMs
@@ -652,6 +679,7 @@ export function createAudioOutput(options: {
   ): ActivateResult => {
     cancelPendingSuspend();
     endMusic();
+    themeEndMs = null;
     forgetCalibration();
     calibrating = false;
     rateHz = null;
@@ -677,6 +705,7 @@ export function createAudioOutput(options: {
       beatPlaying = false;
     }
     endMusic();
+    themeEndMs = null;
     if (busyEndMs !== null) {
       busyEndMs = Math.min(busyEndMs, backend.currentTimeMs() + stopFadeMs);
     }
@@ -780,6 +809,10 @@ export function createAudioOutput(options: {
     return null;
   };
 
+  const soundBusyAt = (startMs: number): boolean =>
+    (busyEndMs !== null && startMs < busyEndMs) ||
+    (themeEndMs !== null && startMs < themeEndMs);
+
   /** Steps 2 to 7 of "Playing a sound", shared by every kind of sound. */
   const schedule = (sound: SoundToSchedule): ScheduleResult => {
     const sampleRateHz = rateHz;
@@ -788,9 +821,9 @@ export function createAudioOutput(options: {
     }
     const wantedStartMs = sound.startAtMs ?? Number.NEGATIVE_INFINITY;
     if (
-      busyEndMs !== null &&
-      Math.max(backend.currentTimeMs() + scheduleLeadMs, wantedStartMs) <
-        busyEndMs
+      soundBusyAt(
+        Math.max(backend.currentTimeMs() + scheduleLeadMs, wantedStartMs),
+      )
     ) {
       return refused("busy");
     }
@@ -850,7 +883,21 @@ export function createAudioOutput(options: {
     });
   };
 
-  const output: AudioOutput & CalibrationMusicOutput = {
+  const keepSetting = (
+    settingDb: number,
+  ): Extract<KeepOutcome, { kind: "kept" }> => {
+    keptSettingDb = settingDb;
+    calibrating = false;
+    lastRepeatSettingDb = null;
+    lastMusicSettingDb = null;
+    return Object.freeze({
+      kind: "kept",
+      settingDb,
+      rangeReport: rangeReport(decibelsToGain(settingDb)),
+    });
+  };
+
+  const output: AudioOutput & CalibrationMusicOutput & OpeningAudioOutput = {
     state: () => state,
     activate,
     stopAll: () => stop("control"),
@@ -936,15 +983,49 @@ export function createAudioOutput(options: {
         endMusic();
         busyEndMs = backend.currentTimeMs() + stopFadeMs;
       }
-      keptSettingDb = settingDb;
-      calibrating = false;
-      lastRepeatSettingDb = null;
-      lastMusicSettingDb = null;
-      return Object.freeze({
-        kind: "kept",
-        settingDb: keptSettingDb,
-        rangeReport: rangeReport(decibelsToGain(keptSettingDb)),
-      });
+      return keepSetting(settingDb);
+    },
+
+    usePresetLevel: () => keepSetting(audioOutputConfig.calibrationReferenceDb),
+
+    startTheme({ repeat }) {
+      if (
+        state.kind !== "running" ||
+        music === null ||
+        music.sampleRateHz !== rateHz ||
+        themeEndMs !== null
+      ) {
+        return;
+      }
+      // Let the final game sound finish before the theme starts.
+      const startMs = Math.max(
+        backend.currentTimeMs() + scheduleLeadMs,
+        busyEndMs ?? 0,
+      );
+      if (!Number.isFinite(startMs)) {
+        return;
+      }
+      startMusicLoop(
+        music,
+        startMs,
+        audioOutputConfig.calibrationReferenceDb,
+        repeat,
+      );
+      themeEndMs = repeat
+        ? Number.POSITIVE_INFINITY
+        : startMs + (music.samples.length / music.sampleRateHz) * 1000;
+    },
+
+    stopTheme() {
+      if (themeEndMs === null) {
+        return;
+      }
+      backend.stopLoop(stopFadeMs);
+      themeEndMs = null;
+      busyEndMs = Math.max(
+        busyEndMs ?? 0,
+        backend.currentTimeMs() + stopFadeMs,
+      );
     },
 
     rangeReport: () =>
@@ -1004,8 +1085,7 @@ export function createAudioOutput(options: {
       }
       if (
         musicPlaying ||
-        (busyEndMs !== null &&
-          backend.currentTimeMs() + scheduleLeadMs < busyEndMs)
+        soundBusyAt(backend.currentTimeMs() + scheduleLeadMs)
       ) {
         return refused("busy");
       }
@@ -1016,16 +1096,7 @@ export function createAudioOutput(options: {
           musicTopDb(),
         ),
       );
-      backend.startLoop(
-        {
-          left: ready.samples,
-          right: ready.samples,
-          sampleRateHz: ready.sampleRateHz,
-        },
-        startMs,
-        musicLevelGain(ready, settingDb),
-        outputFadeMs,
-      );
+      startMusicLoop(ready, startMs, settingDb);
       musicPlaying = true;
       musicTargetDb = settingDb;
       musicPlayedDb = settingDb;

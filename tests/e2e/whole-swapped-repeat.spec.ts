@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import { headphoneCheckCopy } from "../../src/copy/headphone-check-copy";
-import { replayCopy } from "../../src/copy/replay-copy";
 import { resultPageCopy } from "../../src/copy/result-page-copy";
 import { roomCopy } from "../../src/copy/room-copy";
 import { rulesCopy } from "../../src/copy/rules-copy";
@@ -8,7 +7,7 @@ import { swappedRepeatCopy } from "../../src/copy/swapped-repeat-copy";
 import { visitCopy } from "../../src/copy/visit-copy";
 import { expectNoHorizontalScroll, openPage } from "./page-checks";
 import { previewServers } from "./preview-servers";
-import { button, calibrate, heading, playCheck } from "./visit-steps";
+import { button, enterHouse, heading, playCheck } from "./visit-steps";
 
 // One whole short visit on the public page, walked by a listener that lives in the page: it reads
 // each sound the page starts, its channel and its peak, and answers the way a visitor with a
@@ -143,7 +142,7 @@ test("walks a visit with a quieter left ear, then visits a floor again with the 
   test.setTimeout(20 * 60_000);
   await page.addInitScript(installListener);
   const record = await openPage(page, address);
-  await calibrate(page);
+  await enterHouse(page);
 
   // The hiss of the check plays at 0 dB of the visit, so its peak is the listener's reference.
   await playCheck(page);
@@ -158,7 +157,7 @@ test("walks a visit with a quieter left ear, then visits a floor again with the 
   await button(page, visitCopy.goOnButton).click();
   await button(page, rulesCopy.enterButton).click();
 
-  // Through the one room and past the replay to the picture. The listener answers the roll call
+  // Through the one room to the picture. The listener answers the roll call
   // as it answers everything else. A site set back to one room at a time rests between two rooms
   // and waits for a press, which is given wherever it is asked for.
   const picture = heading(page, resultPageCopy.heading);
@@ -166,16 +165,9 @@ test("walks a visit with a quieter left ear, then visits a floor again with the 
     name: roomCopy.goOnButton,
     exact: true,
   });
-  const ways = [
-    goOn,
-    button(page, replayCopy.skipButton),
-    button(page, replayCopy.goOnButton),
-  ];
   await expect(async () => {
-    for (const way of ways) {
-      if (await way.isVisible()) {
-        await way.click({ timeout: 1_000 });
-      }
+    if (await goOn.isVisible()) {
+      await goOn.click({ timeout: 1_000 });
     }
     await expect(picture).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 12 * 60_000, intervals: [1_000] });

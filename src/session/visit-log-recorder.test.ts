@@ -363,7 +363,7 @@ describe("createVisitLogRecorder", () => {
     expect(Object.hasOwn(entry, "anchor")).toBe(false);
   });
 
-  it("refuses an anchor that is not music or hiss, the hands among them", () => {
+  it("refuses invalid anchors, including the legacy hands anchor", () => {
     const visit = recorder();
     for (const anchor of ["hands", "loading", ""]) {
       expect(() =>

@@ -2,6 +2,7 @@ import type { EarEnding, Presentation } from "./ear-search";
 import type {
   EarCounts,
   EarResult,
+  HearingSearchMethod,
   ThresholdSearchSettings,
   UnreliableReason,
 } from "./search-types";
@@ -29,6 +30,7 @@ export function finalizeEarResult(input: {
   presentations: readonly Presentation[];
   falseAlarmRateAboveLimit: boolean;
   settings: ThresholdSearchSettings;
+  method?: HearingSearchMethod;
 }): EarResult {
   const { ending, presentations, falseAlarmRateAboveLimit, settings } = input;
   const counts = countPresentations(presentations);
@@ -44,13 +46,15 @@ export function finalizeEarResult(input: {
         ? settings.capRelativeToAnchorDb
         : undefined;
   if (
-    referenceDb !== undefined &&
-    presentations.some(
-      (presentation) =>
-        presentation.outcome === "caught" &&
-        presentation.levelDb <=
-          referenceDb - settings.inconsistentCatchMarginDb,
-    )
+    ending.kind === "unconfirmed" ||
+    (input.method !== "adaptive" &&
+      referenceDb !== undefined &&
+      presentations.some(
+        (presentation) =>
+          presentation.outcome === "caught" &&
+          presentation.levelDb <=
+            referenceDb - settings.inconsistentCatchMarginDb,
+      ))
   ) {
     reasons.push("inconsistentCatch");
   }
@@ -58,7 +62,11 @@ export function finalizeEarResult(input: {
     reasons.push("falseAlarmRate");
   }
 
-  if (ending.kind === "trialLimit" || reasons.length > 0) {
+  if (
+    ending.kind === "trialLimit" ||
+    ending.kind === "unconfirmed" ||
+    reasons.length > 0
+  ) {
     return Object.freeze({
       ...counts,
       state: "unreliable",
@@ -71,6 +79,8 @@ export function finalizeEarResult(input: {
         ...counts,
         state: "found",
         thresholdDb: ending.thresholdDb,
+        ...(ending.lowDb === undefined ? {} : { lowDb: ending.lowDb }),
+        ...(ending.highDb === undefined ? {} : { highDb: ending.highDb }),
       });
     case "betterThanFloor":
       return Object.freeze({ ...counts, state: "betterThanFloor" });

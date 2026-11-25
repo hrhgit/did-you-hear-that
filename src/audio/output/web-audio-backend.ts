@@ -222,7 +222,13 @@ export function createWebAudioBackend(
       });
     },
 
-    startLoop(channels: ScheduledChannels, startMs, levelGain, fadeInMs) {
+    startLoop(
+      channels: ScheduledChannels,
+      startMs,
+      levelGain,
+      fadeInMs,
+      repeat,
+    ) {
       graph?.startLoop(
         channels.left,
         channels.right,
@@ -230,6 +236,7 @@ export function createWebAudioBackend(
         startMs / 1000,
         levelGain,
         fadeInMs / 1000,
+        repeat,
       );
     },
 

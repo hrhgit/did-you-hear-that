@@ -155,14 +155,6 @@
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 2.8v10.4a.8.8 0 0 0 1.2.7l8.2-5.2a.8.8 0 0 0 0-1.4L5.7 2.1a.8.8 0 0 0-1.2.7z'/%3E%3C/svg%3E");
 }
 
-.visit-button[data-icon="quieter"] {
-  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 6h2.5L8 3v10L4.5 10H2z'/%3E%3Cpath d='M10.5 6.2a2.6 2.6 0 0 1 0 3.6' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
-}
-
-.visit-button[data-icon="louder"] {
-  --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 6H4l3.5-3v10L4 10H1.5z'/%3E%3Cg fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M9.8 6.2a2.6 2.6 0 0 1 0 3.6'/%3E%3Cpath d='M11.6 4.4a5.1 5.1 0 0 1 0 7.2'/%3E%3Cpath d='M13.4 2.6a7.6 7.6 0 0 1 0 10.8'/%3E%3C/g%3E%3C/svg%3E");
-}
-
 .visit-button[data-icon="keep"] {
   --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
@@ -414,7 +406,8 @@
 
 /*
  * A sheet over the yard. The yard stays in sight behind it, darker at the edges, and the words
- * stand on a panel shaped like the doorways and the cards of the room: a wide round arch.
+ * stand on a dark panel in a painted frame of old wood with iron corners. The frame's corners keep
+ * their shape and its bars stretch to the panel's size.
  */
 .visit-sheet {
   position: absolute;
@@ -436,10 +429,12 @@
   position: relative;
   width: 100%;
   max-width: 36rem;
-  padding: clamp(2rem, 1.4rem + 2.4vw, 2.9rem)
-    clamp(1.25rem, 0.6rem + 3vw, 2.75rem) clamp(1.5rem, 1.2rem + 1.2vw, 2.1rem);
-  border: 1px solid var(--panel-line);
-  border-radius: 50% 50% 1.1rem 1.1rem / 3.4rem 3.4rem 1.1rem 1.1rem;
+  padding: clamp(1.7rem, 1.1rem + 2.4vw, 2.6rem)
+    clamp(1.1rem, 0.5rem + 3vw, 2.35rem) clamp(1.2rem, 0.9rem + 1.2vw, 1.8rem);
+  /* The bars are the border; the iron corners reach a little over the panel inside. */
+  border: 0.92rem solid transparent;
+  border-image: url("./art/frame.webp") 44 / 1.5rem stretch;
+  border-radius: 0.5rem;
   background:
     radial-gradient(
       70% 3.5rem at 50% 0,
@@ -456,26 +451,6 @@
     var(--panel-shadow),
     inset 0 1px 0 rgb(255 230 190 / 0.08);
   backdrop-filter: blur(6px);
-}
-
-/* A thin warm line across the top of the arch, like the rim of a lit card. */
-.visit-sheet-body::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 50%;
-  width: min(14rem, 50%);
-  height: 2px;
-  margin-left: max(-7rem, -25%);
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-lamp),
-    transparent
-  );
-  opacity: 0.75;
-  pointer-events: none;
 }
 
 .visit-sheet h1 {
@@ -518,7 +493,6 @@ p.visit-status {
  * The sheets before the room, and the notices, hold one thing to do and a line or two about it.
  * They are narrow and set in the middle, like a sign on a door.
  */
-.visit-sheet-calibration .visit-sheet-body,
 .visit-sheet-check .visit-sheet-body,
 .visit-sheet-rules .visit-sheet-body,
 .visit-sheet-notice .visit-sheet-body {
@@ -526,7 +500,6 @@ p.visit-status {
   text-align: center;
 }
 
-.visit-sheet-calibration h1,
 .visit-sheet-check h1,
 .visit-sheet-rules h1,
 .visit-sheet-notice h1 {
@@ -534,7 +507,6 @@ p.visit-status {
   font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.1rem);
 }
 
-.visit-sheet-calibration p,
 .visit-sheet-check p,
 .visit-sheet-rules p,
 .visit-sheet-notice p {
@@ -542,7 +514,6 @@ p.visit-status {
   margin-inline: auto;
 }
 
-.visit-sheet-calibration .visit-controls,
 .visit-sheet-check .visit-controls,
 .visit-sheet-rules .visit-controls,
 .visit-sheet-notice .visit-controls {
@@ -550,7 +521,6 @@ p.visit-status {
   margin: 1.5rem 0 0.9rem;
 }
 
-.visit-sheet-calibration p.visit-status,
 .visit-sheet-check p.visit-status {
   min-height: 2.9em;
   margin-bottom: 0;
@@ -565,187 +535,6 @@ p.visit-status {
   margin: 0.4rem auto 0;
   font-size: 0.875rem;
   line-height: 1.4;
-}
-
-/* A round button that shows its mark alone. */
-.visit-button.visit-button-icon {
-  flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0;
-  border-radius: 50%;
-}
-
-.visit-button.visit-button-icon::before {
-  left: 50%;
-  margin-left: -0.55rem;
-}
-
-/*
- * The calibration control as a drawn line: quiet at the left end, loud at the right. The ring is
- * where the visitor has put the control. The lit part of the line and its mark are where the sound
- * has got to, which follows the ring a little at a time.
- */
-/* The control with quieter at its left end and louder at its right, in one row. */
-.visit-dial {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  max-width: 26rem;
-  margin: 1.75rem auto 0;
-}
-
-.visit-dial .visit-meter {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* The control is drawn like Jack's flame in the room: a bar of candlelight in a dark groove. */
-.visit-meter {
-  --visit-thumb: 1.75rem;
-  --visit-travel: calc(100% - var(--visit-thumb));
-  position: relative;
-  height: 2.75rem;
-}
-
-.visit-meter-line,
-.visit-meter-fill,
-.visit-meter-mark {
-  position: absolute;
-  top: 50%;
-  pointer-events: none;
-}
-
-.visit-meter-line {
-  right: calc(var(--visit-thumb) / 2 - 0.35rem);
-  left: calc(var(--visit-thumb) / 2 - 0.35rem);
-  height: 0.75rem;
-  margin-top: -0.375rem;
-  border: 1px solid rgb(255 200 120 / 0.35);
-  border-radius: 999px;
-  background: rgb(40 20 10 / 0.7);
-  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6);
-}
-
-.visit-meter-fill {
-  left: calc(var(--visit-thumb) / 2 - 0.35rem);
-  width: calc(var(--visit-setting, 0) * var(--visit-travel) + 0.7rem);
-  height: 0.75rem;
-  margin-top: -0.375rem;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    var(--color-ember-deep),
-    var(--color-ember) 60%,
-    var(--color-candle)
-  );
-  box-shadow: 0 0 0.75rem rgb(255 160 40 / 0.6);
-  transition: width 0.4s ease;
-}
-
-.visit-meter-mark {
-  left: calc(
-    var(--visit-thumb) / 2 + var(--visit-setting, 0) * var(--visit-travel)
-  );
-  width: 0.4rem;
-  height: 1.35rem;
-  margin: -0.675rem 0 0 -0.2rem;
-  border-radius: 999px;
-  background: var(--color-candle);
-  box-shadow: 0 0 0.7rem rgb(255 200 90 / 0.9);
-  transition: left 0.4s ease;
-}
-
-.visit-meter-range {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  appearance: none;
-  cursor: grab;
-  touch-action: pan-y;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.visit-meter-range:active {
-  cursor: grabbing;
-}
-
-.visit-meter-range::-webkit-slider-runnable-track {
-  height: var(--visit-thumb);
-  background: transparent;
-}
-
-.visit-meter-range::-moz-range-track {
-  height: var(--visit-thumb);
-  background: transparent;
-}
-
-.visit-meter-range::-webkit-slider-thumb {
-  box-sizing: border-box;
-  width: var(--visit-thumb);
-  height: var(--visit-thumb);
-  border: 2px solid var(--color-hud);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgb(255 240 210 / 0.28),
-    rgb(20 12 30 / 0.55) 70%
-  );
-  box-shadow: 0 0 0 3px rgb(0 0 0 / 0.35);
-  appearance: none;
-}
-
-.visit-meter-range::-moz-range-thumb {
-  box-sizing: border-box;
-  width: var(--visit-thumb);
-  height: var(--visit-thumb);
-  border: 2px solid var(--color-hud);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgb(255 240 210 / 0.28),
-    rgb(20 12 30 / 0.55) 70%
-  );
-  box-shadow: 0 0 0 3px rgb(0 0 0 / 0.35);
-}
-
-.visit-meter-range:hover::-webkit-slider-thumb,
-.visit-meter-range:focus-visible::-webkit-slider-thumb {
-  border-color: var(--color-lamp);
-  box-shadow:
-    0 0 0 3px rgb(0 0 0 / 0.35),
-    var(--glow-ember);
-}
-
-.visit-meter-range:hover::-moz-range-thumb,
-.visit-meter-range:focus-visible::-moz-range-thumb {
-  border-color: var(--color-lamp);
-  box-shadow:
-    0 0 0 3px rgb(0 0 0 / 0.35),
-    var(--glow-ember);
-}
-
-.visit-meter-range:focus-visible {
-  outline: 2px solid var(--color-lamp);
-  outline-offset: 0.2rem;
-  border-radius: 0.5rem;
-}
-
-p.visit-keys-line {
-  margin: 0 auto 0.5rem;
-  font-size: 0.875rem;
-}
-
-/* The keys are no use without a keyboard. */
-@media (pointer: coarse) {
-  p.visit-keys-line {
-    display: none;
-  }
 }
 
 /*
@@ -782,16 +571,6 @@ p.visit-keys-line {
 /* How to answer: a picture of the screen cut in two, each half with its keys. */
 .visit-answer-guide {
   margin: 0;
-}
-
-.visit-eyebrow {
-  margin: 0 0 0.75rem;
-  color: var(--color-hud-gold);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  line-height: 1.3;
-  text-transform: uppercase;
 }
 
 .visit-halves {
@@ -1160,6 +939,7 @@ p.visit-swap-turn-back {
   max-width: 46rem;
   padding: 1rem 0 1.5rem;
   border: 0;
+  border-image: none;
   border-radius: 0;
   background: none;
   box-shadow: none;
@@ -1167,44 +947,34 @@ p.visit-swap-turn-back {
   backdrop-filter: none;
 }
 
-.visit-sheet-front .visit-sheet-body::before {
-  content: none;
-}
-
 .visit-sheet-front .visit-sheet-body > * {
   margin-inline: auto;
 }
 
-.visit-sheet-front p.visit-eyebrow {
-  display: inline-block;
-  margin-bottom: 1.1rem;
-  padding: 0.35rem 0.95rem;
-  border: 1px solid rgb(255 220 160 / 0.4);
-  border-radius: 999px;
-  background: rgb(14 10 26 / 0.65);
-  font-size: 0.75rem;
+/*
+ * The title is painted lettering, hung a little crooked over the yard. Its words are in the
+ * heading too, unseen (`.visit-spoken`).
+ */
+.visit-sheet-front h1.visit-front-title {
+  width: min(100%, 34rem);
+  margin-bottom: 0.6rem;
+  transform: rotate(-2deg);
 }
 
-.visit-sheet-front h1 {
-  margin-bottom: 1.4rem;
-  color: var(--color-hud);
-  font-size: clamp(2.75rem, 1.3rem + 6.4vw, 5.75rem);
-  line-height: 0.98;
-  text-shadow:
-    0 0 2rem rgb(255 150 50 / 0.45),
-    0 0.25rem 1.5rem rgb(0 0 0 / 0.85);
+.visit-front-lettering {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0.4rem 1.2rem rgb(0 0 0 / 0.7));
 }
 
+/* What to do first: a drawn headphones mark and the line, with no frame around them. */
 .visit-sheet-front p.visit-front-lead {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.6rem;
   max-width: none;
-  margin-bottom: 1rem;
-  padding: 0.45rem 1.15rem 0.45rem 0.9rem;
-  border: 1px solid rgb(253 200 120 / 0.38);
-  border-radius: 999px;
-  background: rgb(80 36 10 / 0.42);
+  margin-bottom: 0.4rem;
   color: var(--color-hud);
   font-size: clamp(1.0625rem, 0.98rem + 0.4vw, 1.25rem);
   line-height: 1.3;
@@ -1213,8 +983,8 @@ p.visit-swap-turn-back {
 
 .visit-headphones-mark {
   flex: none;
-  width: 1.35rem;
-  height: 1.2rem;
+  width: 1.5rem;
+  height: 1.3rem;
   background: var(--color-ember);
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 34'%3E%3Cpath d='M8 20v-4a12 12 0 0 1 24 0v4' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='3' y='17' width='9' height='14' rx='3.5'/%3E%3Crect x='28' y='17' width='9' height='14' rx='3.5'/%3E%3C/svg%3E")
     center / contain no-repeat;
@@ -1223,16 +993,21 @@ p.visit-swap-turn-back {
 .visit-sheet-front p.visit-front-about {
   max-width: 34rem;
   margin-bottom: 0;
+  font-size: 0.9375rem;
 }
 
-/* The five creatures, on cards like those along the floor of the room. */
+/*
+ * The five creatures stand in the yard, not on cards: each on the grass with its shadow under
+ * it, a little higher or lower than its neighbours, its name small at its feet.
+ */
 .visit-roster {
   display: flex;
   justify-content: center;
-  gap: clamp(0.35rem, 1.4vw, 0.9rem);
+  align-items: flex-end;
+  gap: clamp(0.2rem, 1.2vw, 0.8rem);
   width: 100%;
-  max-width: 34rem;
-  margin: 1.6rem auto 0.4rem;
+  max-width: 32rem;
+  margin: 1.1rem auto 0.2rem;
   padding: 0;
   list-style: none;
 }
@@ -1243,18 +1018,28 @@ p.visit-swap-turn-back {
   grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
   min-width: 0;
-  max-width: 6.25rem;
-  aspect-ratio: 5 / 6.4;
-  padding: 0.45rem 0.3rem 0.4rem;
-  border: 1px solid var(--color-graphite-faint);
-  border-radius: 2.6rem 2.6rem 0.4rem 0.4rem;
-  background:
-    radial-gradient(
-      70% 55% at 50% 60%,
-      color-mix(in srgb, var(--creature-hue) 22%, transparent),
-      transparent 100%
-    ),
-    rgb(10 8 18 / 0.78);
+  max-width: 5.5rem;
+  aspect-ratio: 5 / 6;
+}
+
+.visit-roster-card:nth-child(1) {
+  transform: translateY(0.3rem) rotate(-3deg);
+}
+
+.visit-roster-card:nth-child(2) {
+  transform: translateY(-0.7rem);
+}
+
+.visit-roster-card:nth-child(3) {
+  transform: translateY(0.15rem) rotate(2deg);
+}
+
+.visit-roster-card:nth-child(4) {
+  transform: translateY(-0.35rem) rotate(-2deg);
+}
+
+.visit-roster-card:nth-child(5) {
+  transform: translateY(-1rem) rotate(4deg);
 }
 
 .visit-roster-portrait {
@@ -1263,65 +1048,118 @@ p.visit-swap-turn-back {
   min-height: 0;
 }
 
+/* The creature's shadow on the grass. */
+.visit-roster-portrait::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 0;
+  height: 12%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.55), transparent);
+}
+
 .visit-roster-portrait > .creature-art {
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 
 .visit-roster-name {
   max-width: 100%;
   overflow: hidden;
-  font-size: 0.875rem;
+  color: var(--color-graphite);
+  font-size: 0.8125rem;
   font-style: italic;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The two doors in, side by side where there is room: the lit one is the way in. */
+/*
+ * The way in is a wooden sign nailed up in the yard, with its words painted on it. The replay,
+ * which is not open yet, is a line of small words under it.
+ */
 .visit-sheet-front .visit-controls-stacked {
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.9rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
   width: 100%;
-  max-width: 40rem;
-  margin: 1.4rem auto 1rem;
+  margin: 1rem auto 0.4rem;
 }
 
-.visit-sheet-front .visit-controls-stacked .visit-button {
-  flex: 1 1 16rem;
+.visit-sheet-front .visit-controls-stacked .visit-button-lit {
+  width: min(100%, 21rem);
+  aspect-ratio: 76 / 20;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: 0;
+  background: url("./art/sign.webp") center / 100% 100% no-repeat;
+  box-shadow: none;
+  color: var(--color-hud);
+  font-size: 1.375rem;
+  text-align: center;
+  text-shadow: 0 0.1rem 0.4rem rgb(0 0 0 / 0.75);
+  transform: rotate(1.5deg);
+  transition:
+    transform 0.25s ease,
+    filter 0.25s ease;
+}
+
+.visit-sheet-front .visit-controls-stacked .visit-button-lit:hover,
+.visit-sheet-front .visit-controls-stacked .visit-button-lit:focus-visible {
+  box-shadow: none;
+  filter: brightness(1.15) drop-shadow(0 0 0.9rem rgb(245 140 30 / 0.45));
+  transform: rotate(-0.5deg) scale(1.03);
+}
+
+.visit-sheet-front .visit-controls-stacked .visit-button-lit::before {
+  content: none;
+}
+
+.visit-sheet-front
+  .visit-controls-stacked
+  .visit-button-lit
+  .visit-button-note {
+  margin-top: 0;
+  color: var(--color-candle);
+  font-size: 0.875rem;
+}
+
+.visit-sheet-front .visit-controls-stacked .visit-button-quiet {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
   width: auto;
-  min-height: 4.75rem;
-  padding: 0.9rem 1.2rem 0.9rem 3.4rem;
-  border-radius: 1.6rem 1.6rem 0.8rem 0.8rem;
-  font-size: 1.1875rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 2.1rem;
+  border: 0;
+  background: none;
+  font-size: 0.9375rem;
 }
 
-.visit-sheet-front .visit-controls-stacked .visit-button::before {
-  left: 1.15rem;
-  width: 1.35rem;
-  height: 1.35rem;
-  margin-top: -0.675rem;
+.visit-sheet-front .visit-controls-stacked .visit-button-quiet::before {
+  left: 0.75rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: -0.45rem;
 }
 
-.visit-sheet-front .visit-button-lit {
-  animation: visit-candle 3.2s ease-in-out infinite;
+.visit-sheet-front
+  .visit-controls-stacked
+  .visit-button-quiet
+  .visit-button-note {
+  display: inline;
+  margin: 0;
+  font-size: 0.8125rem;
 }
 
-@keyframes visit-candle {
-  0%,
-  100% {
-    box-shadow:
-      inset 0 1px 0 rgb(255 230 180 / 0.28),
-      0 0 1.2rem rgb(245 140 30 / 0.3);
-  }
-
-  50% {
-    box-shadow:
-      inset 0 1px 0 rgb(255 230 180 / 0.34),
-      0 0 2rem rgb(245 140 30 / 0.5);
-  }
+.visit-sheet-front
+  .visit-controls-stacked
+  .visit-button-quiet
+  .visit-button-note::before {
+  content: "· ";
 }
 
 .visit-sheet-front p.visit-front-privacy {
@@ -1329,15 +1167,15 @@ p.visit-swap-turn-back {
   align-items: center;
   gap: 0.45rem;
   max-width: none;
-  margin: 0.4rem 0 0;
-  font-size: 0.9375rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
 }
 
 .visit-sheet-front p.visit-front-privacy::before {
   content: "";
   flex: none;
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 0.8rem;
+  height: 0.8rem;
   background: currentcolor;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3' y='7' width='10' height='7.5' rx='1.5'/%3E%3Cpath d='M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E")
     center / contain no-repeat;
@@ -1439,7 +1277,7 @@ p.visit-swap-turn-back {
     transition: none;
   }
 
-  .visit-sheet-front .visit-button-lit {
-    animation: none;
+  .visit-sheet-front .visit-controls-stacked .visit-button-lit {
+    transition: none;
   }
 }

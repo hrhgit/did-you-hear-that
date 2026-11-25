@@ -43,6 +43,17 @@ export const calibrationCopy = Object.freeze({
   }),
 });
 
+/** The public visit plays a fixed reference. The visitor sets the device volume. */
+export const referenceVolumeCopy = Object.freeze({
+  heading: "Set a comfortable volume",
+  againHeading: "Set your volume again",
+  openLine: "Use your device’s volume controls to make the music comfortable.",
+  hissLine: "Use your device’s volume controls to make the hiss comfortable.",
+  startButton: "Play reference sound",
+  keepButton: "Continue",
+  keptLine: "Keep your system volume unchanged during the test.",
+});
+
 /**
  * The line shown after a calibration is kept when `count` of the visit's `total` rooms cannot
  * reach the anchor cap at this setting (R16.9, D9). With a count of 0 it says every room can.

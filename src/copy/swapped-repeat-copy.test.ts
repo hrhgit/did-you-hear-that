@@ -273,7 +273,7 @@ describe("the swapped repeat's lines", () => {
         unclearReason: null,
       }),
     ).toBe(
-      "Scritch, 4 kHz. Headphones as marked: left ear with the left earpiece, the quietest sound you caught here was 40 dB quieter than your calibration; right ear with the right earpiece, the quietest sound you caught here was 20 dB quieter than your calibration; 20 dB quieter on the left. Headphones swapped: left ear with the right earpiece, the quietest sound you caught here was 40 dB quieter than your calibration; right ear with the left earpiece, the quietest sound you caught here was 20 dB quieter than your calibration; 20 dB quieter on the left. " +
+      "Scritch, 4 kHz. Headphones as marked: left ear with the left earpiece, the estimated level here is 40 dB quieter than your calibration; right ear with the right earpiece, the estimated level here is 20 dB quieter than your calibration; 20 dB quieter on the left. Headphones swapped: left ear with the right earpiece, the estimated level here is 40 dB quieter than your calibration; right ear with the left earpiece, the estimated level here is 20 dB quieter than your calibration; 20 dB quieter on the left. " +
         outcomeLines("followsEar", null).join(" "),
     );
   });

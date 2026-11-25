@@ -216,7 +216,11 @@ describe("visit flow CP4. Answers count against their windows (Universal; R7.6 t
               }
               const windowStartMs = shown.trial.windowStartMs;
               expect(reminder.windowStartMs).toBe(windowStartMs - startMs);
-              const windowEndMs = windowStartMs + responseWindowMs;
+              // A late sound keeps its whole window (headphone-traits R1.5).
+              const windowEndMs =
+                windowStartMs +
+                responseWindowMs +
+                (reminder.timingOffsetMs ?? 0);
               const first = entries.find(
                 (candidate): candidate is ActionEntry =>
                   candidate.kind === "action" &&
@@ -255,7 +259,8 @@ describe("visit flow CP4. Answers count against their windows (Universal; R7.6 t
               continue;
             }
             const windowStartMs = shown.trial.windowStartMs;
-            const windowEndMs = windowStartMs + responseWindowMs;
+            const windowEndMs =
+              windowStartMs + responseWindowMs + (trial.timingOffsetMs ?? 0);
             const given = entries.filter(
               (candidate): candidate is ActionEntry =>
                 candidate.kind === "action" &&

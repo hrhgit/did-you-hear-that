@@ -10,7 +10,13 @@ import {
   paintSweet,
   paintYard,
 } from "./night-paint";
+import { loadJackBody } from "./jack-body";
 import { createSparkPainter } from "./spark-paint";
+import {
+  loadYardBackdrop,
+  paintYardBackdrop,
+  yardBackdrop,
+} from "./yard-backdrop";
 
 /** A side of the room: the side a sound came from. */
 export type RoomSide = "left" | "right";
@@ -191,18 +197,25 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
   const comboCount = make("span", "rhythm-combo-count");
   const comboWord = make("span", "rhythm-combo-word");
   comboWord.textContent = words.comboWord;
+  // The combo stands apart, in the middle over Jack, where the eye already is. The box of the
+  // game names it for a visitor who cannot see it.
   const combo = make("div", "rhythm-combo", [comboCount, comboWord]);
+  combo.setAttribute("aria-hidden", "true");
+  combo.hidden = true;
   const scoreValue = make("span", "rhythm-score-value");
   const scoreWord = make("span", "rhythm-score-word");
   scoreWord.textContent = words.scoreWord;
-  const score = make("div", "rhythm-score", [scoreWord, scoreValue]);
+  // The points a turn won, jumping up from the score and fading. Read out with the score itself.
+  const scoreGain = make("span", "rhythm-score-gain");
+  scoreGain.setAttribute("aria-hidden", "true");
+  const score = make("div", "rhythm-score", [scoreWord, scoreValue, scoreGain]);
   const flameFill = make("span", "rhythm-flame-fill");
   const flame = make("div", "rhythm-flame", [flameFill]);
   const relit = make("p", "rhythm-relit");
   relit.hidden = true;
   const warmUp = make("p", "rhythm-warm-up");
   warmUp.textContent = words.warmUpWord;
-  const hud = make("div", "rhythm-hud", [combo, score, flame, relit, warmUp]);
+  const hud = make("div", "rhythm-hud", [score, flame, relit, warmUp]);
   hud.setAttribute("role", "group");
   hud.hidden = true;
   const pops = {
@@ -215,7 +228,7 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
   }
 
   picture.append(pops.left, pops.right, pops.centre);
-  const element = make("div", "room-scene", [picture, hud]);
+  const element = make("div", "room-scene", [picture, combo, hud]);
   // What the canvas draws, kept as plain attributes so it can be read and tested: who stands in
   // plain view and where, and the last thing a scored turn drew, with a count that tells a new
   // drawing from the one before.
@@ -265,6 +278,7 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
   let shakeAtMs = -1e9;
   let seedCount = 0;
   let comboShown = -1;
+  let scoreShown: number | null = null;
 
   const pop = (
     where: RoomSide | "centre",
@@ -340,9 +354,27 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
       return false;
     }
     yardCtx.scale(ratio, ratio);
-    paintYard(yardCtx, w, h);
+    // The painted night once it has loaded; until then the night as code paints it.
+    const backdrop = yardBackdrop();
+    if (backdrop === null) {
+      paintYard(yardCtx, w, h);
+    } else {
+      paintYardBackdrop(yardCtx, backdrop, 0, 0, w, h, h * groundFraction);
+    }
     return true;
   };
+  if (canPaint(doc)) {
+    // Jack's painted body is drawn every frame once it has loaded; until then, as code paints it.
+    void loadJackBody(doc);
+  }
+  if (canPaint(doc) && yardBackdrop() === null) {
+    void loadYardBackdrop(doc).then((image) => {
+      if (image !== null) {
+        // The next frame lays the yard out again, with the painted night in it.
+        yard = null;
+      }
+    });
+  }
 
   // ─── Painting ──────────────────────────────────────────────────────────────────────────
   const ease = (x: number): number => 1 - (1 - x) ** 3;
@@ -838,6 +870,7 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
         hud.removeAttribute("aria-label");
         flameTarget = 1;
         comboShown = -1;
+        scoreShown = null;
         return;
       }
       hud.hidden = false;
@@ -862,6 +895,12 @@ export function buildRoomScene(doc: Document, words: SceneWords): RoomScene {
       if (scoreValue.textContent !== scoreText) {
         scoreValue.textContent = scoreText;
       }
+      if (scoreShown !== null && standing.score > scoreShown) {
+        // Two names of one animation take turns, so each gain starts it again.
+        scoreGain.textContent = `+${(standing.score - scoreShown).toLocaleString("en-US")}`;
+        score.dataset.gain = score.dataset.gain === "a" ? "b" : "a";
+      }
+      scoreShown = standing.score;
       flameFill.style.setProperty("--flame", String(clamp01(standing.flame)));
       flameTarget = clamp01(standing.flame);
       relit.hidden = standing.relitLine === null;

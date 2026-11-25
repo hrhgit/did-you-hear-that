@@ -264,6 +264,42 @@ describe("savedVisitPayloadJson", () => {
 });
 
 describe("parseSavedVisitPayload", () => {
+  it("keeps a found range in the log and summary and reads other ears without it", () => {
+    const range = { lowDb: -45.2, highDb: -39.5 };
+    const first = visit.visitLog.roomAttempts[0]!;
+    const visitLog: VisitLog = {
+      ...visit.visitLog,
+      roomAttempts: [
+        {
+          ...first,
+          result: { ...first.result!, left: { ...found(-40), ...range } },
+        },
+        ...visit.visitLog.roomAttempts.slice(1),
+      ],
+    };
+    const summary = summarizeVisit(visitLog);
+    const parsed = parseSavedVisitPayload(
+      savedVisitPayloadJson({ ...visit, visitLog, summary }),
+      "full",
+    );
+    expect(parsed?.visitLog.roomAttempts[0]?.result?.left).toMatchObject(range);
+    expect(parsed?.summary.rooms[0]?.left).toMatchObject(range);
+    expect(parsed?.summary.rooms[0]?.right).toEqual(found(-20));
+  });
+
+  it("rejects invalid range endpoints in a summary or log", () => {
+    expect(
+      parsedAfter((p) => {
+        p.summary.rooms[0].left.lowDb = -38;
+      }),
+    ).toBeNull();
+    expect(
+      parsedAfter((p) => {
+        p.visitLog.roomAttempts[0].result.left.highDb = "unknown";
+      }),
+    ).toBeNull();
+  });
+
   it("reads back a payload deep-equal to the JSON round trip of its visit", () => {
     const parsed = parseSavedVisitPayload(savedVisitPayloadJson(visit), "full");
     expect(parsed).toEqual({
@@ -276,6 +312,16 @@ describe("parseSavedVisitPayload", () => {
     });
     expect(isDeepFrozen(parsed)).toBe(true);
   });
+
+  it.each(["quick", "adaptive"])(
+    "retains the %s search method in saved visits",
+    (method) => {
+      const parsed = parsedAfter((payload) => {
+        payload.visitLog.searchMethod = method;
+      });
+      expect(parsed?.visitLog.searchMethod).toBe(method);
+    },
+  );
 
   it("reads a visit marked as a whole, and one judged by another limit", () => {
     expect(markedVisit.summary.visitFalseAlarmRateAboveLimit).toBe(true);
@@ -473,8 +519,8 @@ describe("parseSavedVisitPayload", () => {
       ).toBe(false);
     });
 
-    it.each(["music", "hiss"])(
-      "reads a calibration anchored with the %s and keeps the anchor",
+    it.each(["music", "hiss", "preset"])(
+      "reads a calibration with the %s anchor and keeps it",
       (anchor) => {
         const parsed = parsedAfter(
           () => undefined,

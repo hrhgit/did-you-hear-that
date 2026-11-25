@@ -280,11 +280,12 @@ describe("resultPicture", () => {
           { ...counts, state: "found", thresholdDb: -40 },
           { searchCapDb: 15, floorDb: -70 },
         ),
-        line: "The quietest sound you caught here was 40 dB quieter than your calibration.",
+        line: "The estimated level here is 40 dB quieter than your calibration.",
         reasonLine: null,
         earlier: null,
         valueLabel: "40 dB quieter",
         valueNote: "than your calibration",
+        levelDb: -40,
       });
       expect(first?.left.lightDepthFraction).toBeCloseTo(
         0.1 + (0.8 * 55) / 85,
@@ -361,7 +362,7 @@ describe("resultPicture", () => {
 
     it("describes each floor in words", () => {
       expect(third?.description).toBe(
-        "Squeak, 8 kHz. Left: This room should be visited again. One catch here did not fit with your other answers. Right: The quietest sound you caught here was 30 dB quieter than your calibration. There is no left and right difference to show here, because one side has no level.",
+        "Squeak, 8 kHz. Left: This room should be visited again. One catch here did not fit with your other answers. Right: The estimated level here is 30 dB quieter than your calibration. There is no left and right difference to show here, because one side has no level.",
       );
     });
   });
@@ -391,7 +392,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(0);
       expect(floor?.differenceLabel).toBe("0 dB");
       expect(floor?.differenceLine).toBe(
-        "At this pitch you caught the same level on your left and on your right.",
+        "At this pitch the estimates are the same on your left and right.",
       );
     });
 
@@ -400,7 +401,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(15);
       expect(floor?.differenceLabel).toBe("15 dB quieter on the left");
       expect(floor?.differenceLine).toBe(
-        "At this pitch you caught a sound 15 dB quieter on your left than on your right.",
+        "At this pitch the estimate is 15 dB quieter on your left than on your right.",
       );
     });
 
@@ -409,7 +410,7 @@ describe("resultPicture", () => {
       expect(floor?.rightMinusLeftDb).toBe(-15);
       expect(floor?.differenceLabel).toBe("15 dB quieter on the right");
       expect(floor?.differenceLine).toBe(
-        "At this pitch you caught a sound 15 dB quieter on your right than on your left.",
+        "At this pitch the estimate is 15 dB quieter on your right than on your left.",
       );
     });
   });
@@ -811,7 +812,7 @@ describe("resultPicture", () => {
       const picture = live(visitOf("full", mixedQuick), "2026-11-20");
       expect(picture.kind).toBe("live");
       expect(picture.visitType).toBe("full");
-      expect(picture.heading).toBe("The quietest sounds you caught");
+      expect(picture.heading).toBe("Your listening estimates");
       expect(picture.dateLabel).toBe("20 November 2026");
       expect(picture.visitTypeLabel).toBe("Full visit, 3 rooms");
       expect(picture.imageCaption).toBe(
@@ -901,6 +902,7 @@ describe("resultPicture", () => {
           { ...counts, state: "found", thresholdDb: -30 },
           { searchCapDb: 15, floorDb: hearingMethodConfig.floorDb },
         ),
+        levelDb: -30,
       });
     });
 
@@ -997,6 +999,9 @@ describe("resultPicture", () => {
           expect(shownWing.earlier).toEqual({
             state: shownWing.state,
             outlineDepthFraction: shownWing.lightDepthFraction,
+            ...(shownWing.levelDb === undefined
+              ? {}
+              : { levelDb: shownWing.levelDb }),
           });
         }
       }
@@ -1009,7 +1014,7 @@ describe("resultPicture", () => {
       });
       expect(withEarlier(shownFull, earlier).comparison).toEqual({
         earlierSavedVisitId: "0a1b2c3d",
-        line: "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+        line: "The faint lines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
       });
     });
 
@@ -1107,7 +1112,7 @@ describe("resultPicture", () => {
       const picture = withEarlier(shownFull, earlier);
       expect(picture.comparison).toEqual({
         earlierSavedVisitId: "0a1b2c3e",
-        line: "Your visit of 28 February 2026 with headphones of the same name was unreliable as a whole, so it has no outlines.",
+        line: "Your visit of 28 February 2026 with headphones of the same name was unreliable as a whole, so it is not drawn.",
       });
       for (const floor of picture.floors) {
         expect(floor.left.earlier?.outlineDepthFraction).toBeNull();

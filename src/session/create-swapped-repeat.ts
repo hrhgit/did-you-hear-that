@@ -91,6 +91,9 @@ export interface SwappedRepeatOptions {
   /** Draws the engine seed from the visit's source when the room starts. */
   readonly drawEngineSeed: () => number;
   readonly latestOffset: LatestOffset;
+  /** The visit's timing evidence, held at the values reached when counting ended. */
+  readonly timingOffsetMs?: () => number;
+  readonly baselineMs?: () => number | undefined;
   readonly emit: (event: SwappedTrialScoredEvent) => void;
   /** A play was refused `notRunning`: the flow acts as on a stop report with this reason. */
   readonly notRunning: (reason: StopReason) => void;
@@ -528,12 +531,12 @@ export function createSwappedRepeat(
         startedAtMs: timer.now(),
       });
       const search = createThresholdSearch({
+        method: log.searchMethod,
         settings: {
           ...hearingMethodConfig,
           capRelativeToAnchorDb: searchCapDb,
           floorDb: searchFloorDb,
           // Held at or above the floor, as the flow holds the first run's (create-visit-flow.ts).
-          // Each ear's own start from practice replaces it (audible-start task 11).
           startingLevelDb: Math.max(
             hearingMethodConfig.startingLevelDb,
             searchFloorDb,
@@ -552,6 +555,8 @@ export function createSwappedRepeat(
         soundRandom: options.soundRandom,
         recorder: runRecorder,
         latestOffset: options.latestOffset,
+        timingOffsetMs: options.timingOffsetMs,
+        baselineMs: options.baselineMs,
         scored: (entry) => {
           const trial = scoredTrialOf(entry);
           const reaction = reactionTo(entry);

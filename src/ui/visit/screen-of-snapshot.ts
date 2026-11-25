@@ -1,6 +1,9 @@
-import { audioOutputConfig } from "../../config/audio-output-config";
 import type { GhostSoundId } from "../../config/sound-id";
-import { calibrationCopy, roomsShortLine } from "../../copy/calibration-copy";
+import {
+  calibrationCopy,
+  referenceVolumeCopy,
+  roomsShortLine,
+} from "../../copy/calibration-copy";
 import {
   creatureCardLabel,
   creatureCaughtCountLine,
@@ -56,23 +59,12 @@ export type NoticeAction =
 /** The calibration sheet. */
 export interface CalibrationScreen {
   readonly heading: string;
-  /** What to read before using the control, in order, without the line about the keys. */
+  /** The instruction for setting a comfortable device volume. */
   readonly introLines: readonly string[];
-  /** The line that names the keys, shown under the control, or null. */
-  readonly keysLine: string | null;
-  /** Whether the calibration sound has been started, so that the control can be used. */
+  /** Whether the fixed reference is playing. */
   readonly started: boolean;
   /** Whether a setting has been played, so that it can be kept. */
   readonly canKeep: boolean;
-  readonly canGoLouder: boolean;
-  /** The control's ends and its step, in dB of the setting. */
-  readonly bottomDb: number;
-  readonly topDb: number;
-  readonly stepDb: number;
-  /** Where the visitor has put the control: the thumb of the slider. */
-  readonly targetDb: number;
-  /** Where the sound has got to between the bottom (0) and the top (1), or null before it plays. */
-  readonly settingFraction: number | null;
   /** What the house says about the setting, or null while only the opening lines apply. */
   readonly statusLine: string | null;
 }
@@ -110,13 +102,12 @@ export interface NoticeScreen {
 }
 
 /**
- * The words of the roll call and of the counting, under the lantern, in the room, which stays in
- * full view (audible-start, light plan; one-room design.md, "The roll call"). The line that a
- * sound is playing is shown only for a practice sound, which counts for nothing, and never names
- * its side. Through the counting the line that it counts stands still, so it changes with no trial.
+ * The words of the roll call, under the lantern, in the room, which stays in full view
+ * (audible-start, light plan; one-room design.md, "The roll call"). The line that a sound is
+ * playing never names its side. Once the room counts there are no words: the combo stands there.
  */
 export interface PracticeScreen {
-  /** Over the practice, or null once the room counts. */
+  /** Over the practice. */
   readonly heading: string | null;
   readonly lines: readonly string[];
   /** Said while a practice sound plays, or null. */
@@ -288,7 +279,7 @@ export interface Screen {
   readonly notice: NoticeScreen | null;
   readonly replay: ReplayScreen | null;
   readonly swap: SwapScreen | null;
-  /** The words of the practice and the counting in a room, or null. */
+  /** The words of the practice in a room, or null once it counts. */
   readonly practice: PracticeScreen | null;
   /** The score, the combo and Jack's flame of a room that counts, or null. */
   readonly chase: ChaseScreen | null;
@@ -632,9 +623,7 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
     case "entry":
       return { ...base, sheet: "frontDoor" };
     case "calibration": {
-      const { playedSettingDb, controlBottomDb, controlTopDb } = snapshot;
-      const span = controlTopDb - controlBottomDb;
-      const introLines = snapshot.introLines ?? [calibrationCopy.openLine];
+      const introLines = snapshot.introLines ?? [referenceVolumeCopy.openLine];
       return {
         ...base,
         sheet: "calibration",
@@ -647,25 +636,9 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
           introLines: introLines.filter(
             (line) => line !== calibrationCopy.keysLine,
           ),
-          keysLine: introLines.includes(calibrationCopy.keysLine)
-            ? calibrationCopy.keysLine
-            : null,
           started: snapshot.playing,
-          canKeep: snapshot.playing && playedSettingDb !== null,
-          canGoLouder: snapshot.playing && !snapshot.atTop,
-          bottomDb: controlBottomDb,
-          topDb: controlTopDb,
-          stepDb: audioOutputConfig.calibrationSettingStepDb,
-          targetDb:
-            snapshot.targetSettingDb ?? playedSettingDb ?? controlBottomDb,
-          settingFraction:
-            playedSettingDb === null || !(span > 0)
-              ? null
-              : Math.min(
-                  1,
-                  Math.max(0, (playedSettingDb - controlBottomDb) / span),
-                ),
-          // The opening lines stand above the control already.
+          canKeep: snapshot.playing && snapshot.playedSettingDb !== null,
+          // The opening lines stand above the button already.
           statusLine: introLines.includes(snapshot.line) ? null : snapshot.line,
         },
       };
@@ -723,17 +696,16 @@ export function screenOfSnapshot(snapshot: VisitSnapshot): Screen {
               },
         chase: chaseScreenOf(snapshot.rhythm ?? null, snapshot.chase ?? null),
         beat: snapshot.beat ?? null,
+        // Once the room counts the words go, and the middle of the yard is the combo's.
         practice:
-          practice === undefined
+          practice === undefined || !rollCall
             ? null
             : {
-                heading: rollCall ? practice.heading : null,
+                heading: practice.heading,
                 lines: practice.lines,
-                // Never while counting: the line would tell when a counted sound plays.
-                soundPlayingLine:
-                  practice.soundPlaying && rollCall
-                    ? practice.soundPlayingLine
-                    : null,
+                soundPlayingLine: practice.soundPlaying
+                  ? practice.soundPlayingLine
+                  : null,
               },
       };
     }

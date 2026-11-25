@@ -28,7 +28,7 @@ import {
 } from "./room-copy";
 import * as rules from "./rules-copy";
 import { rulesCopy } from "./rules-copy";
-import { calibrationCopy } from "./calibration-copy";
+import { referenceVolumeCopy } from "./calibration-copy";
 import { leavingCopy } from "./leaving-copy";
 import * as visit from "./visit-copy";
 import { visitCopy } from "./visit-copy";
@@ -86,13 +86,13 @@ describe("the house interface's copy", () => {
   );
 
   it("heads the calibration screens with the music's headings until the page reads the snapshot's (audible-start D32)", () => {
-    expect(visitCopy.calibrationHeading).toBe(calibrationCopy.heading);
-    expect(visitCopy.recalibrateHeading).toBe(calibrationCopy.againHeading);
+    expect(visitCopy.calibrationHeading).toBe(referenceVolumeCopy.heading);
+    expect(visitCopy.recalibrateHeading).toBe(referenceVolumeCopy.againHeading);
   });
 
-  it("says that a changed audio device means calibrating again, without naming the calibration sound", () => {
+  it("asks for another headphone check after a changed audio device", () => {
     expect(leavingCopy.pauseLines.deviceChanged).toBe(
-      "Your audio device changed, so the visit paused. You will calibrate again, and then this room starts over.",
+      "Your audio device changed. Check left and right again to continue.",
     );
     expect(leavingCopy.pauseLines.deviceChanged).not.toMatch(/hiss|music/i);
   });

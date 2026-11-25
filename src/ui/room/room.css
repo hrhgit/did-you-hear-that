@@ -1728,11 +1728,24 @@
   display: none;
 }
 
+/* The combo, in the middle of the yard over Jack, where the eye already is. */
 .rhythm-combo {
+  position: absolute;
+  top: calc(var(--visit-bar) + 0.75rem);
+  left: 50%;
   display: grid;
   justify-items: center;
   line-height: 1;
+  color: #fff3dc;
+  font-variant-numeric: lining-nums tabular-nums;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 70%);
+  transform: translateX(-50%);
+  pointer-events: none;
   transition: opacity 0.3s ease;
+}
+
+.rhythm-combo[hidden] {
+  display: none;
 }
 
 .rhythm-combo[data-combo="none"] {
@@ -1740,7 +1753,7 @@
 }
 
 .rhythm-combo-count {
-  font-size: clamp(2.25rem, 6vw, 3.75rem);
+  font-size: clamp(3rem, 8vw, 5rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: #ffd27a;
@@ -1787,6 +1800,90 @@
   align-items: baseline;
   font-size: 1.125rem;
   font-weight: 700;
+}
+
+/* The points a turn won jump up out of the score and fade; the score itself gives a little kick. */
+.rhythm-score {
+  position: relative;
+}
+
+/* Out in the open sky to the left of the score, clear of the flame under it. */
+.rhythm-score-gain {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 0.6rem);
+  color: #ffd27a;
+  font-size: 1.125rem;
+  font-weight: 800;
+  white-space: nowrap;
+  text-shadow:
+    0 0 8px rgb(255 160 40 / 70%),
+    0 2px 6px rgb(0 0 0 / 80%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rhythm-score[data-gain="a"] .rhythm-score-gain {
+  animation: rhythm-gain-a 0.9s ease-out both;
+}
+
+.rhythm-score[data-gain="b"] .rhythm-score-gain {
+  animation: rhythm-gain-b 0.9s ease-out both;
+}
+
+.rhythm-score[data-gain="a"] .rhythm-score-value {
+  animation: rhythm-bump-a 0.28s ease-out;
+}
+
+.rhythm-score[data-gain="b"] .rhythm-score-value {
+  animation: rhythm-bump-b 0.28s ease-out;
+}
+
+.rhythm-score-value {
+  display: inline-block;
+  transform-origin: right center;
+}
+
+@keyframes rhythm-gain-a {
+  0% {
+    opacity: 0;
+    transform: translateY(0.4rem) scale(0.7);
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(-0.2rem) scale(1.15);
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-1.6rem);
+  }
+}
+
+@keyframes rhythm-gain-b {
+  0% {
+    opacity: 0;
+    transform: translateY(0.4rem) scale(0.7);
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(-0.2rem) scale(1.15);
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-1.6rem);
+  }
 }
 
 .rhythm-score-word {
@@ -1906,14 +2003,33 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rhythm-pop-word,
-  .rhythm-combo-count {
+  .rhythm-combo-count,
+  .rhythm-score-value {
     animation: none !important;
+  }
+
+  /* Without motion the gain shows in place for a moment and fades. */
+  .rhythm-score[data-gain] .rhythm-score-gain {
+    animation-name: rhythm-gain-still !important;
+  }
+
+  @keyframes rhythm-gain-still {
+    0%,
+    70% {
+      opacity: 1;
+      transform: none;
+    }
+
+    100% {
+      opacity: 0;
+      transform: none;
+    }
   }
 }
 
 /*
- * A narrow page standing up: the display is too tall to stand beside the words, so it lies in one
- * row across the top under the bar, and the words come down under it.
+ * A narrow page standing up: the points and the flame lie in one row across the top under the bar,
+ * and the combo stands under them in the middle.
  */
 @media (max-width: 40rem) and (orientation: portrait) {
   .visit {
@@ -1923,15 +2039,19 @@
   .rhythm-hud {
     left: 0.75rem;
     right: 0.75rem;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     justify-items: stretch;
     column-gap: 0.75rem;
     row-gap: 0.25rem;
   }
 
+  .rhythm-combo {
+    top: calc(var(--visit-bar) + 2.5rem);
+  }
+
   .rhythm-combo-count {
-    font-size: 1.75rem;
+    font-size: 2.5rem;
   }
 
   .rhythm-combo-word {
@@ -1940,19 +2060,19 @@
   }
 
   .rhythm-score {
-    flex-direction: column;
-    gap: 0;
-    align-items: center;
+    justify-self: start;
     font-size: 1rem;
+  }
+
+  /* The score stands at the left edge here, so its gain jumps up on its right. */
+  .rhythm-score-gain {
+    right: auto;
+    left: calc(100% + 0.6rem);
   }
 
   .rhythm-flame {
     justify-self: end;
     width: clamp(5rem, 26vw, 7rem);
-  }
-
-  .rhythm-score {
-    justify-self: center;
   }
 
   .rhythm-relit,
@@ -1961,5 +2081,16 @@
     justify-self: end;
     min-width: 0;
     max-width: 100%;
+  }
+}
+
+/* A phone on its side: little height, so the combo is smaller and sits close under the bar. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .rhythm-combo {
+    top: calc(var(--visit-bar) + 0.25rem);
+  }
+
+  .rhythm-combo-count {
+    font-size: 2.25rem;
   }
 }

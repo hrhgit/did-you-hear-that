@@ -1,12 +1,12 @@
 import { hearingMethodConfig } from "../../config/hearing-method-config";
 import type { GhostSoundId } from "../../config/sound-id";
 import { leavingCopy } from "../../copy/leaving-copy";
+import { focusFloorLabel, resultFocusCopy } from "../../copy/result-focus-copy";
 import {
-  focusFloorLabel,
-  pictureKeyCopy,
-  resultFocusCopy,
-} from "../../copy/result-focus-copy";
-import { differenceLabel } from "../../copy/result-lines";
+  differenceLabel,
+  levelRangeLabel,
+  levelRangeLine,
+} from "../../copy/result-lines";
 import {
   chaseScoreCopy,
   longestRowLine,
@@ -14,8 +14,15 @@ import {
   roomCaughtLine,
   totalCaughtLine,
 } from "../../copy/result-page-copy";
+import {
+  balanceOffsetLine,
+  delayLine,
+  headphoneTraitsCopy,
+  quietCutLine,
+} from "../../copy/headphone-traits-copy";
 import { roomNames } from "../../copy/room-copy";
 import { chaseScoreOf } from "../../session/chase-score";
+import { headphoneTraitsOf } from "../../session/headphone-traits";
 import {
   resultFocus,
   type FocusPointKind,
@@ -34,27 +41,14 @@ import type {
   VisitToSave,
 } from "../../session/result-page-types";
 import { drawCreature } from "../room/creature-art";
-import { drawResultSection } from "./draw-result-section";
-import { attachResultYard } from "./result-yard";
+import { resultCurveCopy } from "../../copy/result-curve-copy";
+import { resultCurve } from "../../session/result-curve";
+import { drawResultCurve } from "./draw-result-curve";
 import { savePictureAsImage } from "./save-picture";
 import { repeatComparisonBlock } from "./show-repeat-comparison";
 
-/** The seed of the pencil that draws the result, so the house looks the same every time. */
-const resultDrawingSeed = 1887;
-
 /** How long a floor's words glow after the focus card took the visitor to them. */
 const calledGlowMs = 1800;
-
-/** The marks of the drawing, in the order the key under it lists them. */
-type PictureMark = "light" | "creature" | "dark" | "hatched" | "earlier";
-
-const pictureMarks: readonly PictureMark[] = [
-  "light",
-  "creature",
-  "dark",
-  "hatched",
-  "earlier",
-];
 
 /** What the result view is given. Everything that reads or keeps a visit comes in from outside. */
 export interface ResultViewOptions {
@@ -179,20 +173,26 @@ export function createResultView(options: ResultViewOptions): ResultView {
     scoreRooms,
   ]);
 
-  // The picture, and the control that saves it as an image.
-  const drawing = make("div", "result-drawing");
+  // What the visit says about the headphones at this volume (headphone-traits R6): one row for
+  // each trait the visit could tell, its reason in small text.
+  const traitRows = make("dl", "result-traits-rows");
+  const traits = make("section", "result-traits", [
+    make("h2", "result-traits-heading", [headphoneTraitsCopy.heading]),
+    traitRows,
+  ]);
+
+  // The picture (result-curve design.md "Redesign, 2026-11-25"): the yard at night, each
+  // pitch's creature on the grass and both ears' levels in the sky above it, its key drawn in;
+  // one small note, and the control that saves it as an image.
+  const drawing = make("div", "result-curve-chart");
   drawing.setAttribute("role", "img");
-  // What each mark of the drawing means: only the marks the picture holds.
-  const pictureKey = make("ul", "result-key");
-  pictureKey.setAttribute("aria-label", pictureKeyCopy.label);
   const savePictureButton = button(resultPageCopy.savePictureButton);
   const pictureStatus = status();
-  // The picture stands in the yard of the room the visit was played in.
-  const frame = make("div", "result-frame", [drawing]);
-  const repaintYard = attachResultYard(doc, frame, drawing);
-  const figure = make("div", "result-figure", [
-    frame,
-    pictureKey,
+  const figure = make("figure", "result-figure result-curve", [
+    make("div", "result-curve-frame", [drawing]),
+    make("figcaption", "result-curve-foot", [
+      make("p", "result-curve-note", [resultCurveCopy.shapeNote]),
+    ]),
     make("div", "result-figure-controls", [savePictureButton, pictureStatus]),
   ]);
 
@@ -295,6 +295,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
       figure,
       limits,
       score,
+      traits,
       make("div", "result-words", [floorList, sharedFloorLine, comparisonLine]),
       keep,
       saved,
@@ -314,19 +315,6 @@ export function createResultView(options: ResultViewOptions): ResultView {
   let shownPicture: ResultPicture | null = null;
   /** What the drawing on the page was made from, so that it is redrawn only when that changes. */
   let drawnKey: string | null = null;
-
-  /** Everything of a picture that the drawing shows. */
-  const drawingKeyOf = (picture: ResultPicture): string =>
-    JSON.stringify(
-      picture.floors.map((floor) => [
-        floor.room.roomId,
-        ...[floor.left, floor.right].map((wing) => [
-          wing.state,
-          wing.lightDepthFraction,
-          wing.earlier?.outlineDepthFraction ?? null,
-        ]),
-      ]),
-    );
 
   const pictureNow = (list: SavedVisitList): ResultPicture | null => {
     if (shownSaved !== null) {
@@ -379,11 +367,20 @@ export function createResultView(options: ResultViewOptions): ResultView {
     wing: PictureWing,
   ): HTMLElement => {
     // The level large and its note small. Read out, it is the wing's line in full.
+    const value = shownOnly(make("p", "result-wing-value", [wing.valueLabel]));
+    const line = make("p", "result-wing-line", [spoken(wing.line)]);
+    if (wing.range !== undefined) {
+      const { lowDb, highDb } = wing.range;
+      value.append(
+        make("span", "result-wing-range", [levelRangeLabel(lowDb, highDb)]),
+      );
+      line.append(spoken(levelRangeLine(lowDb, highDb)));
+    }
     const words = make("div", "result-wing", [
       make("span", "result-wing-side", [label]),
-      shownOnly(make("p", "result-wing-value", [wing.valueLabel])),
+      value,
       shownOnly(make("p", "result-wing-note", [wing.valueNote])),
-      make("p", "result-wing-line", [spoken(wing.line)]),
+      line,
     ]);
     words.dataset.state = wing.state;
     words.dataset.side = side;
@@ -399,14 +396,14 @@ export function createResultView(options: ResultViewOptions): ResultView {
   const floorItems = new Map<GhostSoundId, HTMLElement>();
   let calledTimer: number | null = null;
 
-  /** Lights one floor of the drawing and dims the others, or lights them all again for null. */
+  /** Puts the moonbeam on one pitch of the drawing and dims the others, or none for null. */
   const pickFloor = (roomId: GhostSoundId | null): void => {
     const section = drawing.querySelector("svg");
     if (section === null) {
       return;
     }
     section.setAttribute("data-picking", roomId === null ? "false" : "true");
-    for (const floor of section.querySelectorAll(".result-floor")) {
+    for (const floor of section.querySelectorAll(".result-curve-column")) {
       floor.setAttribute(
         "data-picked",
         floor.getAttribute("data-room") === roomId ? "true" : "false",
@@ -587,57 +584,6 @@ export function createResultView(options: ResultViewOptions): ResultView {
     );
   };
 
-  /** The marks a picture holds. */
-  const marksOf = (picture: ResultPicture): ReadonlySet<PictureMark> => {
-    const marks = new Set<PictureMark>();
-    for (const floor of picture.floors) {
-      for (const wing of [floor.left, floor.right]) {
-        if (wing.lightDepthFraction === null) {
-          marks.add("hatched");
-        } else if (wing.lightDepthFraction > 0) {
-          marks.add("light");
-          marks.add("creature");
-        }
-        if (wing.state === "worseThanCap") {
-          marks.add("dark");
-        }
-        if ((wing.earlier?.outlineDepthFraction ?? 0) > 0) {
-          marks.add("earlier");
-        }
-      }
-    }
-    return marks;
-  };
-
-  const drawKey = (picture: ResultPicture): void => {
-    const marks = marksOf(picture);
-    // The creature in the key is the first one the drawing shows, from the top of the house.
-    const firstLit = [...picture.floors]
-      .reverse()
-      .find((floor) =>
-        [floor.left, floor.right].some(
-          (wing) => (wing.lightDepthFraction ?? 0) > 0,
-        ),
-      )?.room.roomId;
-    pictureKey.replaceChildren(
-      ...pictureMarks
-        .filter((mark) => marks.has(mark))
-        .map((mark) => {
-          const swatch =
-            mark === "creature" && firstLit !== undefined
-              ? creatureBadge(firstLit, "result-key-swatch")
-              : shownOnly(make("span", "result-key-swatch"));
-          const item = make("li", "result-key-item", [
-            swatch,
-            make("span", "", [pictureKeyCopy[mark]]),
-          ]);
-          item.dataset.mark = mark;
-          return item;
-        }),
-    );
-    pictureKey.hidden = marks.size === 0;
-  };
-
   /** Draws the picture and the line about the earlier visit. Called on every change of the name. */
   const drawPicture = (list: SavedVisitList, entering: boolean): void => {
     const picture = pictureNow(list);
@@ -647,20 +593,16 @@ export function createResultView(options: ResultViewOptions): ResultView {
       drawnKey = null;
       return;
     }
-    const key = drawingKeyOf(picture);
+    const curve = resultCurve(picture);
+    const standingOut = new Map(
+      focusOf(picture)?.points.map(
+        (point) => [point.roomId, point.kind] as const,
+      ) ?? [],
+    );
+    const key = JSON.stringify([curve, [...standingOut]]);
     if (entering || key !== drawnKey) {
       drawnKey = key;
-      drawing.replaceChildren(
-        drawResultSection(doc, picture, {
-          seed: resultDrawingSeed,
-          wingLabels: {
-            left: resultPageCopy.leftLabel,
-            right: resultPageCopy.rightLabel,
-          },
-          entering,
-        }),
-      );
-      repaintYard();
+      drawing.replaceChildren(drawResultCurve(doc, curve, { standingOut }));
     }
     const typedSomething = shownSaved === null && nameInput.value.trim() !== "";
     setLine(
@@ -739,6 +681,52 @@ export function createResultView(options: ResultViewOptions): ResultView {
     }
   };
 
+  /** The headphone rows of the shown visit; the section is hidden when it can tell nothing. */
+  function drawTraits(log: VisitToSave["visitLog"] | null): void {
+    const found = log === null ? null : headphoneTraitsOf(log);
+    const rows: HTMLElement[] = [];
+    const row = (label: string, value: string, note: string | null): void => {
+      rows.push(
+        make("div", "result-traits-row", [
+          make("dt", "result-traits-label", [label]),
+          make("dd", "result-traits-value", [value]),
+          ...(note === null
+            ? []
+            : [make("dd", "result-traits-note visit-quiet", [note])]),
+        ]),
+      );
+    };
+    if (found?.delay) {
+      const eased = (log?.trials ?? []).some(
+        (trial) => trial.status === "scored" && (trial.timingOffsetMs ?? 0) > 0,
+      );
+      row(
+        headphoneTraitsCopy.delayLabel,
+        delayLine(found.delay.roundedMs, found.delay.band),
+        eased ? headphoneTraitsCopy.delayEasedNote : null,
+      );
+    }
+    if (found?.quietCut) {
+      row(
+        headphoneTraitsCopy.quietCutLabel,
+        quietCutLine(found.quietCut.levelDb),
+        headphoneTraitsCopy.quietCutNote,
+      );
+    }
+    if (found?.balance) {
+      const balance = found.balance;
+      row(
+        headphoneTraitsCopy.balanceLabel,
+        balance.kind === "even"
+          ? headphoneTraitsCopy.balanceEvenLine
+          : balanceOffsetLine(balance.quieterSide, balance.offsetDb),
+        balance.kind === "even" ? null : headphoneTraitsCopy.balanceOffsetNote,
+      );
+    }
+    traitRows.replaceChildren(...rows);
+    traits.hidden = rows.length === 0;
+  }
+
   /** Draws everything from what the archive holds now. */
   function drawAll(entering: boolean): void {
     const list = archive.list();
@@ -756,7 +744,6 @@ export function createResultView(options: ResultViewOptions): ResultView {
     }
     const focusNow = focusOf(picture);
     drawFocus(focusNow);
-    drawKey(picture);
     heading.textContent = picture.heading;
     drawing.setAttribute("aria-label", picture.heading);
     dateLabel.textContent = picture.dateLabel;
@@ -796,6 +783,7 @@ export function createResultView(options: ResultViewOptions): ResultView {
         ),
       );
     }
+    drawTraits(shownLog);
     limitsHeading.textContent = picture.limitsStatement.heading;
     limitsList.replaceChildren(
       ...picture.limitsStatement.sentences.map((sentence) =>

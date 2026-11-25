@@ -33,8 +33,7 @@ export interface WingWords {
 
 const unreliableReasonLines: Readonly<Record<UnreliableReasonName, string>> =
   Object.freeze({
-    trialLimit:
-      "Your answers here had not settled when the house ran out of tries.",
+    trialLimit: "The check ended before your answers settled.",
     inconsistentCatch: "One catch here did not fit with your other answers.",
     falseAlarmRate: "In this room you often answered when I made no sound.",
     levelNotAsAsked:
@@ -155,7 +154,7 @@ export function wingLine(wing: WingWords): string {
   requireWing(wing);
   switch (wing.state) {
     case "found":
-      return `The quietest sound you caught here was ${relativeLevelLabel(wing.thresholdDb as number)}.`;
+      return `The estimated level here is ${relativeLevelLabel(wing.thresholdDb as number)}.`;
     case "betterThanFloor":
       return "Quieter than this house can whisper.";
     case "worseThanCap":
@@ -201,6 +200,19 @@ export function wingValue(wing: WingWords): WingValueWords {
   }
 }
 
+/** Whole decibels relative to the calibration, shown as a span of magnitudes. */
+export function levelRangeLabel(lowDb: number, highDb: number): string {
+  const low = Math.abs(Math.round(lowDb));
+  const high = Math.abs(Math.round(highDb));
+  const first = lowDb <= 0 && highDb >= 0 ? 0 : Math.min(low, high);
+  return `${String(first)}–${String(Math.max(low, high))}`;
+}
+
+/** The spoken form keeps the direction relative to the calibration at each end. */
+export function levelRangeLine(lowDb: number, highDb: number): string {
+  return `The range runs from ${relativeLevelLabel(lowDb)} to ${relativeLevelLabel(highDb)}.`;
+}
+
 /** Why a wing is unreliable, in one line. */
 export function unreliableReasonLine(reason: UnreliableReasonName): string {
   requireReason(reason);
@@ -228,11 +240,11 @@ export function differenceLine(rightMinusLeftDb: number | null): string {
   }
   const whole = wholeDifference(rightMinusLeftDb);
   if (whole === 0) {
-    return "At this pitch you caught the same level on your left and on your right.";
+    return "At this pitch the estimates are the same on your left and right.";
   }
   return whole > 0
-    ? `At this pitch you caught a sound ${String(whole)} dB quieter on your left than on your right.`
-    : `At this pitch you caught a sound ${String(-whole)} dB quieter on your right than on your left.`;
+    ? `At this pitch the estimate is ${String(whole)} dB quieter on your left than on your right.`
+    : `At this pitch the estimate is ${String(-whole)} dB quieter on your right than on your left.`;
 }
 
 /** The offer of the swapped repeat on a floor whose left and right are this far apart. */

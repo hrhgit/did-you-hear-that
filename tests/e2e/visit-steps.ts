@@ -1,7 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { audioOutputConfig } from "../../src/config/audio-output-config";
 import type { GhostSoundId } from "../../src/config/sound-id";
-import { calibrationCopy } from "../../src/copy/calibration-copy";
 import {
   creatureIntroLine,
   oneRoomCopy,
@@ -17,8 +15,6 @@ import { visitCopy } from "../../src/copy/visit-copy";
 // The steps from the front door into the one room, shared by the tests that walk a visit on the
 // public page.
 
-const { calibrationSettingKeepMinDb } = audioOutputConfig;
-
 export const heading = (page: Page, name: string) =>
   page.getByRole("heading", { level: 1, name });
 export const button = (page: Page, name: string) =>
@@ -27,40 +23,9 @@ export const button = (page: Page, name: string) =>
 export const quickVisit = (page: Page) =>
   page.getByRole("button", { name: frontDoorCopy.choices.full.button });
 
-const escaped = (text: string): string =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * The calibration heading, whichever sound the browser could play: the music, or the hiss where
- * this browser cannot decode the music.
- */
-export const calibrationHeading = (page: Page) =>
-  page.getByRole("heading", {
-    level: 1,
-    name: new RegExp(
-      `^(${escaped(calibrationCopy.heading)}|${escaped(calibrationCopy.hiss.heading)})$`,
-    ),
-  });
-
-/** The calibration control, which is named by the heading of its sheet. */
-export const calibrationSlider = (page: Page) => page.getByRole("slider");
-
-/** Chooses the short visit and drags the control to the lowest setting that can be kept. */
-export async function calibrate(page: Page): Promise<void> {
+export async function enterHouse(page: Page): Promise<void> {
   await quickVisit(page).click();
-  await expect(calibrationHeading(page)).toBeVisible();
-  await button(page, calibrationCopy.startButton).click();
-  const slider = calibrationSlider(page);
-  await expect(slider).toBeVisible();
-  await slider.fill(String(calibrationSettingKeepMinDb));
-  // The sound follows the control a little at a time, so it takes some seconds to reach the
-  // setting asked for. Until then the house does not keep the setting.
-  await expect(async () => {
-    await button(page, calibrationCopy.keepButton).click();
-    await expect(heading(page, visitCopy.headphoneCheckHeading)).toBeVisible({
-      timeout: 400,
-    });
-  }).toPass({ timeout: 30_000 });
+  await expect(heading(page, visitCopy.headphoneCheckHeading)).toBeVisible();
 }
 
 /**
@@ -105,7 +70,7 @@ export const creatureCards = (page: Page) =>
  * makes its sound and nothing counts yet.
  */
 export async function enterRoom(page: Page): Promise<void> {
-  await calibrate(page);
+  await enterHouse(page);
   await checkHeadphones(page);
   await button(page, rulesCopy.enterButton).click();
   await expect(roomPicture(page)).toBeVisible();

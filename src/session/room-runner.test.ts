@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { createManualTimer } from "../config/manual-timer";
@@ -111,6 +111,7 @@ function scriptedSearch(
   return {
     responses,
     current: step,
+    earEstimate: () => null,
     respond(response) {
       if (responses.length >= trials.length) {
         throw new Error("The scripted search has finished.");
@@ -887,6 +888,58 @@ function mixedOn(
 }
 
 describe("createMixedRoomRunner (one-room, the mixed runner)", () => {
+  it("passes the turn's net answer time and only estimates one octave away or on the other ear", async () => {
+    const shell = await calibratedShell();
+    const first = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+    const second = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+    const third = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+    const respond = vi.fn(second.respond);
+    const found = (thresholdDb: number) => ({
+      ...counts,
+      state: "found" as const,
+      thresholdDb,
+    });
+    let timingOffsetMs = 90;
+    const run = mixedOn(
+      shell,
+      [
+        { ...first, earEstimate: () => -50 },
+        {
+          ...second,
+          respond,
+          earEstimate: (ear) => (ear === "right" ? -25 : null),
+        },
+        { ...third, earEstimate: (ear) => (ear === "left" ? -34 : -28) },
+      ],
+      scriptedTurns([0.5, 0]),
+      {
+        overrides: {
+          timingOffsetMs: () => timingOffsetMs,
+          baselineMs: () => 275,
+          earlierRooms: [
+            {
+              frequencyHz: 2000,
+              result: {
+                left: found(-18),
+                right: { ...counts, state: "betterThanFloor" },
+              },
+            },
+          ],
+        },
+      },
+    );
+    run.runner.start();
+    run.advance(1500);
+    timingOffsetMs = 200;
+    run.advanceTo(run.presented[0]!.windowStartMs + 690);
+    run.runner.answer("left");
+    expect(respond).toHaveBeenCalledExactlyOnceWith("left", "perfect", {
+      netAnswerMs: 600,
+      baselineMs: 275,
+      steering: { centreDb: -26.5, spreadDb: 12 },
+    });
+  });
+
   it("takes the turns the source draws, and gives each trial to its own search, sound and room", async () => {
     const shell = await calibratedShell();
     const first = scriptedSearch([
@@ -1571,52 +1624,60 @@ describe("createMixedRoomRunner, the time limit of the counting (2026-11-20)", (
     expect(run.plays).toHaveLength(0);
   });
 
-  it("lets a trial in its window be decided first, then ends the run instead of asking for another", async () => {
+  it("ends during a response window without counting the unfinished trial", async () => {
     const shell = await calibratedShell();
-    const first = cuttableSearch(manyTrials(1000));
+    const first = cuttableSearch([soundTrial(1, "left", -25, 1000)]);
     const second = cuttableSearch(manyTrials(1000));
     const run = mixedOn(
       shell,
       [first.search, second.search],
       scriptedTurns([0, 0, 0]),
-      { overrides: { timeLimitMs: 1200 } },
+      { overrides: { timeLimitMs: 2700 } },
     );
     run.runner.start();
     run.advance(1000);
     expect(run.runner.state()).toBe("presented");
-    run.advance(200);
-    // The limit has passed, and the window of the trial under way is still open.
-    expect(run.runner.state()).toBe("presented");
-    expect(run.events).toEqual([]);
-    run.advance(100);
+    run.advance(500);
     run.runner.answer("left");
+    run.advance(1199);
+    expect(run.runner.state()).toBe("presented");
+    expect(shell.timer.now()).toBeGreaterThan(run.presented[1]!.windowStartMs);
+    expect(shell.timer.now()).toBeLessThan(run.presented[1]!.windowEndMs);
+    run.advance(1);
     expect(run.runner.state()).toBe("finished");
+    run.runner.answer("left");
     expect(run.events).toEqual([
       "scored:corridor:1",
       "trackFinished:corridor",
       "trackFinished:stairs",
       "finished",
     ]);
-    // The search that had the trial was given its answer and then cut off; the other was only cut off.
     expect(first.search.responses).toEqual(["left"]);
-    expect(first.cutOffs.count).toBe(1);
+    expect(first.cutOffs.count).toBe(0);
+    expect(second.search.responses).toEqual([]);
     expect(second.cutOffs.count).toBe(1);
+    expect(run.log().trials.map(({ status }) => status)).toEqual([
+      "scored",
+      "discarded",
+    ]);
     run.advance(60_000);
-    expect(run.plays).toHaveLength(1);
+    expect(run.plays).toHaveLength(2);
   });
 
-  it("ends the run when the window of the last trial closes unanswered", async () => {
+  it("ends before a scheduled sound starts when its response window would open too late", async () => {
     const shell = await calibratedShell();
     const only = cuttableSearch(manyTrials(1000));
     const run = mixedOn(shell, [only.search], scriptedTurns([0]), {
-      overrides: { timeLimitMs: 1100 },
+      overrides: { timeLimitMs: 1001 },
     });
     run.runner.start();
     run.advance(1000);
     expect(run.runner.state()).toBe("presented");
-    run.advance(responseWindowMs + scheduleLeadMs + 500);
+    expect(shell.timer.now() + 1).toBeLessThan(run.presented[0]!.windowStartMs);
+    run.advance(1);
     expect(run.runner.state()).toBe("finished");
-    expect(only.search.responses).toEqual(["none"]);
+    expect(only.search.responses).toEqual([]);
+    expect(run.log().trials[0]?.status).toBe("discarded");
     expect(only.cutOffs.count).toBe(1);
     expect(run.events.at(-1)).toBe("finished");
   });
@@ -1642,7 +1703,7 @@ describe("createMixedRoomRunner, the time limit of the counting (2026-11-20)", (
     expect(run.events).toEqual(["trackFinished:corridor", "finished"]);
   });
 
-  it("ends the run on resume when the limit passed in a window that the pause discarded", async () => {
+  it("ends after the remaining time when a pause interrupted a response window", async () => {
     const shell = await calibratedShell();
     const only = cuttableSearch(manyTrials(1000));
     const run = mixedOn(shell, [only.search], scriptedTurns([0]), {

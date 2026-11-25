@@ -1,3 +1,4 @@
+import { adaptiveHearingConfig } from "../config/adaptive-hearing-config";
 import type { AudioOutputConfig } from "../config/audio-output-config";
 import { audioOutputConfig } from "../config/audio-output-config";
 import type { HearingMethodConfig } from "../config/hearing-method-config";
@@ -11,11 +12,13 @@ import { classifyResponse } from "../engine/classify-response";
 import type {
   Ear,
   RoomResult,
+  SearchEvidence,
   SoundOutcome,
   ThresholdSearch,
   Trial,
   VisitorResponse,
 } from "../engine/search-types";
+import { judgementOf } from "./rhythm-score";
 import { answerTimeMs } from "./answer-time";
 import type {
   PlayedReminder,
@@ -30,6 +33,8 @@ import type {
 import type { BeatSlot, BeatTiming } from "./beat-clock";
 import { noSoundWindowStartMs, soundWindowStartMs } from "./window-start";
 import { rhythmConfig } from "../config/rhythm-config";
+import type { EasyTurnPacer } from "./easy-turn-pacer";
+import { quantile } from "./output-delay";
 
 /**
  * What a test listener needs to answer a trial, handed to `onTrialPresented` when the trial's
@@ -110,6 +115,18 @@ interface RunnerCommonOptions {
   readonly settings?: RoomRunnerSettings;
   /** Puts every turn on the room's beat (the rhythm game, 2026-11-18). Absent: no beat. */
   readonly beat?: BeatTiming;
+  /**
+   * The Timing_Offset now (headphone-traits R1): it lengthens the window of the turn presented,
+   * moves its cue later and goes with its decision to the log. Absent: 0.
+   */
+  readonly timingOffsetMs?: () => number;
+  /** The lower quartile of the visit's earlier loud catches, when enough have been scored. */
+  readonly baselineMs?: () => number | undefined;
+  /** Room results from runs that finished before this one started. */
+  readonly earlierRooms?: readonly {
+    readonly frequencyHz: number;
+    readonly result: Pick<RoomResult, Ear>;
+  }[];
 }
 
 export interface RoomRunnerOptions extends RunnerCommonOptions, RoomTrack {
@@ -147,6 +164,22 @@ export interface RoomGameOptions {
   ) => void;
   /** Called after an answer that decided nothing has been logged. */
   readonly answerIgnored: (side: Ear, atMs: number) => void;
+  /**
+   * Easy turns on the beat (headphone-traits R2). Absent: none. Asked after every decided counted
+   * turn, and told of every turn.
+   */
+  readonly easyTurns?: EasyTurnOptions;
+}
+
+/** What the runner needs for easy turns (headphone-traits design.md "Easy turns"). */
+export interface EasyTurnOptions {
+  readonly pacer: EasyTurnPacer;
+  /** Draws the easy turn's creature and ear. Never the turn source. */
+  readonly random: RandomSource;
+  /** How far above the creature's last catch on that ear it plays. */
+  readonly aboveCaughtDb: number;
+  /** Its level on an ear on which that creature has not been caught. */
+  readonly uncaughtLevelDb: number;
 }
 
 /** What the runner of several rooms together takes (one-room design.md, "The mixed runner"). */
@@ -168,9 +201,8 @@ export interface MixedRoomRunnerOptions extends RunnerCommonOptions {
   readonly game?: RoomGameOptions;
   /**
    * How long the Counting may last, in time the room is running: a pause does not count. When it
-   * is up, a trial in its gap is dropped and a trial in its window is decided first; then every
-   * search that is still open is cut off (`ThresholdSearch.cutOff`), told through `trackFinished`,
-   * and the run is over. Absent: no limit.
+   * is up, any unfinished trial is discarded and every open search is cut off
+   * (`ThresholdSearch.cutOff`) before the run ends. Absent: no limit.
    */
   readonly timeLimitMs?: number;
 }
@@ -205,6 +237,8 @@ interface TrialPresentation {
   readonly trial: Trial;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
+  /** The Timing_Offset when it was presented. */
+  readonly offsetMs: number;
 }
 
 /** A reminder sound under way. `trial` is the trial that waits behind it. */
@@ -215,6 +249,9 @@ interface ReminderPresentation {
   readonly trial: Trial;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
+  readonly offsetMs: number;
+  /** The track whose trial waits behind it: `track` for a reminder, another for an easy turn. */
+  readonly waitingTrack: RoomTrack;
 }
 
 type Presentation = TrialPresentation | ReminderPresentation;
@@ -278,6 +315,39 @@ export function createMixedRoomRunner(
     throw new RangeError("A room run needs at least one track.");
   }
 
+  const steeringOf = (
+    track: RoomTrack,
+    ear: Ear,
+  ): SearchEvidence["steering"] => {
+    const estimatesDb: number[] = [];
+    const add = (estimateDb: number | null): void => {
+      if (estimateDb !== null) estimatesDb.push(estimateDb);
+    };
+    const frequencyHz = track.room.frequencyHz;
+    const neighbours = (otherHz: number): boolean =>
+      otherHz === frequencyHz * 2 || otherHz * 2 === frequencyHz;
+    add(track.search.earEstimate(ear === "left" ? "right" : "left"));
+    for (const other of tracks) {
+      if (neighbours(other.room.frequencyHz)) {
+        add(other.search.earEstimate("left"));
+        add(other.search.earEstimate("right"));
+      }
+    }
+    for (const earlier of options.earlierRooms ?? []) {
+      if (neighbours(earlier.frequencyHz)) {
+        for (const result of [earlier.result.left, earlier.result.right]) {
+          if (result.state === "found") add(result.thresholdDb);
+        }
+      }
+    }
+    return estimatesDb.length === 0
+      ? undefined
+      : {
+          centreDb: quantile(estimatesDb, 0.5),
+          spreadDb: adaptiveHearingConfig.steeringSpreadDb,
+        };
+  };
+
   let state: RoomRunnerState = "idle";
   let handle: TimerHandle | null = null;
   let presentation: Presentation | null = null;
@@ -294,13 +364,17 @@ export function createMixedRoomRunner(
   /** The off-beat of the turn just put on the beat, told once the step that chose it is over. */
   let pendingCueMs: number | null = null;
   const beat = options.beat;
+  const offsetNow = (): number => {
+    const value = options.timingOffsetMs?.() ?? 0;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+  const easy = game?.easyTurns;
   const timeLimitMs = options.timeLimitMs;
   /** The time the room has run before the stretch under way, and when that stretch began. */
   let usedMs = 0;
   let runningSinceMs = 0;
   let deadline: TimerHandle | null = null;
-  /** True once the time limit has passed: the run ends at the next Decision. */
-  let timeUp = false;
+  let deadlineAtMs: number | null = null;
 
   /** Tells the cue of the turn put on the beat, if any. Called at the end of every step. */
   const flushCue = (): void => {
@@ -325,13 +399,9 @@ export function createMixedRoomRunner(
     if (timeLimitMs === undefined || deadline !== null) {
       return;
     }
-    deadline = timer.setTimeout(
-      () => {
-        deadline = null;
-        timeIsUp();
-      },
-      Math.max(0, timeLimitMs - usedMs),
-    );
+    const remainingMs = Math.max(0, timeLimitMs - usedMs);
+    deadlineAtMs = runningSinceMs + remainingMs;
+    deadline = timer.setTimeout(endForTime, Math.ceil(remainingMs));
   };
 
   /** Ends the stretch of running time, for a pause or the end of the run. */
@@ -341,35 +411,38 @@ export function createMixedRoomRunner(
       timer.clearTimeout(deadline);
       deadline = null;
     }
+    deadlineAtMs = null;
   };
 
-  /** Cuts off every search still open, and tells each one's end. */
-  const cutOffOpenTracks = (): void => {
+  /** Close immediately without treating an incomplete response window as a missed answer. */
+  const endForTime = (): void => {
+    interrupt();
+    stopClock();
+    output.fadeOutSound();
+    state = "finished";
+    turn = null;
     for (const track of tracks) {
       if (!finishedTracks.has(track)) {
         finishedTracks.add(track);
         options.trackFinished(track, track.search.cutOff().result);
       }
     }
-  };
-
-  /** Ends the run at once, because its time is up and no trial is presented. */
-  const endForTime = (): void => {
-    clearTimer();
-    stopClock();
-    pendingCueMs = null;
-    state = "finished";
-    turn = null;
-    cutOffOpenTracks();
     options.finished();
   };
 
-  /** The time limit has passed. A trial in its window is decided first; any other wait ends. */
-  const timeIsUp = (): void => {
-    timeUp = true;
-    if (state === "waitingGap") {
-      endForTime();
-    }
+  const timeIsUp = (): boolean =>
+    deadlineAtMs !== null && timer.now() >= deadlineAtMs;
+
+  /** Check the clock in case the browser runs an overdue turn before the deadline callback. */
+  const scheduleTurn = (callback: () => void, delayMs: number): void => {
+    handle = timer.setTimeout(() => {
+      handle = null;
+      if (timeIsUp()) {
+        endForTime();
+      } else {
+        callback();
+      }
+    }, delayMs);
   };
 
   const waitingTrial = (track: RoomTrack): Trial | null => {
@@ -396,10 +469,7 @@ export function createMixedRoomRunner(
     state = "waitingGap";
     const clock = beat?.clock() ?? null;
     if (beat === undefined || clock === null) {
-      handle = timer.setTimeout(() => {
-        handle = null;
-        present(track, trial, null);
-      }, trial.gapBeforeMs);
+      scheduleTurn(() => present(track, trial, null), trial.gapBeforeMs);
       return;
     }
     // The gap, at least the cue's lead, and then the next off-beat. The same for every kind of
@@ -407,12 +477,10 @@ export function createMixedRoomRunner(
     const slot = clock.slotNotBefore(
       timer.now() + Math.max(trial.gapBeforeMs, beat.cueLeadMs),
     );
-    pendingCueMs = slot.pageMs;
-    handle = timer.setTimeout(
-      () => {
-        handle = null;
-        present(track, trial, slot);
-      },
+    // The cue lands when the sound is heard, not when it leaves the page (headphone-traits R1.6).
+    pendingCueMs = slot.pageMs + offsetNow();
+    scheduleTurn(
+      () => present(track, trial, slot),
       Math.max(
         0,
         slot.pageMs -
@@ -425,6 +493,17 @@ export function createMixedRoomRunner(
 
   /** Waits the trial's gap, with a reminder first when the room has been quiet too long. */
   const waitNext = (track: RoomTrack, trial: Trial): void => {
+    const clock = beat?.clock() ?? null;
+    if (
+      game !== undefined &&
+      easy !== undefined &&
+      beat !== undefined &&
+      clock !== null &&
+      easy.pacer.wantsEasyTurn()
+    ) {
+      waitEasyTurn(track, trial, game, easy, beat);
+      return;
+    }
     // On the beat every turn is cued, so the room is never silent long enough to need a reminder.
     if (
       game === undefined ||
@@ -435,10 +514,7 @@ export function createMixedRoomRunner(
       return;
     }
     state = "waitingGap";
-    handle = timer.setTimeout(() => {
-      handle = null;
-      presentReminder(track, trial, game);
-    }, trial.gapBeforeMs);
+    scheduleTurn(() => presentReminder(track, trial, game), trial.gapBeforeMs);
   };
 
   /** Plays the soft chime after a catch, on its ear, above the caught level and within the limit. */
@@ -474,16 +550,77 @@ export function createMixedRoomRunner(
     });
   };
 
+  /**
+   * Puts an easy turn on the next off-beat, before the trial that waits (headphone-traits R2): the
+   * sound of another creature of the run, clearly above where it was last caught.
+   */
+  const waitEasyTurn = (
+    track: RoomTrack,
+    trial: Trial,
+    gameOptions: RoomGameOptions,
+    easyOptions: EasyTurnOptions,
+    beatTiming: BeatTiming,
+  ): void => {
+    const clock = beatTiming.clock();
+    if (clock === null) {
+      waitGap(track, trial);
+      return;
+    }
+    state = "waitingGap";
+    // A creature still in the room, and another than the one that waits where there is one.
+    const open = tracks.filter((candidate) => !finishedTracks.has(candidate));
+    const others = open.filter((candidate) => candidate !== track);
+    const pool = others.length === 0 ? [track] : others;
+    const pick = (count: number): number =>
+      Math.min(count - 1, Math.floor(easyOptions.random.next() * count));
+    const creature = pool[pick(pool.length)]!;
+    const ear: Ear = pick(2) === 0 ? "left" : "right";
+    const caught = lastCaughtDb.get(creature)?.[ear];
+    const wantedDb =
+      caught === undefined
+        ? easyOptions.uncaughtLevelDb
+        : caught + easyOptions.aboveCaughtDb;
+    const slot = clock.slotNotBefore(
+      timer.now() + Math.max(trial.gapBeforeMs, beatTiming.cueLeadMs),
+    );
+    pendingCueMs = slot.pageMs + offsetNow();
+    scheduleTurn(
+      () =>
+        presentReminder(creature, trial, gameOptions, {
+          ear,
+          wantedDb,
+          slot,
+          waitingTrack: track,
+        }),
+      Math.max(
+        0,
+        slot.pageMs -
+          settings.scheduleLeadMs -
+          rhythmConfig.presentAheadMs -
+          timer.now(),
+      ),
+    );
+  };
+
   const presentReminder = (
     track: RoomTrack,
     trial: Trial,
     gameOptions: RoomGameOptions,
+    easyTurn?: {
+      readonly ear: Ear;
+      readonly wantedDb: number;
+      readonly slot: BeatSlot;
+      /** The track whose trial waits behind it. */
+      readonly waitingTrack: RoomTrack;
+    },
   ): void => {
     const { room, attempt } = track;
     const presentedAtMs = timer.now();
     quietSinceMs = presentedAtMs;
     let ear: Ear;
-    if (trial.kind === "sound") {
+    if (easyTurn !== undefined) {
+      ear = easyTurn.ear;
+    } else if (trial.kind === "sound") {
       ear = trial.ear;
     } else {
       ear = lastSilentReminderEar === "left" ? "right" : "left";
@@ -491,9 +628,13 @@ export function createMixedRoomRunner(
     }
     const caught = lastCaughtDb.get(track)?.[ear];
     const wantedDb =
-      caught === undefined
-        ? gameOptions.reminderUncaughtLevelDb
-        : caught + gameOptions.reminderAboveCaughtDb;
+      easyTurn !== undefined
+        ? easyTurn.wantedDb
+        : caught === undefined
+          ? gameOptions.reminderUncaughtLevelDb
+          : caught + gameOptions.reminderAboveCaughtDb;
+    const waitingTrack = easyTurn?.waitingTrack ?? track;
+    const offsetMs = offsetNow();
     const levelDb = Math.max(
       track.searchFloorDb ?? Number.NEGATIVE_INFINITY,
       Math.min(track.searchCapDb ?? Number.POSITIVE_INFINITY, wantedDb),
@@ -504,6 +645,7 @@ export function createMixedRoomRunner(
       levelDb,
       purpose: "reminder",
       random: soundRandom,
+      ...(easyTurn === undefined ? {} : { startAtMs: easyTurn.slot.audioMs }),
     });
     if (outcome.kind === "refused") {
       if (outcome.reason === "notRunning") {
@@ -512,7 +654,7 @@ export function createMixedRoomRunner(
         return;
       }
       // A reminder the output would not play is skipped: the trial waits its own gap.
-      waitGap(track, trial);
+      waitGap(waitingTrack, trial);
       flushCue();
       return;
     }
@@ -522,11 +664,13 @@ export function createMixedRoomRunner(
     );
     latestOffset.latestOffsetMs =
       windowStartMs - (presentedAtMs + settings.scheduleLeadMs);
-    const windowEndMs = windowStartMs + settings.responseWindowMs;
+    const windowEndMs = windowStartMs + settings.responseWindowMs + offsetMs;
     presentation = {
       kind: "reminder",
       track,
       trial,
+      offsetMs,
+      waitingTrack,
       played: {
         roomIndex: room.roomIndex,
         attempt,
@@ -537,16 +681,17 @@ export function createMixedRoomRunner(
         gapBeforeMs: trial.gapBeforeMs,
         presentedAtMs,
         windowStartMs,
+        ...(easyTurn === undefined ? {} : { easy: true }),
       },
       windowStartMs,
       windowEndMs,
     };
+    if (easyTurn !== undefined) {
+      easy?.pacer.note({ kind: "easy" });
+    }
     state = "presented";
-    handle = timer.setTimeout(
-      () => {
-        handle = null;
-        decide("none", null);
-      },
+    scheduleTurn(
+      () => decide("none", null),
       Math.max(0, windowEndMs - timer.now()),
     );
     options.onTrialPresented?.(
@@ -569,7 +714,7 @@ export function createMixedRoomRunner(
     response: VisitorResponse,
     answeredAtMs: number | null,
   ): void => {
-    const { track, trial, played } = current;
+    const { track, trial, played, waitingTrack } = current;
     const outcome: SoundOutcome =
       response === "none"
         ? "missed"
@@ -584,22 +729,16 @@ export function createMixedRoomRunner(
       outcome,
       answeredAtMs,
       scoredAtMs: timer.now(),
+      timingOffsetMs: current.offsetMs,
     });
     if (outcome === "caught") {
       quietSinceMs = timer.now();
       chime(played.ear, played.playedLevelDb);
-    }
-    if (timeUp) {
-      stopClock();
-      state = "finished";
-      turn = null;
-      game?.reminderScored(entry, track);
-      cutOffOpenTracks();
-      options.finished();
-      return;
+    } else if (played.easy === true) {
+      miss(played.ear);
     }
     // The trial behind it waits its own gap before anything is told: a callback may pause.
-    waitGap(track, trial);
+    waitGap(waitingTrack, trial);
     game?.reminderScored(entry, track);
     flushCue();
   };
@@ -611,6 +750,7 @@ export function createMixedRoomRunner(
   ): void => {
     const { room, attempt } = track;
     const presentedAtMs = timer.now();
+    const offsetMs = offsetNow();
     let played: PlayedTrial;
     let windowStartMs: number;
     if (trial.kind === "sound") {
@@ -638,6 +778,7 @@ export function createMixedRoomRunner(
         });
         refusalsInARow += 1;
         if (refusalsInARow >= settings.refusedPlaysInARowMaxCount) {
+          stopClock();
           state = "finished";
           options.soundRefused();
           return;
@@ -689,7 +830,8 @@ export function createMixedRoomRunner(
         windowStartMs,
       };
     }
-    const windowEndMs = windowStartMs + settings.responseWindowMs;
+    // A late sound keeps its whole window (headphone-traits R1.5).
+    const windowEndMs = windowStartMs + settings.responseWindowMs + offsetMs;
     presentation = {
       kind: "trial",
       track,
@@ -697,13 +839,11 @@ export function createMixedRoomRunner(
       trial,
       windowStartMs,
       windowEndMs,
+      offsetMs,
     };
     state = "presented";
-    handle = timer.setTimeout(
-      () => {
-        handle = null;
-        decide("none", null);
-      },
+    scheduleTurn(
+      () => decide("none", null),
       Math.max(0, windowEndMs - timer.now()),
     );
     options.onTrialPresented?.(
@@ -736,7 +876,6 @@ export function createMixedRoomRunner(
     }
     const { track, played } = current;
     const outcome = classifyResponse(current.trial, response);
-    const step = track.search.respond(response);
     refusalsInARow = 0;
     if (played.kind === "sound" && response !== "none") {
       // An answer ends its sound at once, so the next sound never finds the output busy.
@@ -747,7 +886,29 @@ export function createMixedRoomRunner(
       outcome,
       answeredAtMs,
       scoredAtMs: timer.now(),
+      timingOffsetMs: current.offsetMs,
     });
+    easy?.pacer.note({
+      kind: "counted",
+      sound: played.kind === "sound",
+      caught: outcome === "caught",
+    });
+    const judgement = judgementOf(entry);
+    const grade =
+      judgement === "perfect" || judgement === "great" || judgement === "good"
+        ? judgement
+        : undefined;
+    const evidence: SearchEvidence | undefined =
+      entry.kind === "sound" &&
+      entry.outcome === "caught" &&
+      entry.responseTimeMs !== null
+        ? {
+            netAnswerMs: entry.responseTimeMs - current.offsetMs,
+            baselineMs: options.baselineMs?.(),
+            steering: steeringOf(track, entry.ear),
+          }
+        : undefined;
+    const step = track.search.respond(response, grade, evidence);
     if (played.kind === "sound" && outcome === "caught") {
       quietSinceMs = timer.now();
       lastCaughtDb.set(track, {
@@ -769,12 +930,7 @@ export function createMixedRoomRunner(
     // The next turn is drawn, and its gap begun, before anything is told: a callback may pause.
     turn = drawTurn();
     const next = turn === null ? null : waitingTrial(turn);
-    // With the time over, a search that is still open ends here instead of presenting again.
-    const timeIsOver = timeUp && turn !== null && next !== null;
     if (turn === null || next === null) {
-      turn = null;
-      state = "finished";
-    } else if (timeIsOver) {
       turn = null;
       state = "finished";
     } else {
@@ -786,9 +942,6 @@ export function createMixedRoomRunner(
     options.scored(entry, track);
     if (step.kind === "finished") {
       options.trackFinished(track, step.result);
-    }
-    if (timeIsOver) {
-      cutOffOpenTracks();
     }
     if (finishedTracks.size === tracks.length) {
       options.finished();
@@ -842,6 +995,10 @@ export function createMixedRoomRunner(
       ) {
         return;
       }
+      if (timeIsUp()) {
+        endForTime();
+        return;
+      }
       const atMs = answerTimeMs(pressedAtMs, timer.now());
       if (
         state === "presented" &&
@@ -883,11 +1040,6 @@ export function createMixedRoomRunner(
         return;
       }
       quietSinceMs = timer.now();
-      if (timeUp) {
-        // The limit passed in the window that the pause discarded.
-        endForTime();
-        return;
-      }
       startClock();
       waitGap(turn, trial);
       flushCue();

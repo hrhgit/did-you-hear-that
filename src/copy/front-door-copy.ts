@@ -3,15 +3,13 @@
  * product is described as a self-check and a first listen (wording.md).
  */
 export const frontDoorCopy = Object.freeze({
-  /** A few words over the title, the way the cover of a game names its kind. */
-  eyebrow: "A haunted house for headphones",
   headphonesLine: "Put on headphones. Turn off noise cancelling.",
   aboutLine: "Catch each creature by ear. Every catch makes it quieter.",
   choicesLabel: "Ways in",
   choices: Object.freeze({
     full: Object.freeze({
       button: "Enter the house",
-      note: "About 5 minutes",
+      note: "Up to 5 min + setup",
     }),
     replay: Object.freeze({
       button: "Watch a 60 second replay",

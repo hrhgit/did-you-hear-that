@@ -22,6 +22,8 @@ export interface AudioOutputConfig {
   readonly peakBoundDb: Readonly<Record<SoundId, number>>;
   /** Most renders tried for one playable buffer before the request is refused. */
   readonly renderAttemptsMaxCount: number;
+  /** Fixed reference level for the public visit and its opening theme. */
+  readonly calibrationReferenceDb: number;
   /** Bottom of the calibration control, where every calibration begins. */
   readonly calibrationSettingMinDb: number;
   /** Step of the calibration control. */
@@ -98,6 +100,8 @@ export const audioOutputConfig: AudioOutputConfig = deepFreeze({
   // D8: about 66 dB below full scale for the calibration sound. Raised from -60 by the owner on
   // 2026-11-16 after playing: the first seconds were too quiet to hear. Guarded (D32)
   calibrationSettingMinDb: -40,
+  // The level at which the visit already started its calibration music.
+  calibrationReferenceDb: -23,
   // D8
   calibrationSettingStepDb: 1,
   // The whole control: the calibration sound follows the control as it moves. The 5 dB limit of

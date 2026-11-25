@@ -118,6 +118,9 @@ function earlierWing(
   return {
     state: earlierResult.state,
     outlineDepthFraction: lightDepthFraction(earlierResult, scale),
+    ...(earlierResult.state === "found"
+      ? { levelDb: earlierResult.thresholdDb }
+      : {}),
   };
 }
 
@@ -141,6 +144,12 @@ function wing(
     earlier: earlierResult === null ? null : earlierWing(earlierResult, scale),
     valueLabel: value.value,
     valueNote: value.note,
+    ...(result.state === "found" &&
+    result.lowDb !== undefined &&
+    result.highDb !== undefined
+      ? { range: { lowDb: result.lowDb, highDb: result.highDb } }
+      : {}),
+    ...(result.state === "found" ? { levelDb: result.thresholdDb } : {}),
   };
 }
 

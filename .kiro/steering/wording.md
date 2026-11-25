@@ -21,7 +21,7 @@ One exception: the fixed limits statement described below says what the product 
 ## How to describe the product
 
 - It is a "self-check" or "a first listen". It is not a "hearing test" and not a "hearing check".
-- It "finds the quietest sound you caught", it does not "measure your hearing".
+- It estimates a level from the sounds you caught during the game. It does not "measure your hearing".
 - Levels are described as "quieter" and "louder" and drawn as depth of light. If a number is shown it is labelled as relative to the visitor's own calibration.
 
 ## What the result page must always say

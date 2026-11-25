@@ -48,10 +48,11 @@ export interface OutputGraph {
   fadeToSilence(durationS: number): void;
   /**
    * Starts the calibration music's loop (audible-start design.md, "Playing"): one stereo buffer of
-   * the two channels, looping from `startS`, through its level gain at `levelGain`, a fade-in gain
+   * the two channels, starting at `startS`, through its level gain at `levelGain`, a fade-in gain
    * that rises from exact zero to 1 over `fadeInS`, and a fade-out gain at 1 until `stopLoop`,
    * into the stop gain. Throws a `RangeError`, and plays nothing, as `play` does, and also if a
-   * loop is already playing or `levelGain` is not a finite number above 0.
+   * music source is already playing or `levelGain` is not a finite number above 0.
+   * Music loops unless `repeat` is false.
    */
   startLoop(
     left: Float32Array,
@@ -60,6 +61,7 @@ export interface OutputGraph {
     startS: number,
     levelGain: number,
     fadeInS: number,
+    repeat?: boolean,
   ): void;
   /**
    * Ramps the loop's level gain exponentially from its value at `startS` to `levelGain` at `endS`.
@@ -242,7 +244,15 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
       source.start(startS);
     },
 
-    startLoop(left, right, sampleRateHz, startS, levelGain, fadeInS) {
+    startLoop(
+      left,
+      right,
+      sampleRateHz,
+      startS,
+      levelGain,
+      fadeInS,
+      repeat = true,
+    ) {
       checkChannels(left, right, sampleRateHz);
       if (!(Number.isFinite(levelGain) && levelGain > 0)) {
         throw new RangeError(
@@ -261,7 +271,7 @@ export function createOutputGraph(context: BaseAudioContext): OutputGraph {
 
       const source = context.createBufferSource();
       source.buffer = stereoBuffer(left, right);
-      source.loop = true;
+      source.loop = repeat;
       const level = stereoGain(levelGain);
       // Exact zero until the fade in begins at the loop's start.
       const fadeIn = stereoGain(0);

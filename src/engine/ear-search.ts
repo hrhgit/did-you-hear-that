@@ -1,16 +1,24 @@
 import { atLeastFraction } from "./fraction-comparisons";
 import type {
+  CatchGrade,
   Direction,
   Ear,
+  SearchEvidence,
   SoundOutcome,
   ThresholdSearchSettings,
 } from "./search-types";
 
 export type EarEnding =
-  | { readonly kind: "found"; readonly thresholdDb: number }
+  | {
+      readonly kind: "found";
+      readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
+    }
   | { readonly kind: "betterThanFloor" }
   | { readonly kind: "worseThanCap" }
-  | { readonly kind: "trialLimit" };
+  | { readonly kind: "trialLimit" }
+  | { readonly kind: "unconfirmed" };
 
 export interface Presentation {
   readonly levelDb: number;
@@ -24,7 +32,11 @@ export interface EarSearch {
   /** Throws an Error once the search has ended. */
   next(): { readonly levelDb: number; readonly direction: Direction };
   /** Throws an Error once the search has ended. */
-  record(outcome: SoundOutcome): void;
+  record(
+    outcome: SoundOutcome,
+    grade?: CatchGrade,
+    evidence?: SearchEvidence,
+  ): void;
   ending(): EarEnding | undefined;
   /**
    * Ends the search now, short of any rule: an ear still searching ends as `trialLimit`, the

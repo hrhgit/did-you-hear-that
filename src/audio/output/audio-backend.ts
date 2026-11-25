@@ -69,16 +69,17 @@ export interface AudioBackend {
   loadCalibrationMusic(filePath: string): Promise<DecodedCalibrationMusic>;
   /**
    * Starts the calibration music's loop (audible-start design.md, "Playing"): the two channels,
-   * which the shell makes equal, looping without a break from `startMs` on the audio clock, at the
+   * which the shell makes equal, playing from `startMs` on the audio clock, at the
    * linear `levelGain`, behind a fade gain that rises from exact zero to 1 over `fadeInMs` with the
    * raised cosine of the output fade. The loop goes through the stop gain, so `fadeToSilence`
-   * stops it with every other sound. The shell starts at most one loop at a time.
+   * stops it with every other sound. Music loops unless `repeat` is false.
    */
   startLoop(
     channels: ScheduledChannels,
     startMs: number,
     levelGain: number,
     fadeInMs: number,
+    repeat?: boolean,
   ): void;
   /**
    * Ramps the loop's level gain exponentially from its value at `startMs` to `levelGain` at

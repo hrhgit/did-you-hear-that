@@ -1,5 +1,10 @@
 import { canPaint } from "../room/creature-art";
-import { horizonY, resultViewBox } from "./result-geometry";
+import {
+  loadYardBackdrop,
+  paintYardBackdrop,
+  yardBackdrop,
+} from "../room/yard-backdrop";
+import { layoutOf, type ResultLayout } from "./result-geometry";
 
 /**
  * The yard behind the result picture: the same night as the room the visit was played in, so the
@@ -15,9 +20,6 @@ type Ctx = CanvasRenderingContext2D;
 
 const tau = Math.PI * 2;
 
-/** Where the sky meets the grass, in the units of the drawing. */
-const groundY = horizonY;
-
 /** A repeatable scatter: the same yard every time the page is drawn. */
 function scatter(seed: number): () => number {
   let state = seed >>> 0;
@@ -27,9 +29,13 @@ function scatter(seed: number): () => number {
   };
 }
 
-/** The yard, painted in drawing units over the box from (left, top) to (right, bottom). */
+/**
+ * The yard, painted in drawing units over the box from (left, top) to (right, bottom). The moon,
+ * the tree, the stones and the fog are placed for the tall picture and spread across the wide one.
+ */
 function paintYard(
   ctx: Ctx,
+  layout: ResultLayout,
   left: number,
   top: number,
   right: number,
@@ -37,6 +43,9 @@ function paintYard(
 ): void {
   const random = scatter(11);
   const width = right - left;
+  const groundY = layout.horizonY;
+  /** From the tall picture's x to this one's. */
+  const across = (x: number): number => (x * layout.viewBox.width) / 440;
 
   const sky = ctx.createLinearGradient(0, top, 0, groundY);
   sky.addColorStop(0, "#090716");
@@ -58,7 +67,7 @@ function paintYard(
   }
 
   // The moon, high at the right, with its halo and its seas.
-  const moonX = 372;
+  const moonX = across(372);
   const moonY = 46;
   const moonR = 17;
   const halo = ctx.createRadialGradient(
@@ -151,7 +160,7 @@ function paintYard(
     branch(30, 5, 5);
     ctx.restore();
   };
-  tree(44, 1, -0.1);
+  tree(across(44), 1, -0.1);
 
   // The grass, from the horizon down past the last lane, darker towards the visitor.
   const ground = ctx.createLinearGradient(0, groundY, 0, bottom);
@@ -187,9 +196,9 @@ function paintYard(
     ctx.stroke();
     ctx.restore();
   };
-  stone(318, 13, 19, 0.08);
-  stone(342, 10, 14, -0.1);
-  stone(104, 11, 16, -0.06);
+  stone(across(318), 13, 19, 0.08);
+  stone(across(342), 10, 14, -0.1);
+  stone(across(104), 11, 16, -0.06);
 
   // Tufts of grass scattered over the yard, thicker near the horizon.
   ctx.strokeStyle = "rgba(90, 64, 108, 0.55)";
@@ -204,12 +213,14 @@ function paintYard(
   }
 
   // Low fog drifting over the grass.
+  const depthOf = (y: number): number =>
+    groundY + ((y - 98) * (layout.viewBox.height - groundY)) / (760 - 98);
   for (const [x, y, r] of [
-    [60, groundY + 20, 120],
-    [380, groundY + 40, 140],
-    [120, 420, 160],
-    [360, 560, 150],
-    [220, 700, 200],
+    [across(60), groundY + 20, 120],
+    [across(380), groundY + 40, 140],
+    [across(120), depthOf(420), 160],
+    [across(360), depthOf(560), 150],
+    [across(220), depthOf(700), 200],
   ] as const) {
     const fog = ctx.createRadialGradient(x, y, 0, x, y, r);
     fog.addColorStop(0, "rgba(170, 150, 200, 0.09)");
@@ -252,6 +263,8 @@ export function attachResultYard(
     if (section === null) {
       return;
     }
+    const layout = layoutOf(section.dataset.shape === "wide" ? "wide" : "tall");
+    const resultViewBox = layout.viewBox;
     const ratio = Math.min(2, view.devicePixelRatio || 1);
     const frameBox = frame.getBoundingClientRect();
     const box = section.getBoundingClientRect();
@@ -268,6 +281,7 @@ export function attachResultYard(
     const offsetY =
       box.top - frameBox.top + (box.height - resultViewBox.height * scale) / 2;
     const geometry = [
+      layout.viewBox.width,
       ratio,
       frameBox.width,
       frameBox.height,
@@ -301,15 +315,36 @@ export function attachResultYard(
       ratio * (offsetX - resultViewBox.x * scale),
       ratio * (offsetY - resultViewBox.y * scale),
     );
-    paintYard(
-      ctx,
-      resultViewBox.x - offsetX / scale,
-      resultViewBox.y - offsetY / scale,
-      resultViewBox.x + (frameBox.width - offsetX) / scale,
-      resultViewBox.y + (frameBox.height - offsetY) / scale,
-    );
+    const left = resultViewBox.x - offsetX / scale;
+    const top = resultViewBox.y - offsetY / scale;
+    const right = resultViewBox.x + (frameBox.width - offsetX) / scale;
+    const bottom = resultViewBox.y + (frameBox.height - offsetY) / scale;
+    paintYard(ctx, layout, left, top, right, bottom);
+    // Over the sky, the painted night of the room once it has loaded. The grass the lanes lie on
+    // reaches far below the picture's own ground, so it stays as code paints it.
+    const backdrop = yardBackdrop();
+    if (backdrop !== null) {
+      paintYardBackdrop(
+        ctx,
+        backdrop,
+        left,
+        top,
+        right - left,
+        bottom - top,
+        layout.horizonY,
+        true,
+      );
+    }
     lastGeometry = geometry;
   };
+  if (yardBackdrop() === null) {
+    void loadYardBackdrop(doc).then((image) => {
+      if (image !== null) {
+        lastGeometry = null;
+        repaint();
+      }
+    });
+  }
 
   canvas.addEventListener("contextrestored", () => {
     lastGeometry = null;

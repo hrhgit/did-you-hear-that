@@ -94,11 +94,6 @@ describe("visit flow CP1. Every visit ends (Universal; R22.4)", () => {
             .find((entry): entry is SnapshotEntry => entry.kind === "snapshot");
           expect(lastSnapshot?.snapshot).toEqual(final);
           const endMs = lastSnapshot?.atMs ?? startMs;
-          const replay = entries.find(
-            (entry) =>
-              entry.kind === "snapshot" &&
-              entry.snapshot.stage === "missedSoundReplay",
-          );
           const endingEntries = entries.filter(
             (entry) =>
               (entry.kind === "action" && entry.name === "stop") ||
@@ -106,9 +101,8 @@ describe("visit flow CP1. Every visit ends (Universal; R22.4)", () => {
           );
 
           if (final.stage === "exit") {
-            // The exit is the visitor's ending, reached in the same step, before the replay.
+            // The exit is the visitor's ending, reached in the same step, before the result.
             expect(script.ending).not.toBeNull();
-            expect(replay).toBeUndefined();
             expect(endingEntries).toHaveLength(1);
             const ending = endingEntries[0];
             if (
@@ -127,15 +121,12 @@ describe("visit flow CP1. Every visit ends (Universal; R22.4)", () => {
               script.ending.kind === "stop" ? "visitor" : "pageLeft",
             );
           } else {
-            // A result: any ending came no earlier than the replay.
-            expect(replay).toBeDefined();
-            if (script.ending !== null && replay !== undefined) {
+            // The simulated visitor stops when the result appears.
+            expect(endingEntries).toEqual([]);
+            if (script.ending !== null) {
               expect(startMs + script.ending.atMs).toBeGreaterThanOrEqual(
-                replay.atMs,
+                endMs,
               );
-              for (const ending of endingEntries) {
-                expect(ending.seq).toBeGreaterThan(replay.seq);
-              }
             }
           }
 

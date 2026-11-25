@@ -1,6 +1,8 @@
-import { audioOutputConfig } from "../../config/audio-output-config";
 import { describe, expect, it } from "vitest";
-import { calibrationCopy } from "../../copy/calibration-copy";
+import {
+  calibrationCopy,
+  referenceVolumeCopy,
+} from "../../copy/calibration-copy";
 import {
   oneRoomCopy,
   rollCallCopy,
@@ -181,7 +183,7 @@ const calibration: CalibrationSnapshot = {
   controlBottomDb: -60,
   controlTopDb: -10,
   atTop: false,
-  line: calibrationCopy.openLine,
+  line: referenceVolumeCopy.openLine,
   keepRefusal: null,
 };
 
@@ -224,21 +226,14 @@ describe("screenOfSnapshot", () => {
     expect(screen.sheet).toBe("calibration");
     expect(screen.calibration).toEqual({
       heading: visitCopy.calibrationHeading,
-      introLines: [calibrationCopy.openLine],
-      keysLine: null,
+      introLines: [referenceVolumeCopy.openLine],
       started: false,
       canKeep: false,
-      canGoLouder: false,
-      bottomDb: -60,
-      topDb: -10,
-      stepDb: audioOutputConfig.calibrationSettingStepDb,
-      targetDb: -60,
-      settingFraction: null,
       statusLine: null,
     });
   });
 
-  it("shows the snapshot's heading and lines, with the keys line apart", () => {
+  it("shows the snapshot's heading and instruction", () => {
     const screen = screenOfSnapshot({
       ...calibration,
       heading: calibrationCopy.hiss.heading,
@@ -249,7 +244,6 @@ describe("screenOfSnapshot", () => {
     expect(screen.calibration?.introLines).toEqual([
       calibrationCopy.hiss.openLine,
     ]);
-    expect(screen.calibration?.keysLine).toBe(calibrationCopy.keysLine);
     expect(screen.calibration?.statusLine).toBeNull();
   });
 
@@ -263,39 +257,11 @@ describe("screenOfSnapshot", () => {
     expect(screen.calibration?.statusLine).toBe(calibrationCopy.loadingLine);
   });
 
-  it("puts the thumb at the target and the mark where the sound has got to", () => {
-    const screen = screenOfSnapshot({
-      ...calibration,
-      playing: true,
-      playedSettingDb: -35,
-      targetSettingDb: -20,
-    });
-    expect(screen.calibration?.targetDb).toBe(-20);
-    expect(screen.calibration?.settingFraction).toBeCloseTo(0.5);
-    expect(screen.calibration?.canKeep).toBe(true);
-    expect(screen.calibration?.canGoLouder).toBe(true);
-  });
-
-  it("puts the thumb at the played setting when the snapshot names no target", () => {
-    const screen = screenOfSnapshot({
-      ...calibration,
-      playing: true,
-      playedSettingDb: -35,
-    });
-    expect(screen.calibration?.targetDb).toBe(-35);
-  });
-
-  it("stops offering louder at the top of the control and says so", () => {
-    const screen = screenOfSnapshot({
-      ...calibration,
-      playing: true,
-      playedSettingDb: -10,
-      atTop: true,
-      line: calibrationCopy.atTopLine,
-    });
-    expect(screen.calibration?.canGoLouder).toBe(false);
-    expect(screen.calibration?.settingFraction).toBe(1);
-    expect(screen.calibration?.statusLine).toBe(calibrationCopy.atTopLine);
+  it("allows confirmation once a reference setting has played", () => {
+    const playing = { ...calibration, playing: true };
+    expect(screenOfSnapshot(playing).calibration?.canKeep).toBe(false);
+    const heard = { ...playing, playedSettingDb: -23 };
+    expect(screenOfSnapshot(heard).calibration?.canKeep).toBe(true);
   });
 
   it("names a calibration after a device change differently", () => {
@@ -441,17 +407,13 @@ describe("screenOfSnapshot", () => {
       expect(playing.practice?.soundPlayingLine).not.toMatch(/left|right/i);
     });
 
-    it("keeps one still line through the counting", () => {
+    it("shows no words through the counting", () => {
       const counting = screenOfSnapshot({
         ...base("room", 2),
         room: stairs,
         practice: practice("counting", true),
       });
-      expect(counting.practice).toEqual({
-        heading: null,
-        lines: practiceCopy.countingLines,
-        soundPlayingLine: null,
-      });
+      expect(counting.practice).toBeNull();
       expect(
         screenOfSnapshot({
           ...base("room", 2),
@@ -742,11 +704,7 @@ describe("screenOfSnapshot", () => {
       expect(screen.answersShown).toBe(true);
       expect(screen.featured).toBeNull();
       expect(screen.room).toEqual({ name: "2 still about", progress: "" });
-      expect(screen.practice).toEqual({
-        heading: null,
-        lines: rollCallCopy.countingLines,
-        soundPlayingLine: null,
-      });
+      expect(screen.practice).toBeNull();
       expect(screen.chase).toEqual({
         score: 0,
         combo: 0,
@@ -830,7 +788,7 @@ describe("screenOfSnapshot", () => {
         }),
       );
       expect(screen.featured).toBeNull();
-      expect(screen.practice?.soundPlayingLine).toBeNull();
+      expect(screen.practice).toBeNull();
       expect(screen.creatures.map(({ state }) => state)).toEqual([
         "about",
         "about",

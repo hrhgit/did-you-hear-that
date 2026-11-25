@@ -147,11 +147,7 @@ describe("visit-flow-types", () => {
       SnapshotFor<"unsupported">
     >().toEqualTypeOf<UnsupportedSnapshot>();
   });
-  // The additions of the missed-sound replay (missed-sound-replay design.md, "Interface contract").
-
-  it("gives VisitFlow a startReplay that takes nothing and returns nothing", () => {
-    expectTypeOf<VisitFlow["startReplay"]>().toEqualTypeOf<() => void>();
-  });
+  // The missed-sound replay types are used by the development preview.
 
   it("gives the replay snapshot its replay view", () => {
     expectTypeOf<
@@ -293,7 +289,7 @@ describe("visit-flow-types", () => {
       "loading" | "music" | "hiss"
     >();
     expectTypeOf<CalibrationAnchor>().toEqualTypeOf<
-      "hands" | "music" | "hiss"
+      "hands" | "music" | "hiss" | "preset"
     >();
   });
 

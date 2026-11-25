@@ -15,9 +15,9 @@ The rule against jumps upward went first, earlier on 2026-11-17. The rest went t
 3. **The search cap belongs to the search.** `capRelativeToAnchorDb` (+5 dB) is where the threshold search stops rising (`.kiro/steering/hearing-method.md`). The output stage no longer holds sounds to it: a reminder, a chime or any later sound asked for above it plays as asked, up to the ceiling.
 4. **Fades.** The output stage puts its own short fade on both ends of every sound, and the house's sounds are built with fades of at least `fadeMinMs` (20 ms). The output stage no longer refuses a sound whose fades come out shorter.
 5. **Silent means silent.** On a trial for one ear, the other channel carries exact digital zero. On a no-sound trial both channels carry exact digital zero. This is how the hearing method tells the ears apart, not a safety limit.
-6. **Sound lengths.** The ghost sounds are built to last at most `ghostSoundMaxDurationMs` (1.5 s), and the timings of the visit flow are measured from it. The output stage no longer refuses a longer sound. The calibration music plays without a break while the calibration screen is open and the visitor has started it, and follows the control as the visitor moves it, from a bottom of −40 dB.
+6. **Sound lengths.** The ghost sounds are built to last at most `ghostSoundMaxDurationMs` (1.5 s), and the timings of the visit flow are measured from it. The output stage no longer refuses a longer sound. The theme loops on the headphone check screen until the visitor starts the check. It plays once when the main visit reaches its result, and stops if the visitor leaves the result. The development listening page uses the same music for calibration.
 7. **The stop control.** A visible control stops all sound at once. Leaving the page or hiding the tab stops all sound.
-8. **The volume keys.** After calibration the page tells the visitor not to raise the system volume.
+8. **The volume keys.** The headphone check asks the visitor to keep the system volume unchanged during the test.
 9. **No jump scares.** The house has no loud stingers, screams or full-screen flashes. This is the product's tone (`.kiro/steering/product.md`), and can change with it.
 
 ## Current values

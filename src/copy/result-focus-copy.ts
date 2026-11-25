@@ -91,7 +91,7 @@ function whereOf(sides: readonly AnswerSide[]): string {
     : `on your ${sides[0] ?? "left"}`;
 }
 
-/** One floor's line beside its name, such as "You caught a sound 18 dB quieter on your left than on your right." */
+/** One floor's line beside its name, such as "The estimate is 18 dB quieter on your left than on your right." */
 export function focusPointLine(point: FocusPointWords): string {
   requireKind(point.kind);
   switch (point.kind) {
@@ -114,7 +114,7 @@ export function focusPointLine(point: FocusPointWords): string {
       const quieter = whole > 0 ? "left" : "right";
       const other = whole > 0 ? "right" : "left";
       const size = `${point.atLeast ? "at least " : ""}${String(Math.abs(whole))} dB`;
-      return `You caught a sound ${size} quieter on your ${quieter} than on your ${other}.`;
+      return `The estimate is ${size} quieter on your ${quieter} than on your ${other}.`;
     }
     case "dark":
       requireSides(point.sides);
@@ -207,7 +207,7 @@ export const pictureKeyCopy = Object.freeze({
   label: "What the marks mean",
   light: "Light: how far you followed the sound",
   creature: "Creature: where the light ends",
-  dark: "Dark: the loudest sound went by",
+  dark: "Dash means the loudest sound went by",
   hatched: "Hatched: no level was found",
   earlier: "Dashed: your earlier visit",
 });

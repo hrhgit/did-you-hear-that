@@ -513,13 +513,8 @@ test.describe("the one room", () => {
     const snapshot = roomAt(quick, start);
     await walk(page, quick).through(start);
 
-    // The words change to those of the counting, in the same place.
-    await expect(page.locator(".visit-practice-heading")).toBeHidden();
-    await expect(page.locator(".visit-practice-lines p")).toHaveText([
-      ...rollCallCopy.countingLines,
-    ]);
-    await expect(page.locator(".room-intro")).toBeHidden();
-    await expect(page.locator(".visit-practice-sound")).toBeHidden();
+    // The words go: the middle of the yard is the combo's now.
+    await expect(page.locator(".visit-practice")).toBeHidden();
     await expect(main(page)).not.toHaveAttribute("data-roll-call", "true");
 
     // Nobody stands in view from here on: who makes a counted sound is shown only once it is
@@ -1231,7 +1226,6 @@ test.describe("the one room", () => {
       };
       await expectApart("while it counts", {
         ...countingParts,
-        words: page.locator(".visit-practice-lines"),
         flame: page.locator(".rhythm-flame"),
       });
 

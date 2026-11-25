@@ -1,5 +1,5 @@
 import type { ResultPicture } from "../../session/result-page-types";
-import { resultViewBox } from "./result-geometry";
+import { tallLayout } from "./result-geometry";
 
 /**
  * The saved image of a result, laid out as plain data: a sheet with the drawing of the house at
@@ -106,11 +106,18 @@ export function wrapText(
   return lines;
 }
 
-/** Lays out the sheet for a picture. */
+/**
+ * Lays out the sheet for a picture. `drawingBox` is the view box of the drawing as the page shows
+ * it, tall or wide, so the drawing keeps its proportions on the sheet.
+ */
 export function layoutPictureSheet(
   picture: ResultPicture,
   headphones: SheetHeadphones | null,
   measure: MeasureText,
+  drawingBox: {
+    readonly width: number;
+    readonly height: number;
+  } = tallLayout.viewBox,
 ): PictureSheet {
   const lines: SheetLine[] = [];
   const rules: SheetRule[] = [];
@@ -211,9 +218,7 @@ export function layoutPictureSheet(
     x: margin,
     y: bodyTop,
     width: drawingWidth,
-    height: Math.round(
-      (drawingWidth * resultViewBox.height) / resultViewBox.width,
-    ),
+    height: Math.round((drawingWidth * drawingBox.height) / drawingBox.width),
   };
 
   // Beside the drawing: what the picture can tell, in full, then each floor from the top down.

@@ -1,5 +1,5 @@
 import { ghostSoundIds } from "../../config/sound-id";
-import { calibrationCopy } from "../../copy/calibration-copy";
+import { referenceVolumeCopy } from "../../copy/calibration-copy";
 import { creatureCopy, oneRoomCopy } from "../../copy/creature-copy";
 import { frontDoorCopy } from "../../copy/front-door-copy";
 import { headphoneCheckCopy } from "../../copy/headphone-check-copy";
@@ -16,6 +16,7 @@ import { buildRoomScene, type RoomScene } from "../room/build-room-scene";
 import { drawCreature } from "../room/creature-art";
 import { buildCreatureShelf, type CreatureShelf } from "../room/creature-shelf";
 import { drawSwappedHeadphones } from "./draw-swapped-headphones";
+import { titleLettering } from "./title-lettering";
 
 /** A sheet of text laid over the faint room. Only one is shown at a time. */
 export interface Sheet {
@@ -55,25 +56,6 @@ export interface VisitPage {
       Record<"full" | "replay", HTMLButtonElement>
     >;
     readonly statusLine: HTMLElement;
-  };
-  readonly calibration: Sheet & {
-    /** Holds one paragraph for each line to read before using the control. */
-    readonly introLines: HTMLElement;
-    /** The control and the buttons at its two ends. */
-    readonly dial: HTMLElement;
-    /**
-     * A drawn line with a lit part and a mark on it: how far the sound has got between the two
-     * ends. Set by `--visit-setting`, from 0 to 1.
-     */
-    readonly meter: HTMLElement;
-    /** The slider over the drawn line. Its thumb is where the visitor has put the control. */
-    readonly range: HTMLInputElement;
-    readonly keysLine: HTMLElement;
-    readonly statusLine: HTMLElement;
-    readonly startButton: HTMLButtonElement;
-    readonly quieterButton: HTMLButtonElement;
-    readonly louderButton: HTMLButtonElement;
-    readonly keepButton: HTMLButtonElement;
   };
   readonly headphoneCheck: Sheet & {
     readonly keptLine: HTMLElement;
@@ -158,7 +140,11 @@ export interface VisitPage {
 type Children = readonly (Node | string)[];
 
 /** Builds the visit's elements inside `main` and returns handles to the ones that change. */
-export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
+export function buildVisitPage(
+  doc: Document,
+  main: HTMLElement,
+  options: { readonly showReplayPreview?: boolean } = {},
+): VisitPage {
   const make = <K extends keyof HTMLElementTagNameMap>(
     tag: K,
     className: string,
@@ -183,17 +169,6 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     if (note !== undefined) {
       element.append(make("span", "visit-button-note", [note]));
     }
-    return element;
-  };
-  // A button that shows its drawn mark alone. Its word is still its name, for a visitor who
-  // cannot see the mark, and its tooltip, for one who wonders what it does.
-  const iconButton = (label: string, icon: string): HTMLButtonElement => {
-    const element = make("button", "visit-button visit-button-icon", [
-      make("span", "visit-spoken", [label]),
-    ]);
-    element.type = "button";
-    element.title = label;
-    element.dataset.icon = icon;
     return element;
   };
   // An answer of a headphone check: a tile with a small drawing of the headphones over its word.
@@ -323,7 +298,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     ),
     replay: button(
       frontDoorCopy.choices.replay.button,
-      "",
+      "visit-button-quiet",
       frontDoorCopy.choices.replay.note,
     ),
   };
@@ -337,14 +312,20 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
   );
   choices.setAttribute("role", "group");
   choices.setAttribute("aria-label", frontDoorCopy.choicesLabel);
-  const frontDoorHeading = heading(siteTitle);
+  // The title is painted lettering. Its words stay in the heading, unseen, so that the heading
+  // still reads as the name of the house to a visitor who cannot see the picture.
+  const frontDoorHeading = make("h1", "visit-front-title", [
+    titleLettering(doc),
+    make("span", "visit-spoken", [siteTitle]),
+  ]);
+  frontDoorHeading.tabIndex = -1;
   const status = (): HTMLElement => {
     const element = make("p", "visit-status visit-quiet");
     element.setAttribute("role", "status");
     return element;
   };
   const frontDoorStatus = status();
-  // The five creatures, each on a card shaped like a doorway, the way the room's cards are.
+  // The five creatures, standing in the yard with their names at their feet.
   const roster = make(
     "ul",
     "visit-roster",
@@ -373,51 +354,12 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     frontDoorStatus,
     make("p", "visit-quiet visit-front-privacy", [frontDoorCopy.privacyLine]),
   ]);
-  frontDoorHeading.before(make("p", "visit-eyebrow", [frontDoorCopy.eyebrow]));
-
-  // Calibration: one line of what to do, a control that can be dragged with quieter and louder at
-  // its two ends, and a button to keep the setting.
-  const calibrationHeading = heading(visitCopy.calibrationHeading);
-  calibrationHeading.id = "visit-calibration-heading";
-  const introLines = make("div", "visit-calibration-lines", [
-    make("p", "", [calibrationCopy.openLine]),
-  ]);
-  const statusLine = status();
-  const range = make("input", "visit-meter-range");
-  range.type = "range";
-  range.setAttribute("aria-labelledby", calibrationHeading.id);
-  const meter = make("div", "visit-meter", [
-    make("span", "visit-meter-line"),
-    make("span", "visit-meter-fill"),
-    make("span", "visit-meter-mark"),
-    range,
-  ]);
-  const startButton = button(calibrationCopy.startButton, "visit-button-lit");
-  startButton.dataset.icon = "play";
-  const quieterButton = iconButton(calibrationCopy.quieterButton, "quieter");
-  const louderButton = iconButton(calibrationCopy.louderButton, "louder");
-  const keepButton = button(calibrationCopy.keepButton, "visit-button-lit");
-  keepButton.dataset.icon = "keep";
-  const dial = make("div", "visit-dial", [quieterButton, meter, louderButton]);
-  dial.hidden = true;
-  const keysLine = make("p", "visit-keys-line visit-quiet");
-  keysLine.hidden = true;
-  const calibration = withSteps(
-    sheet("calibration", calibrationHeading, [
-      introLines,
-      dial,
-      controls([startButton, keepButton]),
-      keysLine,
-      statusLine,
-    ]),
-    0,
-  );
 
   // The headphone check.
   const checkHeading = heading(visitCopy.headphoneCheckHeading);
   // The two lines about the volume stand at the foot of the sheet, under what there is to do.
   const keptLine = make("p", "visit-quiet visit-foot-line", [
-    calibrationCopy.keptLine,
+    referenceVolumeCopy.keptLine,
   ]);
   const roomsLine = make("p", "visit-quiet visit-foot-line");
   const playButton = button(headphoneCheckCopy.playButton, "visit-button-lit");
@@ -448,7 +390,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       keptLine,
       roomsLine,
     ]),
-    1,
+    0,
   );
 
   // The rules.
@@ -490,7 +432,7 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       answerGuide,
       controls([enterButton]),
     ]),
-    2,
+    1,
   );
 
   // One sheet for everything else the house has to say: paused, stopped, ended, cannot play.
@@ -642,13 +584,12 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
     captionBlock,
     rest,
     shelf.element,
-    replaying,
+    ...(options.showReplayPreview ? [replaying] : []),
     frontDoor,
-    calibration,
     headphoneCheck,
     rules,
     notice,
-    replay,
+    ...(options.showReplayPreview ? [replay] : []),
     swap,
   );
 
@@ -672,20 +613,6 @@ export function buildVisitPage(doc: Document, main: HTMLElement): VisitPage {
       heading: frontDoorHeading,
       choiceButtons,
       statusLine: frontDoorStatus,
-    },
-    calibration: {
-      element: calibration,
-      heading: calibrationHeading,
-      introLines,
-      dial,
-      meter,
-      range,
-      keysLine,
-      statusLine,
-      startButton,
-      quieterButton,
-      louderButton,
-      keepButton,
     },
     headphoneCheck: {
       element: headphoneCheck,

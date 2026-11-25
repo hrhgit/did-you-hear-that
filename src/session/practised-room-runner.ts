@@ -98,6 +98,8 @@ interface PractiseCommonOptions {
   readonly practiceScored: (entry: ScoredPracticeTrial) => void;
   /** Called once, when the practice ends and the counting begins. */
   readonly countingStarted: () => void;
+  /** Begin counting after the roll call even if some practice sounds went uncaught. */
+  readonly continueAfterMisses?: boolean;
   /** As the room runner's: a practice sound was refused because the output is not running. */
   readonly pauseFromOutput: () => void;
   /** As the room runner's: one practice sound was refused too many times in a row. */
@@ -301,7 +303,7 @@ export function createPractisedRoomsRunner(
   const next = (): void => {
     const turn = queue[0];
     if (turn === undefined) {
-      if (missed.length > 0) {
+      if (missed.length > 0 && !options.continueAfterMisses) {
         phase = "notHeard";
         pending = null;
         options.notHeard(missesOf(missed));

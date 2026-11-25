@@ -5,7 +5,7 @@
  * enters a string of the house (D11).
  */
 export const resultPageCopy = Object.freeze({
-  heading: "The quietest sounds you caught",
+  heading: "Your listening estimates",
   leftLabel: "Left",
   rightLabel: "Right",
   differenceHeading: "Left and right",

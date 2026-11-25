@@ -143,7 +143,11 @@ function roomsEqual(first: unknown, second: unknown): boolean {
  * saved `hands` is unreadable, because no calibration is logged so: a calibration recorded before
  * the audible-start spec has no `anchor` at all.
  */
-const savedAnchors: readonly unknown[] = Object.freeze(["music", "hiss"]);
+const savedAnchors: readonly unknown[] = Object.freeze([
+  "music",
+  "hiss",
+  "preset",
+]);
 
 /** Whether a calibration's `anchor`, when it has one, is one a calibration may be saved with. */
 function calibrationAnchorHolds(calibration: unknown): boolean {
@@ -189,10 +193,30 @@ function searchFloorHolds(entry: unknown): boolean {
   );
 }
 
+/** Old results have neither endpoint. Check each endpoint that is present. */
+function earRangeHolds(result: unknown): boolean {
+  if (
+    !isJsonObject(result) ||
+    (result.lowDb === undefined && result.highDb === undefined)
+  ) {
+    return true;
+  }
+  const { thresholdDb, lowDb, highDb } = result;
+  return (
+    result.state === "found" &&
+    isFiniteNumber(thresholdDb) &&
+    (lowDb === undefined || (isFiniteNumber(lowDb) && lowDb <= thresholdDb)) &&
+    (highDb === undefined || (isFiniteNumber(highDb) && highDb >= thresholdDb))
+  );
+}
+
 /** Rule 2: the light check of the log. */
 function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
   if (
     log.formatVersion !== payloadFormatVersion ||
+    (log.searchMethod !== undefined &&
+      log.searchMethod !== "quick" &&
+      log.searchMethod !== "adaptive") ||
     typeof log.visitType !== "string" ||
     !Object.hasOwn(visitTypeNames, log.visitType) ||
     log.visitType !== envelopeVisitType ||
@@ -203,7 +227,14 @@ function logHolds(log: JsonObject, envelopeVisitType: VisitType): boolean {
     !logListFields.every((field) => Array.isArray(log[field])) ||
     !(log.calibrations as readonly unknown[]).every(calibrationAnchorHolds) ||
     !(log.calibrations as readonly unknown[]).every(calibrationFloorsHold) ||
-    !(log.roomAttempts as readonly unknown[]).every(searchFloorHolds)
+    !(log.roomAttempts as readonly unknown[]).every(
+      (attempt) =>
+        searchFloorHolds(attempt) &&
+        (!isJsonObject(attempt) ||
+          !isJsonObject(attempt.result) ||
+          (earRangeHolds(attempt.result.left) &&
+            earRangeHolds(attempt.result.right))),
+    )
   ) {
     return false;
   }
@@ -230,7 +261,8 @@ function earResultHolds(result: unknown): boolean {
     !isJsonObject(result) ||
     typeof result.state !== "string" ||
     !earStates.includes(result.state) ||
-    !earCountFields.every((field) => isCount(result[field]))
+    !earCountFields.every((field) => isCount(result[field])) ||
+    !earRangeHolds(result)
   ) {
     return false;
   }
@@ -424,7 +456,12 @@ export function parseSavedVisitPayload(
   const swappedRepeats: unknown = Object.hasOwn(payload, "swappedRepeats")
     ? payload.swappedRepeats
     : [];
-  if (!swappedRepeatRunsHold(swappedRepeats, summary, visitLog)) {
+  if (
+    !swappedRepeatRunsHold(swappedRepeats, summary, visitLog) ||
+    !swappedRepeats.every(
+      (run) => earRangeHolds(run.left) && earRangeHolds(run.right),
+    )
+  ) {
     return null;
   }
   return deepFreeze({

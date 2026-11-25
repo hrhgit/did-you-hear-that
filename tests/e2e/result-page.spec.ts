@@ -30,9 +30,6 @@ test.use({ launchOptions: { args: ["--mute-audio"] } });
 
 const address = `http://localhost:${String(devServer.port)}${devServer.resultSheetPath}`;
 
-/** The width of one wing in the units of the drawing: from the lamp to the inner face of a wall. */
-const wingWidth = 168;
-
 let quickVisit: VisitToSave;
 let laterQuickVisit: VisitToSave;
 let fullVisit: VisitToSave;
@@ -75,7 +72,7 @@ async function openSheet(page: Page, visit: VisitToSave) {
   return record;
 }
 
-/** Waits until the light has spread and every fade has ended. */
+/** Waits until every fade has ended. */
 async function settle(page: Page): Promise<void> {
   await page.evaluate(() =>
     Promise.all(
@@ -107,24 +104,29 @@ const button = (page: Page, name: string): Locator =>
   page.getByRole("button", { name, exact: true });
 const floorWords = (page: Page, roomId: GhostSoundId): Locator =>
   page.locator(`.result-floor-words[data-room="${roomId}"]`);
-const drawnFloor = (page: Page, roomId: GhostSoundId): Locator =>
-  page.locator(`.result-section .result-floor[data-room="${roomId}"]`);
+const drawnColumn = (page: Page, roomId: GhostSoundId): Locator =>
+  page.locator(`.result-curve-svg .result-curve-column[data-room="${roomId}"]`);
+const drawnPoint = (
+  page: Page,
+  roomId: GhostSoundId,
+  side: "left" | "right",
+): Locator =>
+  page.locator(
+    `.result-curve-svg .result-curve-point[data-room="${roomId}"][data-side="${side}"]`,
+  );
 const savedVisits = (page: Page): Locator =>
   page.locator(".result-saved-visit");
 
-/** How wide the light of a wing is drawn, in the units of the drawing. 0 for a wing with no light. */
-async function lightWidth(
+/** How high in the sky a found ear's light is drawn: larger is louder, in the units of the drawing. */
+async function heightOf(
   page: Page,
   roomId: GhostSoundId,
   side: "left" | "right",
 ): Promise<number> {
-  const light = drawnFloor(page, roomId).locator(
-    `.result-light[data-side="${side}"]`,
-  );
-  if ((await light.count()) === 0) {
-    return 0;
-  }
-  return Number(await light.getAttribute("width"));
+  return drawnPoint(page, roomId, side).evaluate((mark) => {
+    const box = (mark as SVGGraphicsElement).getBBox();
+    return -(box.y + box.height / 2);
+  });
 }
 
 /** The summary of a visit with some ears replaced, to draw states a simulated visit rarely gives. */
@@ -165,7 +167,7 @@ const counts = {
 };
 
 test.describe("the result of a visit", () => {
-  test("draws a visit: the head, the rooms it entered from the top down, and the rooms it skipped left empty", async ({
+  test("draws a visit: the head, the pitches it entered from the lowest, and both ears at each", async ({
     page,
   }) => {
     const record = await openSheet(page, quickVisit);
@@ -186,26 +188,32 @@ test.describe("the result of a visit", () => {
     await expect(page.locator(".result-floor-name")).toHaveText(
       fromTheTop.map((roomId) => roomNames[roomId]),
     );
-    for (const roomId of ghostSoundIds) {
-      await expect(drawnFloor(page, roomId)).toHaveAttribute(
-        "data-kind",
-        entered.includes(roomId) ? "entered" : "closed",
+    // One column for each pitch entered, from the lowest at the left.
+    const columns = await page
+      .locator(".result-curve-svg .result-curve-column")
+      .evaluateAll((all) =>
+        all.map((column) => column.getAttribute("data-room")),
       );
-    }
+    expect(columns).toEqual(
+      [...quickVisit.summary.rooms]
+        .sort((a, b) => a.room.frequencyHz - b.room.frequencyHz)
+        .map((room) => room.room.roomId),
+    );
 
-    // This visitor's left side caught quieter sounds than the right on every floor, so the light
-    // reaches further into the left wing, and ends inside both.
+    // This visitor's left side caught quieter sounds than the right at every pitch, so its light
+    // sits lower in the sky.
     for (const room of quickVisit.summary.rooms) {
       expect(room.left.state).toBe("found");
       expect(room.right.state).toBe("found");
-      const left = await lightWidth(page, room.room.roomId, "left");
-      const right = await lightWidth(page, room.room.roomId, "right");
-      expect(left).toBeGreaterThan(right);
-      expect(right).toBeGreaterThan(0);
-      expect(left).toBeLessThan(wingWidth);
-      await expect(
-        drawnFloor(page, room.room.roomId).locator(".result-reach"),
-      ).toHaveCount(2);
+      for (const side of ["left", "right"] as const) {
+        await expect(drawnPoint(page, room.room.roomId, side)).toHaveAttribute(
+          "data-mark",
+          "found",
+        );
+      }
+      expect(await heightOf(page, room.room.roomId, "left")).toBeLessThan(
+        await heightOf(page, room.room.roomId, "right"),
+      );
       await expect(
         floorWords(page, room.room.roomId).locator(".result-wing"),
       ).toHaveCount(2);
@@ -276,29 +284,36 @@ test.describe("the result of a visit", () => {
     await openSheet(page, mixed);
     await settle(page);
 
-    // Caught at the quietest sound the house has: light to the far wall, with no end line.
-    expect(await lightWidth(page, "attic", "left")).toBe(wingWidth);
-    await expect(
-      drawnFloor(page, "attic").locator('.result-reach[data-side="left"]'),
-    ).toHaveCount(0);
-    // Nothing caught: the wing stays dark and is not hatched.
-    expect(await lightWidth(page, "attic", "right")).toBe(0);
-    await expect(
-      drawnFloor(page, "attic").locator('[data-side="right"]'),
-    ).toHaveCount(0);
-    // No level to draw: hatched, with no light.
-    await expect(
-      drawnFloor(page, "stairs").locator('.result-doubt[data-side="left"]'),
-    ).toHaveCount(1);
-    expect(await lightWidth(page, "stairs", "left")).toBe(0);
+    // Past either end of the search, a mark beyond that end of the sky; no level, a hollow mark.
+    for (const [roomId, side, mark] of [
+      ["attic", "left", "betterThanFloor"],
+      ["attic", "right", "worseThanCap"],
+      ["stairs", "left", "unreliable"],
+      ["stairs", "right", "found"],
+    ] as const) {
+      await expect(drawnPoint(page, roomId, side)).toHaveAttribute(
+        "data-mark",
+        mark,
+      );
+    }
+    expect(await heightOf(page, "attic", "right")).toBeGreaterThan(
+      await heightOf(page, "stairs", "right"),
+    );
+    expect(await heightOf(page, "attic", "left")).toBeLessThan(
+      await heightOf(page, "stairs", "right"),
+    );
     await expect(
       floorWords(page, "stairs").locator(
         '.result-wing[data-state="unreliable"]',
       ),
     ).toHaveCount(1);
-    // Two levels: the quieter one reaches further.
-    expect(await lightWidth(page, "nursery", "right")).toBeGreaterThan(
-      await lightWidth(page, "nursery", "left"),
+    // Two levels: the quieter one sits lower, and the wide gap gets a moonbeam.
+    expect(await heightOf(page, "nursery", "right")).toBeLessThan(
+      await heightOf(page, "nursery", "left"),
+    );
+    await expect(drawnColumn(page, "nursery")).toHaveAttribute(
+      "data-standing",
+      "farApart",
     );
     // A floor with a wide difference offers the swapped repeat, and the page passes it on.
     await floorWords(page, "nursery")
@@ -315,38 +330,23 @@ test.describe("the result of a visit", () => {
       ),
     ).toEqual([`swappedRepeat:${String(nurseryIndex)}`]);
 
-    // Nothing in the drawing joins one floor to another: every lit shape stays inside its room.
-    const boxes = await page.evaluate(() =>
-      [...document.querySelectorAll(".result-section .result-floor")].map(
-        (floor) => {
-          const box = (floor as SVGGraphicsElement).getBBox();
-          return { top: box.y, bottom: box.y + box.height, height: box.height };
-        },
-      ),
-    );
-    const drawn = boxes
-      .filter((box) => box.height > 0)
-      .sort((a, b) => a.top - b.top);
-    for (let index = 1; index < drawn.length; index += 1) {
-      expect(drawn[index]?.top ?? 0).toBeGreaterThan(
-        drawn[index - 1]?.bottom ?? 0,
-      );
-    }
-
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
   });
 
-  test("leaves every wing dark for a visitor who caught nothing", async ({
-    page,
-  }) => {
+  test("draws no level for a visitor who caught nothing", async ({ page }) => {
     await openSheet(page, silentVisit);
     for (const room of silentVisit.summary.rooms) {
       expect(room.left.state).toBe("worseThanCap");
       expect(room.right.state).toBe("worseThanCap");
     }
-    await expect(page.locator(".result-section .result-light")).toHaveCount(0);
-    await expect(page.locator(".result-section .result-doubt")).toHaveCount(0);
+    await expect(
+      page.locator('.result-curve-point[data-mark="found"]'),
+    ).toHaveCount(0);
+    await expect(
+      page.locator('.result-curve-point[data-mark="worseThanCap"]'),
+    ).toHaveCount(2 * silentVisit.summary.rooms.length);
+    await expect(page.locator(".result-curve-now-line")).toHaveCount(0);
     await expect(page.locator(".result-floor-words")).toHaveCount(5);
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
@@ -468,12 +468,12 @@ test.describe("the result of a visit", () => {
     expect(await page.evaluate(() => window.localStorage.length)).toBe(0);
   });
 
-  test("draws an earlier visit with the same headphones as dashed outlines, by the name alone", async ({
+  test("draws an earlier visit with the same headphones as faint lines, by the name alone", async ({
     page,
   }) => {
     await openSheet(page, quickVisit);
     const name = page.getByLabel(resultPageCopy.headphoneNameLabel);
-    const outlines = page.locator(".result-section .result-earlier");
+    const outlines = page.locator(".result-curve-earlier-point");
     const comparison = page.locator(".result-comparison");
     await expect(page.locator(".result-name-hint")).toHaveText(
       comparisonCopy.headphoneNameHint,
@@ -490,22 +490,16 @@ test.describe("the result of a visit", () => {
     await expect(outlines).toHaveCount(0);
     await expect(comparison).toBeHidden();
 
-    // The same name, whatever its letter case and spacing, brings the earlier visit's outlines.
+    // The same name, whatever its letter case and spacing, brings the earlier visit's lines.
     await name.fill("  the OLD  grey pair ");
     await expect(outlines).toHaveCount(2 * ghostSoundIds.length);
     await expect(comparison).toBeVisible();
     await expect(comparison).not.toHaveText(comparisonCopy.noEarlierVisitLine);
     for (const roomId of ghostSoundIds) {
       await expect(
-        drawnFloor(page, roomId).locator(".result-earlier"),
+        outlines.and(page.locator(`[data-room="${roomId}"]`)),
       ).toHaveCount(2);
     }
-    // Typing a name redraws the outlines and leaves the light where it is: it does not spread
-    // again.
-    await expect(page.locator(".result-section")).toHaveAttribute(
-      "data-entering",
-      "false",
-    );
     await expectNoHorizontalScroll(page);
     await expectNoSeriousAccessibilityProblem(page);
 
@@ -577,24 +571,23 @@ test.describe("the result of a visit", () => {
     await expect(page.locator(".result-figure .result-status")).toBeHidden();
   });
 
-  test("spreads the light once, and only fades it for a visitor who asked for less motion", async ({
+  test("puts a moonbeam on the pitch whose words the visitor points at", async ({
     page,
   }) => {
-    await openPage(page, address);
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await showVisit(page, quickVisit);
-    const animations = await page.evaluate(() =>
-      [...document.querySelectorAll(".result-section .result-light")].map(
-        (light) => {
-          const style = getComputedStyle(light);
-          return `${style.animationName} ${style.animationDuration}`;
-        },
-      ),
+    await openSheet(page, quickVisit);
+    const svg = page.locator(".result-curve-svg");
+    await floorWords(page, "attic").hover();
+    await expect(svg).toHaveAttribute("data-picking", "true");
+    await expect(drawnColumn(page, "attic")).toHaveAttribute(
+      "data-picked",
+      "true",
     );
-    expect(animations.length).toBeGreaterThan(0);
-    for (const animation of animations) {
-      expect(animation).toBe("result-appear 0.4s");
-    }
+    await expect(drawnColumn(page, "cellar")).toHaveAttribute(
+      "data-picked",
+      "false",
+    );
+    await page.mouse.move(0, 0);
+    await expect(svg).toHaveAttribute("data-picking", "false");
   });
 
   test("leads back to the front door", async ({ page }) => {

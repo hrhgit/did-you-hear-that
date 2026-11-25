@@ -9,8 +9,6 @@ import { findEarlierVisit } from "../../session/find-earlier-visit";
 import { resultPicture } from "../../session/result-picture";
 import { createResultView } from "../result/create-result-view";
 import { buildVisitPage, type CheckAnswer } from "./build-visit-page";
-import { joinCalibrationControl } from "./join-calibration-control";
-import { joinReplayButtons } from "./join-replay-buttons";
 import { joinSwapButtons } from "./join-swap-buttons";
 import { listenForAnswers } from "./listen-for-answers";
 import type { VisitSnapshot } from "../../session/visit-flow-types";
@@ -95,31 +93,6 @@ export function startVisit(
   press(page.frontDoor.choiceButtons.full, () => {
     flow.chooseVisit("full");
   });
-  press(page.calibration.startButton, () => {
-    flow.startCalibration();
-  });
-  press(page.calibration.quieterButton, () => {
-    flow.quieter();
-  });
-  press(page.calibration.louderButton, () => {
-    flow.louder();
-  });
-  press(page.calibration.keepButton, () => {
-    flow.keepCalibration();
-  });
-  joinCalibrationControl({
-    doc,
-    page,
-    current: () => screenView.current()?.calibration ?? null,
-    actions: {
-      setTarget: (settingDb) => {
-        flow.setCalibrationTarget(settingDb);
-      },
-      keep: () => {
-        flow.keepCalibration();
-      },
-    },
-  });
   press(page.headphoneCheck.playButton, () => {
     flow.playHeadphoneCheck();
   });
@@ -143,14 +116,6 @@ export function startVisit(
     if (screenView.restButtonIsMeant()) {
       flow.proceed();
     }
-  });
-  joinReplayButtons(page, () => screenView.replayButtonIsMeant(), {
-    startReplay: () => {
-      flow.startReplay();
-    },
-    proceed: () => {
-      flow.proceed();
-    },
   });
   joinSwapButtons(
     page,

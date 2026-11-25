@@ -13,15 +13,10 @@ import {
   type PaintedImage,
 } from "./painted-images";
 import {
-  jackFoot,
-  jackSize,
   laneBox,
-  resultViewBox,
   wingEdgeX,
-  wingLabelY,
   wingLightBox,
-  wingWidth,
-  yardCentreX,
+  type ResultLayout,
 } from "./result-geometry";
 
 /** What the drawing needs besides the picture. */
@@ -35,13 +30,12 @@ export interface ResultSectionOptions {
   readonly wingLabels: { readonly left: string; readonly right: string };
   /** Whether the light spreads from the candles as the drawing appears, or is simply there. */
   readonly entering: boolean;
+  /** The shape of the picture: tall on a phone, wide on a computer. */
+  readonly layout: ResultLayout;
 }
 
 /** How far the earlier visit's outline keeps from the edges of its lane. */
 const outlineInset = 6;
-
-/** The side of the square a creature is drawn in, in the units of the drawing. */
-const creatureSize = 74;
 
 /** How far above the bottom of its lane a creature stands. */
 const creatureFootLift = 3;
@@ -68,35 +62,40 @@ const haloRadii = { x: 16, y: 24 } as const;
  * Where a lit half's creature stands: just inside the end of its light, kept clear of the candle
  * in the middle and of the end of the lane. The x is its middle.
  */
-export function creatureCentreX(side: "left" | "right", depth: number): number {
+export function creatureCentreX(
+  layout: ResultLayout,
+  side: "left" | "right",
+  depth: number,
+): number {
+  const { centreX, creatureSize, wingWidth } = layout;
   const outward = side === "left" ? -1 : 1;
-  const nearest =
-    yardCentreX + outward * (creatureSize / 2 + creatureCandleGap);
+  const nearest = centreX + outward * (creatureSize / 2 + creatureCandleGap);
   const furthest =
-    yardCentreX + outward * (wingWidth - creatureSize / 2 - creatureEndGap);
+    centreX + outward * (wingWidth - creatureSize / 2 - creatureEndGap);
   const inside =
-    wingEdgeX(side, depth) -
+    wingEdgeX(layout, side, depth) -
     outward * creatureSize * creatureInsideLightFraction;
   return side === "left"
     ? Math.max(furthest, Math.min(nearest, inside))
     : Math.min(furthest, Math.max(nearest, inside));
 }
 
-/** One half of a lane: its light, its hatching, its end line and the outline of an earlier visit. */
+/** One half of a lane: its result marks and the outline of an earlier visit. */
 function drawWing(
   doc: Document,
+  layout: ResultLayout,
   pen: SketchPen,
   roomId: GhostSoundId,
   side: "left" | "right",
   wing: PictureWing,
 ): SVGElement[] {
-  const lane = laneBox(roomId);
+  const lane = laneBox(layout, roomId);
   const parts: SVGElement[] = [];
   const depth = wing.lightDepthFraction;
 
   if (depth === null) {
     // No level can be drawn here: the whole half is hatched and stays unlit.
-    const whole = wingLightBox(roomId, side, 1);
+    const whole = wingLightBox(layout, roomId, side, 1);
     parts.push(
       svgElement(doc, "rect", {
         class: "result-doubt",
@@ -108,7 +107,7 @@ function drawWing(
       }),
     );
   } else if (depth > 0) {
-    const light = wingLightBox(roomId, side, depth);
+    const light = wingLightBox(layout, roomId, side, depth);
     parts.push(
       svgElement(doc, "rect", {
         class: "result-light",
@@ -121,7 +120,7 @@ function drawWing(
     );
     if (depth < 1) {
       // Where the light ends: one pencil line across the lane.
-      const x = wingEdgeX(side, depth);
+      const x = wingEdgeX(layout, side, depth);
       parts.push(
         svgElement(doc, "path", {
           class: "result-reach",
@@ -129,19 +128,16 @@ function drawWing(
         }),
       );
     }
-  }
-
-  if (depth !== null && depth > 0) {
     // The lane's creature, where the light ends: as far as the visitor followed it here.
     const art = placedImage(
       doc,
       paintedCreature(doc, roomId),
-      [creatureCentreX(side, depth), lane.bottom - creatureFootLift],
-      creatureSize,
+      [creatureCentreX(layout, side, depth), lane.bottom - creatureFootLift],
+      layout.creatureSize,
     );
     // Facing the candle from either side. The flip sits on a group of its own, under the one
     // that moves as it arrives, so the arrival never undoes it.
-    const centre = creatureCentreX(side, depth);
+    const centre = creatureCentreX(layout, side, depth);
     const facing = svgElement(
       doc,
       "g",
@@ -158,18 +154,32 @@ function drawWing(
         [facing],
       ),
     );
+  } else if (wing.state === "worseThanCap") {
+    // Keep this half dark, with a dash that shows the result was recorded.
+    const x = wingEdgeX(layout, side, 0.5);
+    const y = (lane.top + lane.bottom) / 2;
+    parts.push(
+      svgElement(doc, "rect", {
+        class: "result-uncaught",
+        x: x - 7,
+        y: y - 1,
+        width: 14,
+        height: 2,
+        rx: 1,
+      }),
+    );
   }
 
   const outlineDepth = wing.earlier?.outlineDepthFraction ?? null;
   if (outlineDepth !== null && outlineDepth > 0) {
     // An earlier visit: three ruled, dashed sides, open towards the candle.
-    const x = wingEdgeX(side, outlineDepth);
+    const x = wingEdgeX(layout, side, outlineDepth);
     const top = lane.top + outlineInset;
     const bottom = lane.bottom - outlineInset;
     parts.push(
       svgElement(doc, "path", {
         class: "result-earlier",
-        d: `M${String(yardCentreX)} ${String(top)}L${String(x)} ${String(top)}L${String(x)} ${String(bottom)}L${String(yardCentreX)} ${String(bottom)}`,
+        d: `M${String(layout.centreX)} ${String(top)}L${String(x)} ${String(top)}L${String(x)} ${String(bottom)}L${String(layout.centreX)} ${String(bottom)}`,
       }),
     );
   }
@@ -182,9 +192,13 @@ function drawWing(
 }
 
 /** A small candle in the middle of a lane: where both halves of its light start. */
-function drawCandle(doc: Document, roomId: GhostSoundId): SVGElement {
-  const lane = laneBox(roomId);
-  const x = yardCentreX;
+function drawCandle(
+  doc: Document,
+  layout: ResultLayout,
+  roomId: GhostSoundId,
+): SVGElement {
+  const lane = laneBox(layout, roomId);
+  const x = layout.centreX;
   const base = lane.bottom - 10;
   const wickY = base - 18;
   return svgElement(doc, "g", { class: "result-candle" }, [
@@ -214,10 +228,11 @@ function drawCandle(doc: Document, roomId: GhostSoundId): SVGElement {
 /** The bed of a lane, drawn for every pitch, entered or not. */
 function drawLaneBed(
   doc: Document,
+  layout: ResultLayout,
   roomId: GhostSoundId,
   entered: boolean,
 ): SVGElement {
-  const lane = laneBox(roomId);
+  const lane = laneBox(layout, roomId);
   return svgElement(doc, "rect", {
     class: "result-lane",
     "data-room": roomId,
@@ -233,6 +248,7 @@ function drawLaneBed(
 /** The pitch of a lane, above its middle. */
 function drawPitchLabel(
   doc: Document,
+  layout: ResultLayout,
   roomId: GhostSoundId,
   label: string,
   entered: boolean,
@@ -240,8 +256,8 @@ function drawPitchLabel(
   const text = svgElement(doc, "text", {
     class: "result-pitch",
     "data-state": entered ? "lit" : "closed",
-    x: yardCentreX,
-    y: laneBox(roomId).top - 8,
+    x: layout.centreX,
+    y: laneBox(layout, roomId).top - 8,
     "text-anchor": "middle",
   });
   text.textContent = label;
@@ -254,6 +270,7 @@ function drawPitchLabel(
  */
 function lightGradient(
   doc: Document,
+  layout: ResultLayout,
   roomId: GhostSoundId,
   side: "left" | "right",
 ): SVGElement {
@@ -263,9 +280,9 @@ function lightGradient(
     {
       id: `result-light-${roomId}-${side}`,
       gradientUnits: "userSpaceOnUse",
-      x1: yardCentreX,
+      x1: layout.centreX,
       y1: 0,
-      x2: wingEdgeX(side, 1),
+      x2: wingEdgeX(layout, side, 1),
       y2: 0,
     },
     [
@@ -278,6 +295,7 @@ function lightGradient(
 /** A lane the visit entered: both halves of its light and the candle in the middle. */
 function drawFloor(
   doc: Document,
+  layout: ResultLayout,
   seed: number,
   floor: PictureFloor,
 ): SVGElement {
@@ -287,8 +305,8 @@ function drawFloor(
     createSeededRandom(seed + 1 + ghostSoundIds.indexOf(roomId)),
   );
   const wings = [
-    ...drawWing(doc, pen, roomId, "left", floor.left),
-    ...drawWing(doc, pen, roomId, "right", floor.right),
+    ...drawWing(doc, layout, pen, roomId, "left", floor.left),
+    ...drawWing(doc, layout, pen, roomId, "right", floor.right),
   ];
   const isCreature = (part: SVGElement): boolean =>
     part.classList.contains("result-creature");
@@ -303,8 +321,8 @@ function drawFloor(
     },
     [
       svgElement(doc, "defs", {}, [
-        lightGradient(doc, roomId, "left"),
-        lightGradient(doc, roomId, "right"),
+        lightGradient(doc, layout, roomId, "left"),
+        lightGradient(doc, layout, roomId, "right"),
       ]),
       svgElement(
         doc,
@@ -312,7 +330,7 @@ function drawFloor(
         { "clip-path": `url(#result-lane-${roomId})` },
         wings.filter((part) => !isCreature(part)),
       ),
-      drawCandle(doc, roomId),
+      drawCandle(doc, layout, roomId),
       // The creatures stand over the candle's glow and may lean past the end of the lane.
       ...wings.filter(isCreature),
     ],
@@ -351,7 +369,8 @@ function placedImage(
 }
 
 /** Jack at the foot of the yard, his candle lit and his sweets at his feet, as the room paints him. */
-function drawJack(doc: Document): SVGElement {
+function drawJack(doc: Document, layout: ResultLayout): SVGElement {
+  const { jackFoot, jackSize } = layout;
   const [x, foot] = jackFoot;
   return svgElement(doc, "g", { class: "result-jack" }, [
     svgElement(doc, "ellipse", {
@@ -370,7 +389,7 @@ function drawJack(doc: Document): SVGElement {
  * Draws the result picture: the moonlit yard of the visit, with one lane for each pitch, the
  * highest at the top, and Jack at the foot. In every lane the visit entered a candle burns in the
  * middle, and its light reaches into the left half and into the right half as far as the picture
- * model says. A half with no level to draw is hatched, a half where nothing was caught stays dark,
+ * model says. A half with no level to draw is hatched, a half where nothing was caught has a dash,
  * and a lane the visit did not enter stays empty. Nothing in the drawing joins one lane to
  * another, and no lane carries a scale.
  */
@@ -379,6 +398,8 @@ export function drawResultSection(
   picture: ResultPicture,
   options: ResultSectionOptions,
 ): SVGElement {
+  const { layout } = options;
+  const { viewBox } = layout;
   const definitions = svgElement(doc, "defs", {}, [
     svgElement(
       doc,
@@ -401,7 +422,7 @@ export function drawResultSection(
       svgElement(doc, "stop", { class: "result-jack-glow-far", offset: 1 }),
     ]),
     ...ghostSoundIds.map((roomId) => {
-      const lane = laneBox(roomId);
+      const lane = laneBox(layout, roomId);
       return svgElement(doc, "clipPath", { id: `result-lane-${roomId}` }, [
         svgElement(doc, "rect", {
           x: lane.left,
@@ -418,13 +439,13 @@ export function drawResultSection(
     picture.floors.map((floor) => [floor.room.roomId, floor] as const),
   );
   const beds = ghostSoundIds.map((roomId) =>
-    drawLaneBed(doc, roomId, entered.has(roomId)),
+    drawLaneBed(doc, layout, roomId, entered.has(roomId)),
   );
   const pitches = ghostSoundIds.flatMap((roomId) => {
     const floor = entered.get(roomId);
     return floor === undefined
       ? []
-      : [drawPitchLabel(doc, roomId, floor.pitchLabel, true)];
+      : [drawPitchLabel(doc, layout, roomId, floor.pitchLabel, true)];
   });
   const floors = ghostSoundIds.map((roomId) => {
     const floor = entered.get(roomId);
@@ -434,21 +455,24 @@ export function drawResultSection(
           "data-room": roomId,
           "data-kind": "closed",
         })
-      : drawFloor(doc, options.seed, floor);
+      : drawFloor(doc, layout, options.seed, floor);
   });
 
   // The line from Jack up through the candles, the way a draughtsman marks a centre.
-  const topLane = laneBox(ghostSoundIds[ghostSoundIds.length - 1] ?? "attic");
+  const topLane = laneBox(
+    layout,
+    ghostSoundIds[ghostSoundIds.length - 1] ?? "attic",
+  );
   const centre = svgElement(doc, "path", {
     class: "result-centre",
-    d: `M${String(yardCentreX)} ${String(topLane.top)}L${String(yardCentreX)} ${String(jackFoot[1] - jackSize)}`,
+    d: `M${String(layout.centreX)} ${String(topLane.top)}L${String(layout.centreX)} ${String(layout.jackFoot[1] - layout.jackSize)}`,
   });
 
   const wingLabel = (side: "left" | "right"): SVGElement => {
     const label = svgElement(doc, "text", {
       class: "result-wing-label",
-      x: wingEdgeX(side, 0.55),
-      y: wingLabelY,
+      x: wingEdgeX(layout, side, 0.55),
+      y: layout.wingLabelY,
       "text-anchor": "middle",
     });
     label.textContent = options.wingLabels[side];
@@ -460,11 +484,12 @@ export function drawResultSection(
     "svg",
     {
       class: "result-section",
-      viewBox: `${String(resultViewBox.x)} ${String(resultViewBox.y)} ${String(resultViewBox.width)} ${String(resultViewBox.height)}`,
+      viewBox: `${String(viewBox.x)} ${String(viewBox.y)} ${String(viewBox.width)} ${String(viewBox.height)}`,
       preserveAspectRatio: "xMidYMid meet",
       "aria-hidden": "true",
       focusable: "false",
       "data-entering": options.entering ? "true" : "false",
+      "data-shape": layout.shape,
     },
     [
       definitions,
@@ -472,7 +497,7 @@ export function drawResultSection(
       ...beds,
       ...pitches,
       ...floors,
-      drawJack(doc),
+      drawJack(doc, layout),
       wingLabel("left"),
       wingLabel("right"),
     ],

@@ -78,7 +78,7 @@ export interface VisitFlow {
 
   /** Front door: starts a visit of this type, starts sound, and moves to calibration. */
   chooseVisit(visitType: VisitType): void;
-  /** Calibration: starts the calibration sound at the bottom of the control: the music, looping, or the hiss repeats where the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
+  /** Calibration: starts the reference sound, looping music or hiss repeats when the music cannot be loaded. While the music is still loading, it starts once it is ready. Also starts it again after a stop. */
   startCalibration(): void;
   /** Calibration: moves the control one step louder. The next hiss repeat plays the new setting, and the music reaches it in one ramp of 100 ms. */
   louder(): void;
@@ -126,13 +126,6 @@ export interface VisitFlow {
   stop(): void;
   /** Result: opens the swapped repeat for a room whose summary offers it. */
   chooseSwappedRepeat(roomIndex: number): void;
-  /**
-   * Missed-sound replay, phase `announcing`: starts the sounds. Call it from the visitor's press,
-   * because it may start sound (it calls `activate` within the call). Does nothing in any other
-   * phase or stage, or while a pause holds. In this stage `proceed` skips the replay, or goes on to
-   * the result once it has finished, and `stop` silences at once and shows the result.
-   */
-  startReplay(): void;
   /** Swapped repeat, phase `instruction`: the visitor says the earpieces are swapped. Plays nothing. */
   confirmSwap(): void;
   /**
@@ -506,6 +499,8 @@ export interface VisitLog {
   readonly visitType: VisitType;
   /** The seed of this visit. With the log's answers it reproduces every trial. */
   readonly visitSeed: number;
+  /** Absent in visits made with the original staircase method. */
+  readonly searchMethod?: "quick" | "adaptive";
   /** The rooms in visit order. */
   readonly rooms: readonly VisitRoom[];
   /** Every calibration kept during the visit, in order. */
@@ -579,8 +574,10 @@ export interface LoggedRoomResult {
 export type LoggedEarResult =
   | (EarCounts & {
       readonly state: "found";
-      /** The quietest level caught on 2 of 3 rising presentations. */
+      /** The level found by the search. */
       readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
     })
   | (EarCounts & { readonly state: "betterThanFloor" })
   | (EarCounts & { readonly state: "worseThanCap" })
@@ -671,6 +668,11 @@ export interface ScoredPart<Outcome extends SoundOutcome | NoSoundOutcome> {
   readonly responseTimeMs: number | null;
   /** When it was scored: the answer, or the end of the window. */
   readonly scoredAtMs: number;
+  /**
+   * The Timing_Offset in force when it was presented, taken off `responseTimeMs` before the
+   * answer was graded (headphone-traits R1). Absent when 0 (D2).
+   */
+  readonly timingOffsetMs?: number;
 }
 
 /** The fields of a trial that was played and then not scored, because the visit paused or the room began again. */
@@ -745,8 +747,10 @@ export type VisitUnreliableReason =
 export type VisitEarResult =
   | (EarCounts & {
       readonly state: "found";
-      /** The quietest level caught on 2 of 3 rising presentations, relative to the visitor's calibration. */
+      /** The level found by the search, relative to the visitor's calibration. */
       readonly thresholdDb: number;
+      readonly lowDb?: number;
+      readonly highDb?: number;
     })
   | (EarCounts & { readonly state: "betterThanFloor" })
   | (EarCounts & { readonly state: "worseThanCap" })
@@ -1258,8 +1262,8 @@ export type SwappedRepeat =
 /** What a calibration plays. `loading`: the music is not ready yet; `hiss`: the music could not be loaded. */
 export type CalibrationSound = "loading" | "music" | "hiss";
 
-/** How a calibration's anchor was set. `hands`: matched to rubbed hands, before the audible-start spec. */
-export type CalibrationAnchor = "hands" | "music" | "hiss";
+/** How the reference level was set. `hands` is the legacy rubbed-hands method. */
+export type CalibrationAnchor = "hands" | "music" | "hiss" | "preset";
 
 /**
  * `practice`: the room's sound plays to one ear at a time until each ear has caught it once;
@@ -1389,6 +1393,10 @@ export type ScoredReminderSound = ReminderSoundCommon & {
   readonly answeredAtMs: number | null;
   readonly responseTimeMs: number | null;
   readonly scoredAtMs: number;
+  /** As for a trial (headphone-traits R1). Absent when 0. */
+  readonly timingOffsetMs?: number;
+  /** True for an easy turn on the beat (headphone-traits R2). Absent for a reminder after a quiet. */
+  readonly easy?: true;
 };
 
 export type DiscardedReminderSound = ReminderSoundCommon & {

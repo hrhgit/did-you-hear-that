@@ -60,7 +60,6 @@ export async function simulatedRoomVisit(
     extraPresses: [],
     disturbances: [],
     ending: null,
-    replay: { kind: "watch", startAfterMs: 900 },
     ...(swappedRepeat === undefined ? {} : { swappedRepeat }),
   });
   if (run.ending !== "done" || run.finalStage !== "result") {

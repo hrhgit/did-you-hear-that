@@ -58,9 +58,8 @@ export function createScreenView(options: {
 }): ScreenView {
   const { doc, view, page, result, caption } = options;
   const { scene, shelf } = page;
-  const sheets: Readonly<Record<SheetName, Sheet>> = {
+  const sheets: Readonly<Partial<Record<SheetName, Sheet>>> = {
     frontDoor: page.frontDoor,
-    calibration: page.calibration,
     headphoneCheck: page.headphoneCheck,
     rules: page.rules,
     notice: page.notice,
@@ -73,7 +72,6 @@ export function createScreenView(options: {
   let restShownAtMs: number | null = null;
   let replaySheetShownAtMs: number | null = null;
   let replayLinesShown = "";
-  let calibrationLinesShown = "";
   let swapLinesShown = "";
   let swapComparisonShown: unknown = null;
   let swapPhaseKey: string | null = null;
@@ -82,59 +80,6 @@ export function createScreenView(options: {
 
   const focus = (element: HTMLElement): void => {
     element.focus({ preventScroll: true });
-  };
-
-  const showCalibration = (screen: Screen): void => {
-    const calibration = screen.calibration;
-    if (calibration === null) {
-      return;
-    }
-    const sheet = page.calibration;
-    const startHadFocus = doc.activeElement === sheet.startButton;
-    setText(sheet.heading, calibration.heading);
-    const lines = calibration.introLines.join("\n");
-    if (lines !== calibrationLinesShown) {
-      calibrationLinesShown = lines;
-      sheet.introLines.replaceChildren(
-        ...calibration.introLines.map((line) => {
-          const paragraph = doc.createElement("p");
-          paragraph.textContent = line;
-          return paragraph;
-        }),
-      );
-    }
-    setLine(sheet.keysLine, calibration.started ? calibration.keysLine : null);
-    sheet.startButton.hidden = calibration.started;
-    sheet.keepButton.hidden = !calibration.started;
-    sheet.dial.hidden = !calibration.started;
-    sheet.louderButton.disabled = !calibration.canGoLouder;
-    sheet.keepButton.disabled = !calibration.canKeep;
-    const { range } = sheet;
-    const ends = [
-      ["min", calibration.bottomDb],
-      ["max", calibration.topDb],
-      ["step", calibration.stepDb],
-    ] as const;
-    for (const [name, value] of ends) {
-      if (range.getAttribute(name) !== String(value)) {
-        range.setAttribute(name, String(value));
-      }
-    }
-    if (range.value !== String(calibration.targetDb)) {
-      range.value = String(calibration.targetDb);
-    }
-    sheet.meter.style.setProperty(
-      "--visit-setting",
-      String(calibration.settingFraction ?? 0),
-    );
-    setText(
-      sheet.statusLine,
-      screen.soundNotStartedLine ?? calibration.statusLine ?? "",
-    );
-    if (calibration.started && startHadFocus) {
-      // The slider takes the focus, so that the keys move it at once.
-      focus(range);
-    }
   };
 
   const showHeadphoneCheck = (screen: Screen): void => {
@@ -151,7 +96,10 @@ export function createScreenView(options: {
     for (const button of answers) {
       button.disabled = !check.awaitingAnswer;
     }
-    setText(sheet.judgementLine, check.statusLine ?? "");
+    setText(
+      sheet.judgementLine,
+      screen.soundNotStartedLine ?? check.statusLine ?? "",
+    );
     sheet.goOnButton.hidden = !check.canGoOn;
     if (answerHadFocus && !check.awaitingAnswer) {
       // The answer that was pressed can no longer hold the focus.
@@ -526,7 +474,6 @@ export function createScreenView(options: {
         page.frontDoor.statusLine,
         screen.sheet === "frontDoor" ? screen.soundNotStartedLine : null,
       );
-      showCalibration(screen);
       showHeadphoneCheck(screen);
       showNotice(screen);
       showPractice(screen);
@@ -553,7 +500,7 @@ export function createScreenView(options: {
         focusKey = key;
         if (!first) {
           if (screen.sheet !== null) {
-            focus(sheets[screen.sheet].heading);
+            focus(sheets[screen.sheet]?.heading ?? page.root);
           } else if (screen.restLine !== null) {
             focus(page.restButton);
           } else {

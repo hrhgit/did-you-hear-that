@@ -23,18 +23,12 @@ import type {
   VisitorEnding,
   VisitorExtraPress,
   VisitorListenerSpec,
-  VisitorReplayBehaviour,
   VisitorScript,
   VisitorSwapCheckAnswer,
   VisitorSwappedRepeatBehaviour,
   VisitorSwappedRepeatEvent,
   VisitorSwappedRepeatFloor,
 } from "../listeners/simulated-visitor";
-import {
-  endingAfterStartMaxMs,
-  replayScriptArbitrary,
-  startReplayMaxMs,
-} from "./missed-sound-replay-arbitraries";
 
 // Visitor scripts for the visit flow's properties (visit-flow design.md, "Correctness
 // properties", the visitor script). A script says everything a Simulated_Visitor does; a run adds
@@ -212,47 +206,6 @@ export function visitRunArbitrary(
     performanceOffsetMs: fc.integer({ min: 0, max: performanceOffsetMaxMs }),
     script: visitorScriptArbitrary(options),
   });
-}
-
-/**
- * A replay behaviour of the visitor (missed-sound-replay design.md, CP10), for this spec's files
- * only: watch to the end, skip or stop at a drawn time after the start press, or the starts and
- * events of a replay script. Start presses come 0 to 30 s after the stage is entered, and a skip
- * or a stop 0 to 40 s after the press.
- */
-export const visitorReplayBehaviourArbitrary: fc.Arbitrary<VisitorReplayBehaviour> =
-  fc.oneof(
-    fc.record({
-      kind: fc.constant("watch" as const),
-      startAfterMs: fc.integer({ min: 0, max: startReplayMaxMs }),
-    }),
-    fc.record({
-      kind: fc.constantFrom("skip" as const, "stop" as const),
-      startAfterMs: fc.integer({ min: 0, max: startReplayMaxMs }),
-      endAfterStartMs: fc.integer({ min: 0, max: endingAfterStartMaxMs }),
-    }),
-    replayScriptArbitrary.map(
-      ({ startTimesMs, events }): VisitorReplayBehaviour => ({
-        kind: "script",
-        startTimesMs,
-        events,
-      }),
-    ),
-  );
-
-/**
- * A run of `visitRunArbitrary(options)` whose visitor script has a replay behaviour of
- * `visitorReplayBehaviourArbitrary`, for this spec's files only.
- */
-export function replayVisitRunArbitrary(
-  options: Parameters<typeof visitorScriptArbitrary>[0] = {},
-): fc.Arbitrary<VisitRun> {
-  return fc
-    .record({
-      run: visitRunArbitrary(options),
-      replay: visitorReplayBehaviourArbitrary,
-    })
-    .map(({ run, replay }) => ({ ...run, script: { ...run.script, replay } }));
 }
 
 // ─── The swapped repeat (swapped-repeat design.md, CP10), for that spec's files only ──────────

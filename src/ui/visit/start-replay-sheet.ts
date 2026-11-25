@@ -42,7 +42,7 @@ function startReplaySheet(
   }
   doc.title = siteTitle;
 
-  const page = buildVisitPage(doc, main);
+  const page = buildVisitPage(doc, main, { showReplayPreview: true });
 
   // The picture is not drawn here. An empty sheet stands in its place and stays hidden.
   const result = doc.createElement("section");

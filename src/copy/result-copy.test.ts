@@ -24,6 +24,8 @@ import {
   differenceLine,
   falseAlarmLine,
   floorDescription,
+  levelRangeLabel,
+  levelRangeLine,
   playableFloorLine,
   swappedRepeatLine,
   unreliableReasonLine,
@@ -42,6 +44,20 @@ import {
   visitDateLabel,
   visitTypeLabel,
 } from "./saved-visit-lines";
+
+describe("levelRangeLabel", () => {
+  it.each([
+    [-34.8, -30.2, "30–35"],
+    [1.2, 4.8, "1–5"],
+    [-3.6, 2.1, "0–4"],
+    [-20.2, -20.1, "20–20"],
+  ] as const)("formats %s to %s as %s", (lowDb, highDb, label) => {
+    expect(levelRangeLabel(lowDb, highDb)).toBe(label);
+    expect(findBannedTerms(levelRangeLine(lowDb, highDb), bannedTerms)).toEqual(
+      [],
+    );
+  });
+});
 
 // The copy of the result page (result-page design.md, "The copy" and "The copy tests").
 
@@ -263,7 +279,7 @@ describe("the result page's constant copy", () => {
 
   it("holds every fixed string of the design, word for word", () => {
     expect(resultPageCopy).toEqual({
-      heading: "The quietest sounds you caught",
+      heading: "Your listening estimates",
       leftLabel: "Left",
       rightLabel: "Right",
       differenceHeading: "Left and right",
@@ -362,13 +378,13 @@ describe("visitNoticeLine", () => {
 describe("wingLine", () => {
   it("gives the line of each state", () => {
     expect(wingLine(found(-35))).toBe(
-      "The quietest sound you caught here was 35 dB quieter than your calibration.",
+      "The estimated level here is 35 dB quieter than your calibration.",
     );
     expect(wingLine(found(5))).toBe(
-      "The quietest sound you caught here was 5 dB louder than your calibration.",
+      "The estimated level here is 5 dB louder than your calibration.",
     );
     expect(wingLine(found(0))).toBe(
-      "The quietest sound you caught here was as loud as your calibration.",
+      "The estimated level here is as loud as your calibration.",
     );
     expect(wingLine(betterThanFloor)).toBe(
       "Quieter than this house can whisper.",
@@ -418,7 +434,7 @@ describe("wingLine", () => {
 describe("unreliableReasonLine", () => {
   it("gives the line of each reason", () => {
     expect(reasons.map(unreliableReasonLine)).toEqual([
-      "Your answers here had not settled when the house ran out of tries.",
+      "The check ended before your answers settled.",
       "One catch here did not fit with your other answers.",
       "In this room you often answered when I made no sound.",
       "A sound here was not played at the level the house asked for.",
@@ -445,7 +461,7 @@ describe("differenceLabel and differenceLine", () => {
     for (const difference of [0, -0, 0.4, -0.4]) {
       expect(differenceLabel(difference)).toBe("0 dB");
       expect(differenceLine(difference)).toBe(
-        "At this pitch you caught the same level on your left and on your right.",
+        "At this pitch the estimates are the same on your left and right.",
       );
     }
   });
@@ -455,10 +471,10 @@ describe("differenceLabel and differenceLine", () => {
     expect(differenceLabel(-15)).toBe("15 dB quieter on the right");
     expect(differenceLabel(14.6)).toBe("15 dB quieter on the left");
     expect(differenceLine(15)).toBe(
-      "At this pitch you caught a sound 15 dB quieter on your left than on your right.",
+      "At this pitch the estimate is 15 dB quieter on your left than on your right.",
     );
     expect(differenceLine(-40)).toBe(
-      "At this pitch you caught a sound 40 dB quieter on your right than on your left.",
+      "At this pitch the estimate is 40 dB quieter on your right than on your left.",
     );
   });
 
@@ -503,13 +519,13 @@ describe("floorDescription", () => {
         null,
       ),
     ).toBe(
-      "Scritch, 4 kHz. Left: The quietest sound you caught here was 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
+      "Scritch, 4 kHz. Left: The estimated level here is 35 dB quieter than your calibration. Right: This room should be visited again. One catch here did not fit with your other answers. There is no left and right difference to show here, because one side has no level.",
     );
   });
 
   it("gives both levels and the difference when both wings are found", () => {
     expect(floorDescription("cellar", 500, found(-20), found(-5), 15)).toBe(
-      "Thump, 500 Hz. Left: The quietest sound you caught here was 20 dB quieter than your calibration. Right: The quietest sound you caught here was 5 dB quieter than your calibration. At this pitch you caught a sound 15 dB quieter on your left than on your right.",
+      "Thump, 500 Hz. Left: The estimated level here is 20 dB quieter than your calibration. Right: The estimated level here is 5 dB quieter than your calibration. At this pitch the estimate is 15 dB quieter on your left than on your right.",
     );
   });
 
@@ -700,7 +716,7 @@ describe("the comparison's copy", () => {
   it("holds the fixed strings of the design, word for word", () => {
     expect(comparisonCopy).toEqual({
       headphoneNameHint:
-        "Use the same name next time, and this visit is drawn there as faint outlines.",
+        "Use the same name next time, and this visit is drawn there as faint lines.",
       noEarlierVisitLine:
         "No earlier visit with headphones of this name is saved in this browser.",
     });
@@ -709,16 +725,16 @@ describe("the comparison's copy", () => {
 
   it("names the earlier visit's date and says each visit is relative to its own calibration", () => {
     expect(earlierVisitLine("2026-11-12")).toBe(
-      "The faint outlines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
+      "The faint lines are your visit of 12 November 2026 with headphones of the same name. Each visit is relative to its own calibration.",
     );
     expect(earlierVisitLine("2027-01-01")).toBe(
-      "The faint outlines are your visit of 1 January 2027 with headphones of the same name. Each visit is relative to its own calibration.",
+      "The faint lines are your visit of 1 January 2027 with headphones of the same name. Each visit is relative to its own calibration.",
     );
   });
 
   it("says that an earlier visit unreliable as a whole has no outlines", () => {
     expect(earlierVisitUnreliableLine("2026-11-12")).toBe(
-      "Your visit of 12 November 2026 with headphones of the same name was unreliable as a whole, so it has no outlines.",
+      "Your visit of 12 November 2026 with headphones of the same name was unreliable as a whole, so it is not drawn.",
     );
   });
 

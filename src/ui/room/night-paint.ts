@@ -4,6 +4,8 @@
  * creatures come to snuff and the candy they come to take.
  */
 
+import { jackBody, paintJackBody } from "./jack-body";
+
 type Ctx = CanvasRenderingContext2D;
 
 const tau = Math.PI * 2;
@@ -234,7 +236,9 @@ export function paintFog(
   pool.addColorStop(0, `rgba(255, 150, 50, ${String(0.28 * glow)})`);
   pool.addColorStop(1, "rgba(255, 150, 50, 0)");
   ctx.fillStyle = pool;
-  ctx.fillRect(0, groundY - height * 0.3, width, height * 0.5);
+  // The whole circle of the light, so no edge of it shows as a line on the night.
+  const poolR = width * 0.3;
+  ctx.fillRect(width / 2 - poolR, groundY - poolR, poolR * 2, poolR * 2);
   for (let bank = 0; bank < 6; bank += 1) {
     const speed = 0.012 + bank * 0.004;
     const x = ((t * speed + bank * 0.21) % 1.4) * width * 1.2 - width * 0.3;
@@ -311,47 +315,8 @@ export function paintSweet(ctx: Ctx, index: number, size: number): void {
   ctx.fill();
 }
 
-/**
- * Jack about the middle of his foot, `size` pixels tall. His carved face glows with the candle
- * inside, as bright as his flame, and flickers.
- */
-export function paintJack(ctx: Ctx, size: number, pose: JackPose): void {
-  const { t, flame, hurt, pulse, joy } = pose;
-  const s = size / 100;
-  ctx.save();
-  ctx.scale(s, s);
-  // The pile of candy at his feet.
-  const pile: readonly (readonly [number, number])[] = [
-    [-46, -3],
-    [-36, -2],
-    [40, -3],
-    [50, -2],
-    [-42, -10],
-    [45, -10],
-    [31, -4],
-  ];
-  pile.slice(0, pose.candy).forEach(([x, y], index) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(index * 0.7);
-    paintSweet(ctx, index, 4.2);
-    ctx.restore();
-  });
-  const shake = hurt > 0 ? Math.sin(t * 70) * hurt * 5 : 0;
-  ctx.translate(shake, 0);
-  const swell = 1 + pulse * 0.035 + joy * 0.03;
-  ctx.scale(swell, 2 - swell);
-  const flicker = 0.82 + Math.sin(t * 13) * 0.06 + Math.sin(t * 31 + 1) * 0.05;
-  const light = Math.max(0, Math.min(1, flame)) * flicker;
-
-  // His glow on the night.
-  const aura = ctx.createRadialGradient(0, -42, 10, 0, -42, 120);
-  aura.addColorStop(0, `rgba(255, 150, 40, ${String(0.45 * light)})`);
-  aura.addColorStop(1, "rgba(255, 120, 30, 0)");
-  ctx.fillStyle = aura;
-  ctx.fillRect(-130, -170, 260, 200);
-
-  // His body: ribbed, lit from inside.
+/** Jack's body as code paints it, until the painted one has loaded. */
+function paintCodeBody(ctx: Ctx, hurt: number): void {
   const ribs: readonly (readonly [number, number, number])[] = [
     [-30, 22, 38],
     [30, 22, 38],
@@ -394,6 +359,55 @@ export function paintJack(ctx: Ctx, size: number, pose: JackPose): void {
   ctx.moveTo(4, -82);
   ctx.bezierCurveTo(16, -92, 24, -84, 18, -78);
   ctx.stroke();
+}
+
+/**
+ * Jack about the middle of his foot, `size` pixels tall. His carved face glows with the candle
+ * inside, as bright as his flame, and flickers.
+ */
+export function paintJack(ctx: Ctx, size: number, pose: JackPose): void {
+  const { t, flame, hurt, pulse, joy } = pose;
+  const s = size / 100;
+  ctx.save();
+  ctx.scale(s, s);
+  // The pile of candy at his feet.
+  const pile: readonly (readonly [number, number])[] = [
+    [-46, -3],
+    [-36, -2],
+    [40, -3],
+    [50, -2],
+    [-42, -10],
+    [45, -10],
+    [31, -4],
+  ];
+  pile.slice(0, pose.candy).forEach(([x, y], index) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(index * 0.7);
+    paintSweet(ctx, index, 4.2);
+    ctx.restore();
+  });
+  const shake = hurt > 0 ? Math.sin(t * 70) * hurt * 5 : 0;
+  ctx.translate(shake, 0);
+  const swell = 1 + pulse * 0.035 + joy * 0.03;
+  ctx.scale(swell, 2 - swell);
+  const flicker = 0.82 + Math.sin(t * 13) * 0.06 + Math.sin(t * 31 + 1) * 0.05;
+  const light = Math.max(0, Math.min(1, flame)) * flicker;
+
+  // His glow on the night.
+  const aura = ctx.createRadialGradient(0, -42, 10, 0, -42, 120);
+  aura.addColorStop(0, `rgba(255, 150, 40, ${String(0.45 * light)})`);
+  aura.addColorStop(1, "rgba(255, 120, 30, 0)");
+  ctx.fillStyle = aura;
+  ctx.fillRect(-120, -162, 240, 240);
+
+  // His body: the painted pumpkin once it has loaded; until then ribbed, lit from inside.
+  const painted = jackBody();
+  if (painted !== null) {
+    paintJackBody(ctx, painted, hurt);
+  } else {
+    paintCodeBody(ctx, hurt);
+  }
 
   // The carved face, glowing as bright as the flame.
   const carved = ctx.createRadialGradient(0, -40, 2, 0, -40, 40);
@@ -403,29 +417,21 @@ export function paintJack(ctx: Ctx, size: number, pose: JackPose): void {
     `rgba(255, 200, 60, ${String(0.15 + light * 0.85)})`,
   );
   carved.addColorStop(1, `rgba(200, 80, 10, ${String(0.2 + light * 0.6)})`);
-  ctx.save();
-  ctx.shadowColor = `rgba(255, 190, 60, ${String(light)})`;
-  ctx.shadowBlur = 18 * light;
-  ctx.fillStyle = light < 0.05 ? "#2a1206" : carved;
   // Eyes: triangles that squint with joy and widen in fright.
   const squint = joy * 5 - hurt * 4;
+  const grin = 1 + joy * 0.25 - hurt * 0.35;
+  ctx.beginPath();
   for (const side of [-1, 1]) {
-    ctx.beginPath();
     ctx.moveTo(side * 9, -48 + squint * 0.4);
     ctx.lineTo(side * 25, -48 + squint * 0.4);
     ctx.lineTo(side * 17, -64 + squint);
     ctx.closePath();
-    ctx.fill();
   }
-  ctx.beginPath();
   ctx.moveTo(-4, -36);
   ctx.lineTo(4, -36);
   ctx.lineTo(0, -43);
   ctx.closePath();
-  ctx.fill();
   // The grin, with its teeth.
-  const grin = 1 + joy * 0.25 - hurt * 0.35;
-  ctx.beginPath();
   ctx.moveTo(-30, -28);
   ctx.quadraticCurveTo(0, -6 * grin - 8, 30, -28);
   ctx.quadraticCurveTo(22, -14 * grin, 13, -16);
@@ -436,8 +442,21 @@ export function paintJack(ctx: Ctx, size: number, pose: JackPose): void {
   ctx.lineTo(-13, -16);
   ctx.quadraticCurveTo(-22, -14 * grin, -30, -28);
   ctx.closePath();
+  // The hollow inside and the cut edge of the rind, then the light of the candle in it.
+  ctx.fillStyle = "#2a1206";
   ctx.fill();
-  ctx.restore();
+  ctx.strokeStyle = "rgba(90, 32, 4, 0.9)";
+  ctx.lineWidth = 2.4;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  if (light >= 0.05) {
+    ctx.save();
+    ctx.shadowColor = `rgba(255, 190, 60, ${String(light)})`;
+    ctx.shadowBlur = 18 * light;
+    ctx.fillStyle = carved;
+    ctx.fill();
+    ctx.restore();
+  }
 
   // The candle's flame, which shows through the top of his head.
   if (flame > 0.02) {

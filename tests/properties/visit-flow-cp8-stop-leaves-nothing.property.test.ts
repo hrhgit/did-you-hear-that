@@ -25,8 +25,7 @@ import {
 
 // CP8. Stop leaves nothing (Universal; visit-flow design.md, CP8; R14). Every script here has an
 // ending: the stop control or a left page at any time of the visit. One that comes before the
-// result leaves the house; one that comes later meets the replay or the result, where stop
-// silences and shows the result. The visits render with the worst-case renderers (D26,
+// result leaves the house. On the result, stop silences and stays there. The visits render with the worst-case renderers (D26,
 // audio-output D43). The property holds however the rooms run (one-room design.md, D1): one after
 // another, and taking turns in one room.
 vi.mock("../../src/audio/synth/sound-renderers", async () => {
@@ -165,18 +164,11 @@ describe("visit flow CP8. Stop leaves nothing (Universal; R14)", () => {
               return;
             }
 
-            // The ending came at the replay or later.
             expect(final.stage).toBe("result");
             if (final.stage !== "result") {
               return;
             }
-            if (endingEntry?.kind === "action") {
-              expect(endingEntry.snapshotBefore.stage).toBe(
-                "missedSoundReplay",
-              );
-              expect(endingEntry.snapshotAfter.stage).toBe("result");
-              expect(stoppedAllIn(harness, endingEntry)).toBe(true);
-            }
+            expect(endingEntry).toBeUndefined();
 
             // Stop on the result silences and stays.
             flow.stop();
