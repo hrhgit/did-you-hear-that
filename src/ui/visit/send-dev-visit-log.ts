@@ -25,7 +25,16 @@ export function createDevVisitLog(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      .catch(() => undefined);
+      .then((response) => {
+        if (!response.ok) {
+          console.warn(
+            `Dev visit log (${kind}) was refused: ${response.status}`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(`Dev visit log (${kind}) was not sent`, error);
+      });
   };
   const saved = archive.list().visits.map((listing) => listing.visit);
   if (saved.length > 0) {

@@ -50,10 +50,13 @@ function devVisitLog(): Plugin {
         });
         request.on("end", () => {
           void (async () => {
+            let body: unknown;
             try {
-              const body: unknown = JSON.parse(
-                Buffer.concat(chunks).toString("utf8"),
-              );
+              body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            } catch {
+              return refuse(400);
+            }
+            try {
               await mkdir(visitLogDir, { recursive: true });
               if (kind === "saved") {
                 if (
@@ -88,8 +91,13 @@ function devVisitLog(): Plugin {
                 );
               }
               refuse(204);
-            } catch {
-              refuse(400);
+            } catch (error) {
+              // A full disk or an unwritable folder: say so in the dev server's output.
+              server.config.logger.error(
+                `[dev-visit-log] could not write the ${kind} visit log: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+                { timestamp: true },
+              );
+              refuse(500);
             }
           })();
         });
