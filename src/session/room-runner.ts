@@ -323,8 +323,8 @@ export function createMixedRoomRunner(
   /**
    * Where the neighbouring searches put this ear's level: the median of the levels found for the
    * other ear at the same pitch, for both ears at the neighbouring octaves in this room and in
-   * earlier rooms. Before any of them has found a level, the quietest catches of the same
-   * searches still running stand in, one upward step below, so the first pitch already steers
+   * earlier rooms. Before any of them has found a level, the quietest catches of those of the
+   * same ears still searching stand in, one upward step below, so the first pitch already steers
    * the others (one-room design, "Neighbour start").
    */
   const steeringOf = (
@@ -361,7 +361,11 @@ export function createMixedRoomRunner(
       estimatesDb.length > 0
         ? estimatesDb
         : collect((search, side) => {
-            const caughtDb = search.quietestCatchDb(side);
+            // Only searches still running stand in: an ear that ended without a level says
+            // nothing about where the level is.
+            const caughtDb = search.earSearching(side)
+              ? search.quietestCatchDb(side)
+              : null;
             return caughtDb === null
               ? null
               : caughtDb - hearingMethodConfig.upwardStepDb;

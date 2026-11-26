@@ -352,9 +352,14 @@ export function createAdaptiveEarSearch(
         steering !== undefined &&
         Math.abs(steering.centreDb - (loudestMissDb + lowestCatchLevel) / 2) <=
           steeringAgreesWithinDb;
+      // Only misses within one upward step of the quietest catch confirm it; one far below, from
+      // a steered jump or the first climb, does not.
+      const confirmingCount = misses.filter(
+        (missDb) => lowestCatchLevel! - missDb <= stepDb,
+      ).length;
       if (
         narrow &&
-        (misses.length >= confirmingMissesCount || steeringAgrees)
+        (confirmingCount >= confirmingMissesCount || steeringAgrees)
       ) {
         finishEstimate(lowestClearLevel ?? lowestCatchLevel);
         return;
@@ -425,10 +430,12 @@ export function createAdaptiveEarSearch(
     presentations: () => Object.freeze([...recorded]),
     startAt(startDb) {
       if (ending !== undefined || recorded.length > 0) return;
-      levelDb = Math.min(
-        settings.startingLevelDb,
-        Math.max(floorDb, Math.round(startDb)),
-      );
+      let firstDb = Math.max(floorDb, Math.round(startDb));
+      // As in a steered descent: a catch just above the floor would force a sub-minimum drop.
+      if (firstDb > floorDb && firstDb < floorDb + minDropDb) {
+        firstDb = floorDb + minDropDb;
+      }
+      levelDb = Math.min(settings.startingLevelDb, firstDb);
     },
   });
 }

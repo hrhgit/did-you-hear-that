@@ -133,6 +133,19 @@ describe("the adaptive hearing search", () => {
     });
   });
 
+  it("counts only misses within one upward step of the quietest catch towards the ending", () => {
+    const search = createAdaptiveEarSearch("left", settings);
+    search.record("caught", "perfect");
+    for (const levelDb of [-20, -17, -12]) {
+      expect(search.next().levelDb).toBe(levelDb);
+      search.record("missed");
+    }
+    // Only -12 lies within one step of the catch at -10, so it is played again.
+    expect(search.next()).toEqual({ levelDb: -12, direction: "ascending" });
+    search.record("missed");
+    expect(search.ending()?.kind).toBe("found");
+  });
+
   it("keeps the minimum drop above the floor when the steering jumps near it", () => {
     const steered = createAdaptiveEarSearch("left", settings);
     steered.record("caught", "perfect", {
@@ -151,6 +164,11 @@ describe("the adaptive hearing search", () => {
     expect(search.next().levelDb).toBe(settings.startingLevelDb);
     search.startAt?.(-100);
     expect(search.next().levelDb).toBe(settings.floorDb);
+    // Not just above the floor, where a catch would force a drop below the minimum.
+    search.startAt?.(settings.floorDb + 1);
+    expect(search.next().levelDb).toBe(
+      settings.floorDb + adaptiveHearingConfig.minDropDb,
+    );
     search.startAt?.(-30);
     search.record("caught", "perfect");
     const after = search.next();

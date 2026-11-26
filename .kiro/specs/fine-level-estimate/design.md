@@ -161,7 +161,7 @@ The owner saw a result with one ear near −20 dB and the other below the floor 
 | Lapse 8%, −40 to −20 dB | before | 34.4 | 102 s | 16.3% | 18.0% |
 | | after | 52.6 | 160 s | 1.8% | 2.4% |
 
-Without the agreement rule the same rows took about 1 to 4 more sound trials per visit; without the steered descent, about 0.5 more. Steering from the catches of searches still running, not only from found ears, saved about 2 more sound trials per visit and is not built. On the simulated listeners of "Checks", with no steering, the mean is 7.06 sound trials per ear against the reference's 5.15, and the median error 2.8 dB against 3.3 dB.
+Without the agreement rule the same rows took about 1 to 4 more sound trials per visit; without the steered descent, about 0.5 more. Steering from the catches of searches still running, not only from found ears, saved about 2 more sound trials per visit and is not built. On the simulated listeners of "Checks", with no steering, the mean is 7.17 sound trials per ear against the reference's 5.15 (7.06 before only misses within one upward step of the quietest catch counted towards the ending), and the median error 2.8 dB against 3.3 dB.
 
 ## Neighbour start, 2026-11-25
 

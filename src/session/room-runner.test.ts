@@ -1092,7 +1092,16 @@ describe("createMixedRoomRunner (one-room, the mixed runner)", () => {
       const respond = vi.fn(search.respond);
       const run = mixedOn(
         shell,
-        [{ ...search, earEstimate, quietestCatchDb, steerStart, respond }],
+        [
+          {
+            ...search,
+            earEstimate,
+            quietestCatchDb,
+            earSearching: () => true,
+            steerStart,
+            respond,
+          },
+        ],
         scriptedTurns([]),
       );
       run.runner.start();
@@ -1110,6 +1119,26 @@ describe("createMixedRoomRunner (one-room, the mixed runner)", () => {
       });
     },
   );
+
+  it("takes no steering from the catches of an ear that has ended without a level", async () => {
+    const shell = await calibratedShell();
+    const search = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+    const steerStart = vi.fn(search.steerStart);
+    const run = mixedOn(
+      shell,
+      [
+        {
+          ...search,
+          quietestCatchDb: (ear) => (ear === "right" ? -35 : null),
+          earSearching: (ear) => ear === "left",
+          steerStart,
+        },
+      ],
+      scriptedTurns([]),
+    );
+    run.runner.start();
+    expect(steerStart).not.toHaveBeenCalled();
+  });
 
   it("draws nothing while only one track is unfinished", async () => {
     const shell = await calibratedShell();

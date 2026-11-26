@@ -61,7 +61,7 @@ Acceptance criteria use EARS notation.
 
 ## R5 No more trials, no dwelling at the edge
 
-1. Over the simulated listeners of design.md "Checks", without steering, the mean number of counted sound trials per ear SHALL be at most the mean of the reference search plus 2 (was 0.3; changed 2026-11-25, see 2).
+1. Over the simulated listeners of design.md "Checks", without steering, the mean number of counted sound trials per ear SHALL be at most the mean of the reference search plus 2.1 (was 0.3, then 2; changed 2026-11-25, see 2 and the nearby-miss rule in design.md "Measured").
 2. A miss below every catch SHALL NOT end the ear on its own unless the Steering_Prior agrees with it (R4.3). The search plays the gap between that miss and the quietest catch, or the missed level again once the gap is one upward step or less, and ends with a level after `confirmingMissesCount` such misses within one upward step of the quietest catch (changed 2026-11-25: ending at the first miss let one lapse set the result, measured below in design.md).
 3. No descent step SHALL be smaller than `minDropDb`.
 

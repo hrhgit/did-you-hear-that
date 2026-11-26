@@ -31,12 +31,14 @@ export function createDevVisitLog(
   if (saved.length > 0) {
     send("saved", saved);
   }
-  // The result snapshot is shown again on every change while the visit stays on it.
-  const sent = new WeakSet<object>();
+  // The result snapshot is shown again on every change while the visit stays on it. A swapped
+  // repeat adds to it later, so the visit is sent again when its repeats change.
+  const sentRepeats = new WeakMap<object, number>();
   return {
     finished(visit) {
-      if (sent.has(visit.visitLog)) return;
-      sent.add(visit.visitLog);
+      const repeatCount = visit.swappedRepeats?.length ?? 0;
+      if (sentRepeats.get(visit.visitLog) === repeatCount) return;
+      sentRepeats.set(visit.visitLog, repeatCount);
       send("finished", {
         visitLog: visit.visitLog,
         summary: visit.summary,
