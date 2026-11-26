@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { adaptiveHearingConfig } from "../config/adaptive-hearing-config";
 import { audioOutputConfig } from "../config/audio-output-config";
 import { hearingMethodConfig } from "../config/hearing-method-config";
 import { createManualTimer } from "../config/manual-timer";
@@ -15,6 +16,7 @@ import { createAudioOutput } from "../audio/output/create-audio-output";
 import { createFakeAudioBackend } from "../audio/output/fake-audio-backend";
 import { createThresholdSearch } from "../engine/threshold-search";
 import type {
+  Ear,
   RoomResult,
   SoundTrial,
   NoSoundTrial,
@@ -112,6 +114,10 @@ function scriptedSearch(
     responses,
     current: step,
     earEstimate: () => null,
+    quietestCatchDb: () => null,
+    // A script has no ears of its own, so no track of it leads the room.
+    earSearching: () => false,
+    steerStart: step,
     respond(response) {
       if (responses.length >= trials.length) {
         throw new Error("The scripted search has finished.");
@@ -1030,6 +1036,108 @@ describe("createMixedRoomRunner (one-room, the mixed runner)", () => {
       [3, 0, 1, 2, "sound", "scored"],
       [4, 1, 1, 2, "noSound", "scored"],
     ]);
+  });
+
+  it("plays the lead pitch alone, drawing nothing, until one of its ears ends", async () => {
+    const shell = await calibratedShell();
+    expect(threeRooms[0]!.frequencyHz).toBe(
+      adaptiveHearingConfig.leadFrequencyHz,
+    );
+    const lead = scriptedSearch([
+      soundTrial(1, "left", -25, 1500),
+      soundTrial(2, "right", -25, 1500),
+      soundTrial(3, "left", -30, 1500),
+    ]);
+    const other = scriptedSearch([soundTrial(1, "right", -25, 1500)]);
+    const turns = scriptedTurns([0.9]);
+    const run = mixedOn(
+      shell,
+      [{ ...lead, earSearching: () => lead.responses.length < 2 }, other],
+      turns,
+    );
+    run.runner.start();
+    for (let turn = 0; turn < 4; turn += 1) {
+      run.advance(2200);
+      run.runner.answer("left");
+    }
+    expect(run.plays.map(({ soundId }) => soundId)).toEqual([
+      "corridor",
+      "corridor",
+      "stairs",
+      "corridor",
+    ]);
+    // One draw, once the lead's first ear has ended and two tracks are open.
+    expect(turns.drawn()).toBe(1);
+  });
+
+  it.each([
+    {
+      case: "the other ear's found level",
+      earEstimate: (ear: Ear) => (ear === "right" ? -40 : null),
+      quietestCatchDb: () => null,
+      centreDb: -40,
+    },
+    {
+      case: "the other ear's quietest catch, one upward step below, before anything is found",
+      earEstimate: () => null,
+      quietestCatchDb: (ear: Ear) => (ear === "right" ? -35 : null),
+      centreDb: -35 - hearingMethodConfig.upwardStepDb,
+    },
+  ])(
+    "starts an ear a little above $case and passes the steering with a miss",
+    async ({ earEstimate, quietestCatchDb, centreDb }) => {
+      const shell = await calibratedShell();
+      const search = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+      const steerStart = vi.fn(search.steerStart);
+      const respond = vi.fn(search.respond);
+      const run = mixedOn(
+        shell,
+        [
+          {
+            ...search,
+            earEstimate,
+            quietestCatchDb,
+            earSearching: () => true,
+            steerStart,
+            respond,
+          },
+        ],
+        scriptedTurns([]),
+      );
+      run.runner.start();
+      expect(steerStart).toHaveBeenCalledExactlyOnceWith(
+        "left",
+        centreDb + adaptiveHearingConfig.steeringStartLeadDb,
+      );
+      run.advance(1500);
+      run.advanceTo(run.presented[0]!.windowEndMs);
+      expect(respond).toHaveBeenCalledExactlyOnceWith("none", undefined, {
+        steering: {
+          centreDb,
+          spreadDb: adaptiveHearingConfig.steeringSpreadDb,
+        },
+      });
+    },
+  );
+
+  it("takes no steering from the catches of an ear that has ended without a level", async () => {
+    const shell = await calibratedShell();
+    const search = scriptedSearch([soundTrial(1, "left", -10, 1500)]);
+    const steerStart = vi.fn(search.steerStart);
+    const run = mixedOn(
+      shell,
+      [
+        {
+          ...search,
+          quietestCatchDb: (ear) => (ear === "right" ? -35 : null),
+          earSearching: (ear) => ear === "left",
+          steerStart,
+        },
+      ],
+      scriptedTurns([]),
+    );
+    run.runner.start();
+    expect(steerStart).not.toHaveBeenCalled();
   });
 
   it("draws nothing while only one track is unfinished", async () => {

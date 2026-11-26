@@ -121,7 +121,7 @@ function statistics(
 
 describe("fine level estimate", () => {
   it(
-    "keeps whole-decibel probes in range, descends by the minimum and stops at the first miss",
+    "keeps whole-decibel probes in range, descends by the minimum and never ends on one miss alone",
     () => {
       fc.assert(
         fc.property(listenerArbitrary, (listener) => {
@@ -142,7 +142,26 @@ describe("fine level estimate", () => {
               expect(dropDb).toBeGreaterThanOrEqual(model.minDropDb);
             }
             if (trial.outcome === "caught") caught = true;
-            else if (caught) expect(index).toBe(run.trials.length - 1);
+          }
+          // 2026-11-25, one missed sound: without steering, an ear that ends with a level on a
+          // miss has missed at least twice below its quietest catch.
+          if (
+            caught &&
+            run.ending?.kind === "found" &&
+            run.trials.at(-1)?.outcome !== "caught"
+          ) {
+            const quietestCatchDb = Math.min(
+              ...run.trials
+                .filter(({ outcome }) => outcome === "caught")
+                .map(({ levelDb }) => levelDb),
+            );
+            const missesBelow = run.trials.filter(
+              ({ outcome, levelDb }) =>
+                outcome !== "caught" && levelDb < quietestCatchDb,
+            ).length;
+            expect(missesBelow).toBeGreaterThanOrEqual(
+              model.confirmingMissesCount,
+            );
           }
         }),
         { seed: sampleSeed, numRuns: listenerCount, unbiased: true },
@@ -228,10 +247,14 @@ describe("fine level estimate", () => {
   };
 
   it(
-    "R5.1 adds at most 0.3 sound trials per ear on average",
+    "R5.1 adds at most 2.1 sound trials per ear on average without steering",
     () => {
       const { fine, reference } = measured();
-      expect(fine.meanTrials).toBeLessThanOrEqual(reference.meanTrials + 0.3);
+      // 2026-11-25, one missed sound: a first miss is played again instead of ending the ear,
+      // and only misses within one upward step of the quietest catch count towards the ending.
+      // This costs about 2.03 sound trials per ear here, without steering to agree with it
+      // (requirements R5.1, changed). The reference ended on any single miss.
+      expect(fine.meanTrials).toBeLessThanOrEqual(reference.meanTrials + 2.1);
     },
     timeoutMs,
   );

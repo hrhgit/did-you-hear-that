@@ -13,6 +13,7 @@ import { joinSwapButtons } from "./join-swap-buttons";
 import { listenForAnswers } from "./listen-for-answers";
 import type { VisitSnapshot } from "../../session/visit-flow-types";
 import { reactionOfEvent } from "./reaction-of-event";
+import { createDevVisitLog } from "./send-dev-visit-log";
 import { screenOfSnapshot, type NoticeAction } from "./screen-of-snapshot";
 import { createCaption } from "./show-caption";
 import { createScreenView } from "./show-screen";
@@ -54,6 +55,7 @@ export function startVisit(
     seed: archiveSeed,
     mode: "keep",
   });
+  const devVisitLog = createDevVisitLog(view, archive);
   const resultView = createResultView({
     doc,
     view,
@@ -180,6 +182,7 @@ export function startVisit(
     // During a swapped repeat it is only out of sight.
     if (snapshot.stage === "result") {
       resultView.show(snapshot, snapshot.turnBackLine);
+      devVisitLog.finished(snapshot);
     } else if (snapshot.stage !== "swappedRepeat") {
       resultView.clear();
     }

@@ -205,6 +205,38 @@ export function createThresholdSearch(options: {
       return finished;
     },
 
+    quietestCatchDb: (ear: Ear): number | null => {
+      const caughtDb = ears[ear]
+        .presentations()
+        .filter(({ outcome }) => outcome === "caught")
+        .map(({ levelDb }) => levelDb);
+      return caughtDb.length === 0 ? null : Math.min(...caughtDb);
+    },
+
+    earSearching: (ear: Ear): boolean =>
+      step.kind !== "finished" && ears[ear].isSearching(),
+
+    steerStart: (ear: Ear, levelDb: number): SearchStep => {
+      const earSearch = ears[ear];
+      if (
+        step.kind === "finished" ||
+        earSearch.startAt === undefined ||
+        !earSearch.isSearching() ||
+        earSearch.presentations().length > 0
+      ) {
+        return step;
+      }
+      earSearch.startAt(levelDb);
+      const { trial } = step;
+      if (trial.kind === "sound" && trial.ear === ear) {
+        step = Object.freeze({
+          kind: "trial",
+          trial: Object.freeze({ ...trial, ...earSearch.next() }),
+        });
+      }
+      return step;
+    },
+
     respond: (
       response: VisitorResponse,
       grade?: CatchGrade,
